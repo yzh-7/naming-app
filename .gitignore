@@ -1,0 +1,21 @@
+node_modules/
+dist/
+dist-single/
+
+# 编辑器 / 系统
+.DS_Store
+.vscode/
+.idea/
+
+# 测试产物
+coverage/
+playwright-report/
+test-results/
+
+# 日志
+*.log
+npm-debug.log*
+
+# 本地环境
+.env
+.env.local

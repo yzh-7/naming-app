@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>取名 · 网页版 + 安卓版：打包与迭代方案</title>
+<style>
+  :root {
+    --parchment: #f7f1e6;
+    --surface: #fffdf8;
+    --ink: #16233a;
+    --accent: #1f3a5f;
+    --muted: #7a8699;
+    --line: rgba(31, 58, 95, 0.16);
+    --line-strong: rgba(31, 58, 95, 0.32);
+    --good: #2f6b4f;
+    --warn: #8a6d1f;
+    --serif: "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", "STSong", serif;
+    --sans: "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--parchment);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.75;
+    font-size: 16px;
+  }
+  .page {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 56px 28px 96px;
+  }
+  header.doc {
+    border-bottom: 2px solid var(--line-strong);
+    padding-bottom: 22px;
+    margin-bottom: 34px;
+  }
+  header.doc .eyebrow {
+    font-size: 13px;
+    letter-spacing: 0.18em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+  header.doc h1 {
+    font-family: var(--serif);
+    font-size: 34px;
+    line-height: 1.3;
+    margin: 10px 0 8px;
+    font-weight: 700;
+  }
+  header.doc .meta { color: var(--muted); font-size: 14px; }
+  h2 {
+    font-family: var(--serif);
+    font-size: 23px;
+    margin: 46px 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+    color: var(--accent);
+  }
+  h3 {
+    font-family: var(--serif);
+    font-size: 18px;
+    margin: 26px 0 10px;
+    color: var(--ink);
+  }
+  p { margin: 10px 0; }
+  a { color: var(--accent); }
+  code {
+    font-family: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+    background: rgba(31, 58, 95, 0.08);
+    padding: 2px 6px;
+    border-radius: 5px;
+    font-size: 0.88em;
+  }
+  pre {
+    background: #1a2740;
+    color: #e8edf5;
+    padding: 16px 18px;
+    border-radius: 10px;
+    overflow-x: auto;
+    font-size: 13.5px;
+    line-height: 1.65;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  pre code { background: none; padding: 0; color: inherit; font-size: 13.5px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 14px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  thead th {
+    background: rgba(31, 58, 95, 0.06);
+    color: var(--accent);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 18px 0;
+  }
+  .callout.tldr { border-left-color: var(--accent); }
+  .callout.tip { border-left-color: var(--good); }
+  ul, ol { padding-left: 1.35em; }
+  li { margin: 5px 0; }
+  .pill {
+    display: inline-block;
+    font-size: 12px;
+    padding: 2px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--line-strong);
+    color: var(--accent);
+    margin-right: 6px;
+    white-space: nowrap;
+  }
+  .recommend { color: var(--good); font-weight: 700; }
+  .checklist { list-style: none; padding-left: 0; }
+  .checklist li {
+    padding-left: 30px;
+    position: relative;
+    margin: 10px 0;
+  }
+  .checklist li::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 8px;
+    width: 15px; height: 15px;
+    border: 1.5px solid var(--accent);
+    border-radius: 4px;
+  }
+  footer.doc {
+    margin-top: 56px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 13px;
+  }
+  @media (max-width: 640px) {
+    .page { padding: 32px 16px 64px; }
+    header.doc h1 { font-size: 26px; }
+    h2 { font-size: 20px; }
+    table { font-size: 13px; }
+    th, td { padding: 8px 9px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .page { max-width: none; padding: 0; }
+    pre { background: #f4f4f4; color: #111; border: 1px solid #ccc; }
+    h2 { break-after: avoid; }
+    table, .callout { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="doc">
+    <div class="eyebrow">取名 · 典籍取词</div>
+    <h1>网页版 + 安卓版：打包与迭代方案</h1>
+    <div class="meta">面向决策 · 结论先行 · 更新于 2026-10-16</div>
+  </header>
+
+  <div class="callout tldr">
+    <strong>TL;DR</strong>
+    <ul>
+      <li>现有代码是<strong>纯静态、完全离线、已带 PWA</strong>（manifest + SW + 图标）——安卓版<strong>不需要重写</strong>。</li>
+      <li>三条路：<strong>PWA 直接安装</strong>（0 改动）、<strong>TWA 套壳</strong>（低改动）、<strong>Capacitor</strong>（中等改动，能力最全）。</li>
+      <li>推荐 <span class="recommend">Capacitor</span>：把 <code>dist</code> 打进 APK，不依赖服务器，天生离线，可用系统分享面板——最贴合本项目「运行时零网络」的定位。</li>
+      <li>网页版与安卓版<strong>共用同一份 <code>dist</code></strong>：同一仓库、同一套引擎/UI，只在最底层用平台层分流少数几个网页专属调用。</li>
+    </ul>
+  </div>
+
+  <h2>1. 现状盘点（决定了「为什么能快」）</h2>
+  <table>
+    <thead>
+      <tr><th>事实</th><th>出处</th><th>对安卓的意义</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>静态站点，运行时零网络请求</td><td><code>README.md</code> / <code>size-check.mjs</code></td><td>可直接内嵌 APK，无需后端</td></tr>
+      <tr><td>数据随包发布（<code>data</code> chunk ≈ 225 KB gz）</td><td><code>src/engine/data.ts</code></td><td>离线数据的天然形态就是「内置资源」</td></tr>
+      <tr><td><code>base: './'</code> 相对路径产物</td><td><code>vite.config.ts</code></td><td><code>file://</code> / WebView / 子路径都能跑</td></tr>
+      <tr><td>已能出单文件 HTML（1.39 MB）</td><td><code>npm run build:single</code></td><td>备选的极简分发形态</td></tr>
+      <tr><td>PWA 三件套齐全</td><td><code>public/manifest.webmanifest</code> / <code>sw.js</code> / <code>icon-*.png</code></td><td>Chrome 可直接「添加到主屏幕」当 App 用</td></tr>
+      <tr><td>分享/下载走 Web API</td><td><code>src/lib/share.ts</code> / <code>src/App.tsx</code></td><td>这是唯一需要按平台分流的区域</td></tr>
+    </tbody>
+  </table>
+
+  <h2>2. 三条路对比</h2>
+  <table>
+    <thead>
+      <tr><th>方案</th><th>工作量</th><th>更新方式</th><th>离线</th><th>原生能力</th><th>前置条件</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>PWA 直接安装</strong></td><td>0</td><td>部署即更新</td><td>✅（首次联网后）</td><td>弱（Web Share）</td><td>一个 HTTPS 托管</td></tr>
+      <tr><td><strong>TWA / Bubblewrap</strong></td><td>低</td><td>网页一部署，App 自动更新，<strong>不重发版</strong></td><td>首次需联网</td><td>弱</td><td>HTTPS 托管 + Digital Asset Links + 签名</td></tr>
+      <tr><td><strong>Capacitor</strong></td><td>中</td><td>改 JS 后 <code>cap sync</code> 重打包发版</td><td>✅ 装完即离线</td><td>强（系统分享/存文件）</td><td>Android 工具链（JDK/Gradle/Studio）+ 签名</td></tr>
+    </tbody>
+  </table>
+  <p><strong>排除项</strong>：React Native / Compose 全重写——canvas 分享、二维码、词典装配都要重做，且破坏「一套代码」，不划算。</p>
+
+  <h3>选择建议</h3>
+  <ul>
+    <li>只要「能在安卓上用、像个 App」→ <span class="pill">先发 PWA</span> 零成本，Chrome 装桌面即可。</li>
+    <li>最看重「改网页即时生效、不重发版」→ <span class="pill">TWA</span>（代价：首次联网 + 托管依赖，与离线调性略冲突）。</li>
+    <li>最看重「真离线 + 商店上架 + 原生分享」→ <span class="pill">Capacitor</span> <span class="recommend">（推荐）</span></li>
+  </ul>
+  <div class="callout tip">
+    最优组合：<strong>同一份 <code>dist</code> 既当 PWA（免安装、即时更新）又打进 Capacitor（商店 + 真离线 + 原生分享）</strong>，两条渠道互补。
+  </div>
+
+  <h2>3. Capacitor 方案：需要改的代码（很少）</h2>
+  <p>架构：加一层 <code>src/platform/</code>，网页与安卓共用 UI，只在底层分流。</p>
+  <table>
+    <thead>
+      <tr><th>位置</th><th>网页行为</th><th>安卓行为</th><th>需要的适配</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>src/lib/pwa.ts</code>（<code>usePwa</code>）</td><td>注册 SW</td><td>跳过（WebView 不需要/不支持 SW）</td><td><code>isNative()</code> 分支</td></tr>
+      <tr><td><code>src/App.tsx</code> <code>doShare</code></td><td>二维码指向 <code>location.origin</code></td><td>用系统分享面板发图；二维码指向<strong>正式托管网址</strong></td><td><code>shareImage()</code> + <code>canonicalUrl()</code></td></tr>
+      <tr><td><code>src/App.tsx</code> <code>doCopyLink</code></td><td>复制地址栏 URL</td><td>复制 <code>canonicalUrl()</code>（本地地址无意义）</td><td><code>canonicalUrl()</code></td></tr>
+      <tr><td><code>src/lib/share.ts</code> <code>downloadBlob</code></td><td><code>&lt;a download&gt;</code></td><td><code>@capacitor/filesystem</code> 存文档目录 + <code>@capacitor/share</code> 分享</td><td><code>saveFile()</code></td></tr>
+      <tr><td><code>src/App.tsx</code> <code>doPrint</code></td><td><code>window.print()</code></td><td>WebView 打印受限 → 改为分享名单长图</td><td>复用 <code>shareImage()</code></td></tr>
+    </tbody>
+  </table>
+  <p>新增平台层建议接口（<code>src/platform/index.ts</code>）：</p>
+  <ul>
+    <li><code>isNative(): boolean</code></li>
+    <li><code>canonicalUrl(): string</code> — 正式网页地址（native 下二维码/复制链接用它）</li>
+    <li><code>saveFile(blob, filename): Promise&lt;void&gt;</code></li>
+    <li><code>shareImage(blob, title): Promise&lt;void&gt;</code> — native 走系统面板，web 退回下载</li>
+    <li><code>registerSW(): void</code> — web 才注册</li>
+  </ul>
+  <p><strong>不动</strong>：<code>engine/</code>（纯函数引擎）、<code>store/</code>（持久化/导入导出/URL 编解码）、Tailwind 设计、大部分 <code>ui/</code>。</p>
+
+  <h2>4. 落地步骤（Capacitor）</h2>
+  <pre><code># 依赖
+npm i -D @capacitor/cli
+npm i @capacitor/core @capacitor/android @capacitor/share @capacitor/filesystem
+
+# 初始化（appId 定了难改，一次到位；webDir 指向 vite 产物）
+npx cap init "取名" com.&lt;你的域名反写&gt;.naming --web-dir=dist
+npx cap add android
+
+# 图标/启动页：用现有 public/icon-512.png 生成整套 mipmap
+npx @capacitor/assets generate</code></pre>
+  <p><code>capacitor.config.ts</code> 关键项：</p>
+  <ul>
+    <li><code>appId</code>（如 <code>com.example.naming</code>）</li>
+    <li><code>appName</code>：取名</li>
+    <li><code>webDir: 'dist'</code></li>
+    <li><code>backgroundColor</code> / <code>android.allowMixedContent: false</code></li>
+  </ul>
+  <p><code>package.json</code> 脚本建议：</p>
+  <pre><code>"android:sync": "npm run build &amp;&amp; npx cap sync android",
+"android:apk": "cd android &amp;&amp; ./gradlew assembleDebug",
+"android:aab": "cd android &amp;&amp; ./gradlew bundleRelease"</code></pre>
+  <div class="callout">
+    签名：生成 keystore（<strong>务必备份，丢了无法更新</strong>），写 <code>android/keystore.properties</code>，配置 <code>android/app/build.gradle</code>。产物 <code>.aab</code> 用于上架。
+  </div>
+
+  <h2>5. 发布与迭代</h2>
+  <ul>
+    <li><strong>上架</strong>：签名 keystore → 出 <code>.aab</code> → Play 控制台<strong>内部测试轨</strong> → 封闭测试 → 正式。</li>
+    <li><strong>合规</strong>：应用不收集任何数据 → 「Data safety」勾不收集 + 提供一条隐私政策链接（无采集也要有）。</li>
+    <li><strong>版本</strong>：每次发版 <code>versionCode</code> +1、<code>versionName</code> 更新。</li>
+    <li><strong>日常迭代</strong>：
+      <ul>
+        <li>Capacitor <strong>无内置热更</strong>；纯 JS 改动也需重新出包上传。</li>
+        <li>想要「改了即时生效」：或加 <code>@capawesome/capacitor-live-update</code>，或<strong>继续用 PWA 这条即时通道</strong>，native 只作商店分发。</li>
+      </ul>
+    </li>
+    <li><strong>渠道策略</strong>：<code>dist</code> 同一份，PWA 负责即时更新与免安装，Capacitor 负责商店 + 真离线 + 原生分享。</li>
+  </ul>
+
+  <h2>6. 决策清单（拍板用）</h2>
+  <ul class="checklist">
+    <li>是否上 Google Play？（是 → 需要签名 keystore + 隐私政策 + 开发者账号）</li>
+    <li>迭代优先级：<strong>即时更新（倾向 TWA / PWA）</strong> 还是 <strong>真离线 + 原生体验（倾向 Capacitor）</strong>？</li>
+    <li>是否已有 HTTPS 托管域名？（TWA 必需；PWA 必需；Capacitor 不需要）</li>
+    <li>需要原生分享/存图到相册吗？（需要 → Capacitor）</li>
+    <li><code>appId</code> 用什么？（一旦上架不可改）</li>
+  </ul>
+
+  <footer class="doc">
+    取名 · 典籍取词 — 网页版 / 安卓版打包方案 · 本页为离线单文件，无任何外部资源。
+  </footer>
+</div>
+</body>
+</html>
