@@ -1,6 +1,6 @@
 // 离线 shell：首访后同源 GET 走 cache-first + 回填，断网也能打开。
 // 本应用运行时零网络请求，这里只是把静态产物缓存下来，方便离线/可安装。
-const CACHE = 'naming-app-v3';
+const CACHE = 'naming-app-v4';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
