@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import Compose from './Compose';
 import { DEFAULT_OPTS } from '../store/local';
+import { findCombo } from '../engine/name';
 
 const baseProps = () => ({
   surname: '', setSurname: vi.fn(), reading: 0, setReading: vi.fn(),
@@ -99,5 +100,18 @@ describe('自选页', () => {
     unmount();
     render(<Compose {...p} />);
     expect(screen.getByRole('heading', { name: '苏子归' })).toBeInTheDocument();
+  });
+
+  it('拉黑的条目不出现在随机与搭配字里', () => {
+    localStorage.clear();
+    const blocked = findCombo('子归');
+    expect(blocked).not.toBeNull();
+    const p2 = { ...baseProps(), surname: '苏', opts: { ...DEFAULT_OPTS, exclude: [blocked!.id] } };
+    render(<Compose {...p2} />);
+    pickChar(1, '子');
+    const hints = screen.getAllByTitle(/· 《/);
+    for (const h of hints) {
+      expect(h.getAttribute('title')).not.toContain('子归');
+    }
   });
 });

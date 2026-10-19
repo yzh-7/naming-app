@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  cleanSurname, composeName, findCombo, genderOf, genderPass, genderStats, glossOf, isKnownSurname, L0_CHARS,
+  charFacts, cleanSurname, composeName, findCombo, genderOf, genderPass, genderStats, glossOf, isKnownSurname, L0_CHARS,
   lineGlossOf, minGnOf, namePinyin, pairCandidates,
   nicknames, plan, polyphoneTags, poolSize, popBand, popScore, popularity, radicalTags,
   readings, scoreItem, searchText, shapeTags, surnameReads,
@@ -343,6 +343,18 @@ describe('自选组合：只查事实，不套池内分数', () => {
   it('名用字表 293 字，与 meta 对得上', () => {
     expect(L0_CHARS).toHaveLength(META.L0_size);
     expect(L0_CHARS).toContain('子');
+  });
+  it('charFacts 给出字义/结构/笔画/常见度/读音，未知字留白', () => {
+    const a = charFacts('子');
+    expect(a.known).toBe(true);
+    expect(a.l0).toBe(true);
+    expect(a.gloss).toBe('婴儿');
+    expect(a.reads).toContain('zǐ');
+    const b = charFacts('龘');
+    expect(b.known).toBe(false);
+    expect(b.l0).toBe(false);
+    expect(b.gloss).toBeNull();
+    expect(b.reads).toEqual([]);
   });
 });
 
