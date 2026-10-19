@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  cleanSurname, genderOf, genderPass, genderStats, glossOf, isKnownSurname, minGnOf, namePinyin,
+  cleanSurname, genderOf, genderPass, genderStats, glossOf, isKnownSurname, lineGlossOf, minGnOf, namePinyin,
   nicknames, plan, polyphoneTags, poolSize, popBand, popScore, popularity, radicalTags,
   readings, scoreItem, searchText, shapeTags, surnameReads,
 } from './name';
@@ -276,6 +276,28 @@ describe('字义 / 字形 / 多音 / 小名 / 用字常见度', () => {
     expect(t).toContain(it.name);
     expect(t).toContain(py);
     expect(t).toContain(it.title.toLowerCase());
+  });
+});
+
+describe('出处今译', () => {
+  it('每条候选与单字出处都能取到非空今译，且同一句共用一个下标', () => {
+    for (const it of [...POOL, ...SINGLES]) {
+      expect(Number.isInteger(it.lg)).toBe(true);
+      expect(lineGlossOf(it).length).toBeGreaterThan(0);
+    }
+    const byLine = new Map<string, number>();
+    for (const it of [...POOL, ...SINGLES]) {
+      if (byLine.has(it.line)) expect(it.lg).toBe(byLine.get(it.line));
+      else byLine.set(it.line, it.lg);
+    }
+    expect(byLine.size).toBe(META.line_gloss);
+  });
+  it('抽一条核对句意（灵均）', () => {
+    const hit = POOL.find((p) => p.name === '灵均')!;
+    expect(lineGlossOf(hit)).toBe('父亲审视我初生时的器度，开始赐我美名：给我取名叫正则，取字叫灵均。');
+  });
+  it('越界下标返回空串而不是 undefined（界面按留白处理）', () => {
+    expect(lineGlossOf({ lg: 99999 })).toBe('');
   });
 });
 

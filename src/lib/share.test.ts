@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { copyText, downloadBlob, downloadText, renderListCard, renderShareCard, resultSummary } from './share';
-import { glossOf, scoreItem } from '../engine/name';
+import { glossOf, lineGlossOf, scoreItem } from '../engine/name';
 import { POOL } from '../engine/data';
 import { BOOK_LABEL, BOOK_ORDER, type Opts } from '../engine/types';
 
@@ -55,6 +55,7 @@ describe('结果摘要', () => {
     expect(s).toContain('用字常见度');
     expect(s).toContain('完全离线');
     expect(s).toContain('字义：');
+    expect(s).toContain(`今译：${lineGlossOf(r)}`);
   });
 });
 
@@ -73,6 +74,8 @@ describe('分享卡', () => {
     expect(ctx.fillText).toHaveBeenCalled();
     // 主名必被画到卡片上
     expect(ctx.fillText.mock.calls.some((c) => c[0] === r.full)).toBe(true);
+    // 今译也要画上去（带「今译」前缀，折行后可能截断）
+    expect(ctx.fillText.mock.calls.some((c) => String(c[0]).startsWith('今译'))).toBe(true);
   });
 
   const ctxStub = () => ({
@@ -104,6 +107,14 @@ describe('分享卡', () => {
     await renderShareCard(r);
     expect(getCanvas().height).toBe(1440);
     expect(ctx.fillText.mock.calls.some((c) => c[0] === '扫码打开')).toBe(false);
+  });
+
+  it('长原句/长今译时卡片自动加高，不会压到合注与二维码', async () => {
+    const ctx = ctxStub();
+    const getCanvas = mockCanvas(ctx);
+    const longItem = POOL.find((p) => p.name === '思君')!;
+    await renderShareCard(scoreItem('苏', longItem, opts, 0), undefined, 'https://example.com/?s=苏');
+    expect(getCanvas().height).toBeGreaterThan(1560);
   });
 
   it('名单图：高度随条数增长，画出每个名字与备注', async () => {

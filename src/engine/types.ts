@@ -29,6 +29,7 @@ export type PoolItem = {
   famous: boolean;
   risk: { word: string; freq: number } | null;
   score: number;
+  lg: number; // 出处今译在 LINE_GLOSS 里的下标
 };
 
 export type SingleItem = Omit<PoolItem, 'name' | 'chars' | 'tier' | 'redup' | 'risk'> & {
@@ -91,6 +92,7 @@ export type Named = {
   gap: number;
   strict: boolean;
   redup: boolean;
+  lg: number; // 出处今译在 LINE_GLOSS 里的下标
 };
 
 export type Result = Named & {

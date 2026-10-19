@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { plan, scoreItem, findItem, poolSize, genderStats, cleanSurname, isKnownSurname, surnameReads, shapeTags, popularity, glossOf, namePinyin, popScore } from './engine/name';
+import { plan, scoreItem, findItem, poolSize, genderStats, cleanSurname, isKnownSurname, surnameReads, shapeTags, popularity, glossOf, lineGlossOf, namePinyin, popScore } from './engine/name';
 import { META } from './engine/data';
 import { BOOK_LABEL, BOOK_ORDER, type Opts, type Result } from './engine/types';
 import Controls from './ui/Controls';
@@ -344,6 +344,7 @@ function Compare({ pairs }: { pairs: Pair[] }) {
     ['用字常见度', (p) => popularity(p.r.name).band],
     ['出处', (p) => `《${BOOK_LABEL[p.r.book]}·${p.r.title}》`],
     ['原句', (p) => p.r.line],
+    ['今译', (p) => lineGlossOf(p.r)],
     ['备注', (p) => p.rec.note ?? ''],
   ];
   return (

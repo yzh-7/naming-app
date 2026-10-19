@@ -13,6 +13,7 @@
 | `jieba_dict.txt` | fxsjy/jieba 词典 | MIT | 现代词频 349,046 条，构建期生成「高频剔除表 + 同形标注表」与负面谐音词表 | 否。运行时只查两张小表，且词频**不作为正向质量凭据** |
 | `unihan_krs_gsc.txt` | Unicode Unihan `kRSUnicode`（unicode.org，Unicode Terms of Use 免费使用） | Unicode | 从 Unihan.zip 抽取的派生子集：一二三级字表 8,105 字 → 康熙字典部首编号（取每条的第一个编号） | 否。构建期只把部首属 木(75)/火(86)/水(85)/金(167)/土(32) 五部的字推成卡片上的「部首」提示 |
 | `dict_shape.json` `dict_gloss.json` | mapull/chinese-dictionary 的 `char_base.json` / `char_detail.json`，经 `scripts/derive-dict.mjs` 裁剪 | MIT | 派生：笔画、八类结构名、字义（优先取「本义」，去训诂括号、截断）。字义只对 L0 字进包，笔画/结构对全体 8,105 字进包 | 是：字义进 `gloss.json`，笔画/结构进 `chars.json` 的 `st`/`sx` |
+| `line_gloss.tsv` | **本项目自撰**（1123 行，与候选/单字的原句逐条对应） | 本项目原创，随本仓库发布 | 出处今译：每个唯一原句一句白话释义，只解释句意，不增补典故与命理判断 | 是（`line_gloss.json`，按原句首次出现顺序的字符串数组） |
 | `name_given_freq.json` | wainshine/Chinese-Names-Corpus 的 `Chinese_Names_Corpus（120W）.txt`，经 `scripts/derive-dict.mjs` 裁剪 | Apache-2.0 | 派生：把 114 万个真实姓名去掉首字（姓）后的用字计数，作为「该字在真实名字里有多常用」的**估算证据**（211 万次用字） | 是（`chars.json` 的 `gn` 字段；运行期换算成档位） |
 
 > 部首提示陈述的是「这个字的康熙字典部首是什么」这一可核对的事实，不是「这个字五行属什么」的命理判断。民间按偏旁定五行只对这五部成立，其它部首的字没有可靠说法，因此一律留白（留白 ≠ 无五行）。本项目**不做**五行筛选、不做八字/五格、不给吉凶与「补缺」建议。笔画若日后要改用同一来源的 `kTotalStrokes`，不要重新引入那份爬取数据。
@@ -51,4 +52,4 @@ Vite 8.3.4 · React / React-DOM 19.3.1 · TypeScript 5.9.3 · Tailwind 4.3.3（`
 
 ## 许可策略
 
-语料与字表用 MIT / Apache-2.0 现成数据、归属保留；代码 100% 自写，不引入 gushi_namer 的源码与数据。古典诗文本身进公共领域，风险只来自现代整理本的注释与译文，故不引入任何译文字段（`shuimo.prologue` 是整首现代赏析短文，不参与取词，也不发布）。
+语料与字表用 MIT / Apache-2.0 现成数据、归属保留；代码 100% 自写，不引入 gushi_namer 的源码与数据。古典诗文本身进公共领域，风险只来自现代整理本的注释与译文，故**不引入任何他人的现代译文**：`line_gloss.tsv` 是随本仓库原创撰写的逐句今译（只解释句意，不抄录古诗文网、程俊英等整理本的注释或译文），该文件为本项目原创内容，随本仓库发布；`shuimo.prologue` 是整首现代赏析短文，不参与取词，也不发布。

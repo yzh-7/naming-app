@@ -305,6 +305,38 @@ for (const ch of [...L0].sort()) {
   singles.push({ char: ch, from: best.name, id: `S_${best.id}`, book: best.book, title: best.title, author: best.author, line: best.line, seg: best.seg, foot: best.foot + at * (best.gap ?? 1), gap: 0, strict: best.strict, famous: best.famous, score: best.score - 8 });
 }
 
+// 出处今译：本仓库自撰（data/raw/LICENSES.md），一行「原句\t释义」。
+// 只有候选与单字出处的原句需要释义；缺一条、多一条都在构建期炸掉，不许静默留白。
+const LINE_GLOSS_RAW = new Map();
+for (const line of read('line_gloss.tsv').split('\n')) {
+  if (!line) continue;
+  const tab = line.indexOf('\t');
+  if (tab < 0) throw new Error(`line_gloss.tsv 行格式错误（缺 Tab）：${line}`);
+  const src = line.slice(0, tab);
+  const gl = line.slice(tab + 1);
+  if (!src || !gl) throw new Error(`line_gloss.tsv 有空字段：${line}`);
+  if (LINE_GLOSS_RAW.has(src)) throw new Error(`line_gloss.tsv 原句重复：${src}`);
+  LINE_GLOSS_RAW.set(src, gl);
+}
+
+// 按「候选 → 单字」的首次出现顺序编号；lg 是数组下标，运行时 LINE_GLOSS[lg] 直接取
+const lineGloss = [];
+const glossIndex = new Map();
+const glossAt = (src) => {
+  if (!LINE_GLOSS_RAW.has(src)) throw new Error(`原句没有今译：${src}`);
+  let i = glossIndex.get(src);
+  if (i === undefined) {
+    i = lineGloss.length;
+    glossIndex.set(src, i);
+    lineGloss.push(LINE_GLOSS_RAW.get(src));
+  }
+  return i;
+};
+for (const c of candidates) c.lg = glossAt(c.line);
+for (const s of singles) s.lg = glossAt(s.line);
+const unusedGloss = [...LINE_GLOSS_RAW.keys()].filter((src) => !glossIndex.has(src));
+if (unusedGloss.length) throw new Error(`line_gloss.tsv 有 ${unusedGloss.length} 条释义没有对应原句：${unusedGloss.slice(0, 3).join(' | ')}`);
+
 const chars = {};
 for (const ch of [...WH123].sort()) {
   const rs = readingsOf(ch);
@@ -404,6 +436,7 @@ const meta = {
   radical_named: candidates.filter((c) => c.chars.some((ch) => radical[ch])).length,
   shape_chars: Object.keys(SHAPE).length,
   gloss_chars: Object.keys(gloss).length,
+  line_gloss: lineGloss.length,
   given_freq_chars: Object.keys(GIVEN_FREQ).length,
 };
 const write = (name, data) => fs.writeFileSync(path.join(OUT, name), JSON.stringify(data) + '\n');
@@ -419,11 +452,13 @@ write('gender.json', { female: [...femaleSet].sort().join(''), male: [...maleSet
 write('radical.json', radical);
 // 字义：名用字逐字短释义（本义优先），卡片上「取字」旁展示
 write('gloss.json', gloss);
+// 出处今译：按原句首次出现顺序的纯数组，条目用 lg 下标取；不重复存句子，省体积
+write('line_gloss.json', lineGloss);
 // 混合层实测 193 KB gzip，超出体积预算，且设计里它就是一层噪声：不进包，只出到 data/measured 供人工翻查
 fs.mkdirSync('data/measured', { recursive: true });
 fs.writeFileSync('data/measured/poolC.json', JSON.stringify(
   poolMix.map((c) => ({ name: c.name, book: c.book, title: c.title, seg: c.seg, foot: c.foot, gap: c.gap, score: c.score }))) + '\n');
-const SHIPPED = ['candidates.json', 'singles.json', 'chars.json', 'homophone.json', 'risk.json', 'whitelist-L0.json', 'gender.json', 'radical.json', 'gloss.json'];
+const SHIPPED = ['candidates.json', 'singles.json', 'chars.json', 'homophone.json', 'risk.json', 'whitelist-L0.json', 'gender.json', 'radical.json', 'gloss.json', 'line_gloss.json'];
 meta.ship_gz = Object.fromEntries(SHIPPED.map((f) => [f, gzipSize(path.join(OUT, f))]));
 meta.ship_gz_total = Object.values(meta.ship_gz).reduce((a, b) => a + b, 0);
 write('meta.json', meta);

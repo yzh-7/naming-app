@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import App from './App';
 import { POOL } from './engine/data';
+import { lineGlossOf } from './engine/name';
 
 const ctxStub = () => ({
   fillStyle: '', strokeStyle: '', lineWidth: 0, font: '', textAlign: '',
@@ -40,6 +41,25 @@ describe('App 集成冒烟', () => {
     const note = screen.getByPlaceholderText('为什么喜欢它') as HTMLInputElement;
     fireEvent.change(note, { target: { value: '喜欢它的意思' } });
     expect(note.value).toBe('喜欢它的意思');
+  });
+
+  it('对比表里带出处今译，两列都非空', () => {
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('姓氏'), { target: { value: '苏' } });
+    const favs = screen.getAllByRole('button', { name: '收藏' });
+    fireEvent.click(favs[0]);
+    fireEvent.click(favs[1]);
+    fireEvent.click(screen.getByRole('tab', { name: /收藏 2/ }));
+    const boxes = screen.getAllByLabelText('对比') as HTMLInputElement[];
+    fireEvent.click(boxes[0]);
+    fireEvent.click(boxes[1]);
+    const row = screen.getByRole('rowheader', { name: '今译' }).closest('tr')!;
+    const cells = within(row).getAllByRole('cell');
+    expect(cells).toHaveLength(2);
+    for (const c of cells) {
+      expect(c.textContent?.length).toBeGreaterThan(0);
+      expect(lineGlossOf(POOL.find((p) => lineGlossOf(p) === c.textContent)!)).toBe(c.textContent);
+    }
   });
 
   it('导出触发一次下载并给出提示', () => {

@@ -1,4 +1,4 @@
-import { CHARS, GENDER_FEMALE, GENDER_MALE, GLOSS, HOMO_FULL, HOMO_INIT, POOL, RADICAL, RISK_HIGH, SINGLES } from './data';
+import { CHARS, GENDER_FEMALE, GENDER_MALE, GLOSS, HOMO_FULL, HOMO_INIT, LINE_GLOSS, POOL, RADICAL, RISK_HIGH, SINGLES } from './data';
 import type { Delta, GenderSide, GenderTag, Named, Opts, Result, SortKey } from './types';
 import { BOOK_ORDER } from './types';
 
@@ -238,6 +238,9 @@ export function scoreItem(surname: string, it: Named & { famous?: boolean; tier?
 }
 
 export const findItem = (id: string) => ALL_ITEMS.find((it) => it.id === id);
+
+// 出处今译：构建期按原句首次出现顺序编号，运行时按下标取；查不到返回空串，由界面决定是否留白
+export const lineGlossOf = (it: { lg: number }) => LINE_GLOSS[it.lg] ?? '';
 
 function bookUniverse(opts: Opts): (Named & { famous?: boolean; tier?: string })[] {
   const src = opts.length === 2 ? POOL.filter((p) => p.tier === 'B') : SINGLE_ITEMS;

@@ -46,6 +46,7 @@ const L0 = new Set(JSON.parse(fs.readFileSync(`${OUT}/whitelist-L0.json`, 'utf8'
 const risk = JSON.parse(fs.readFileSync(`${OUT}/risk.json`, 'utf8'));
 const cand = JSON.parse(fs.readFileSync(`${OUT}/candidates.json`, 'utf8'));
 const singles = JSON.parse(fs.readFileSync(`${OUT}/singles.json`, 'utf8'));
+const lineGloss = JSON.parse(fs.readFileSync(`${OUT}/line_gloss.json`, 'utf8'));
 const names = new Set(cand.map((c) => c.name));
 
 console.log('2) 实测规模（口径：起点落音步、同句读内间隔≤3、排除叠词粘连、六本典籍）');
@@ -161,6 +162,39 @@ ok(seedShape.every((p) => sameShapeSet.has(p)),
 const poolCharsSeen = new Set(cand.flatMap((c) => c.chars));
 ok(singles.length === [...L0].filter((ch) => poolCharsSeen.has(ch)).length && singles.length + meta.singles_without_source === L0.size,
   `单字名＝白名单里有对齐出处的字 ${singles.length} 个（白名单 ${L0.size}，无出处 ${meta.singles_without_source}）`);
+
+console.log('4b) 出处今译：覆盖全部唯一原句，条目只存下标');
+{
+  const rawGloss = new Map();
+  for (const line of fs.readFileSync('data/raw/line_gloss.tsv', 'utf8').split('\n')) {
+    if (!line) continue;
+    const tab = line.indexOf('\t');
+    rawGloss.set(line.slice(0, tab), line.slice(tab + 1));
+  }
+  ok(rawGloss.size === 1123, `raw 今译 1,123 行（实际 ${rawGloss.size}）`);
+  const lines = new Set([...cand, ...singles].map((c) => c.line));
+  ok(lines.size === 1123 && lineGloss.length === lines.size,
+    `唯一原句 ${lines.size} 条、今译 ${lineGloss.length} 条一一对应`);
+  ok([...cand, ...singles].every((c) => Number.isInteger(c.lg) && c.lg >= 0 && c.lg < lineGloss.length),
+    '每个候选/单字出处的 lg 都指向有效今译');
+  const bad = [];
+  const seen = new Set();
+  for (const c of [...cand, ...singles]) {
+    if (seen.has(c.lg)) continue;
+    seen.add(c.lg);
+    if (rawGloss.get(c.line) !== lineGloss[c.lg]) bad.push(`${c.id}: ${c.line}`);
+  }
+  ok(bad.length === 0, 'line_gloss.json 与 raw 逐条一致（同句共用一个下标）', bad.slice(0, 3).join(' | '));
+  ok(new Set([...cand, ...singles].map((c) => c.line)).size === new Set([...cand, ...singles].map((c) => c.lg)).size,
+    '一句一译：没有两条不同原句共用同一个 lg');
+  ok(lineGloss.every((g) => typeof g === 'string' && g.length > 0 && !/[\n\r]/.test(g)),
+    '每条今译都是非空单行字符串');
+  ok(meta.line_gloss === lineGloss.length, `meta.line_gloss = ${lineGloss.length}（实际 ${meta.line_gloss}）`);
+  for (const [w, g] of [['灵均', '父亲审视我初生时的器度，开始赐我美名：给我取名叫正则，取字叫灵均。'], ['东华', '我从前从东华帝君那里承受此经，东华帝君从金阙帝君那里承受。']]) {
+    const hit = cand.find((c) => c.name === w);
+    ok(hit && lineGloss[hit.lg] === g, `${w} 的今译是「${g}」（实际 ${hit ? lineGloss[hit.lg] : '缺条目'}）`);
+  }
+}
 
 console.log('5) 性别风格：字表未漂移 + 强弱两级 + 真筛选不变量');
 {

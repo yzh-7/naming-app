@@ -1,4 +1,4 @@
-import { glossOf, nicknames, polyphoneTags, popularity, radicalTags, shapeTags } from '../engine/name';
+import { glossOf, lineGlossOf, nicknames, polyphoneTags, popularity, radicalTags, shapeTags } from '../engine/name';
 import { BOOK_LABEL, type Result } from '../engine/types';
 
 const WINDOW_MAX = 28;
@@ -30,6 +30,10 @@ function Source({ r }: { r: Result }) {
       <div className="text-sm text-neutral-600 dark:text-neutral-300">
         <div>《{BOOK_LABEL[r.book]}·{r.title}{r.author ? `·${r.author}` : ''}》</div>
         <div className="mt-0.5">取词段「<mark className="bg-amber-100 px-0.5">{r.seg}</mark>」</div>
+        <p className="mt-1.5 border-l-2 border-neutral-200 pl-2 text-xs leading-5 text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+          <span className="mr-1 rounded bg-neutral-100 px-1 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">今译</span>
+          {lineGlossOf(r)}
+        </p>
       </div>
     );
   }
@@ -62,6 +66,10 @@ function Source({ r }: { r: Result }) {
         {gap > 1 && ' · 跨字取词，看原文自辨'}
         {!r.strict && ' · 长短句/散文宽口径'}
       </div>
+      <p className="mt-1.5 border-l-2 border-neutral-200 pl-2 text-xs leading-5 text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+        <span className="mr-1 rounded bg-neutral-100 px-1 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">今译</span>
+        {lineGlossOf(r)}
+      </p>
     </div>
   );
 }

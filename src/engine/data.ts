@@ -6,6 +6,7 @@ import riskJson from '../data/risk.json';
 import genderJson from '../data/gender.json';
 import radicalJson from '../data/radical.json';
 import glossJson from '../data/gloss.json';
+import lineGlossJson from '../data/line_gloss.json';
 import metaJson from '../data/meta.json';
 import { BOOK_ORDER, type CharInfo, type Homophone, type PoolItem, type SingleItem } from './types';
 
@@ -25,7 +26,7 @@ function asPool(v: unknown, what: string): PoolItem[] {
   for (const it of isArr(v)) {
     if (!isObj(it) || !isStr(it.id) || !isStr(it.name) || !Array.isArray(it.chars) || !it.chars.every(isStr) ||
         !isStr(it.book) || !BOOKS.has(it.book) || !isStr(it.title) || !isStr(it.line) ||
-        !isNum(it.foot) || !isNum(it.gap) || typeof it.strict !== 'boolean') {
+        !isNum(it.foot) || !isNum(it.gap) || typeof it.strict !== 'boolean' || !isNum(it.lg)) {
       fail(`${what} 有结构不符的条目`);
     }
   }
@@ -35,7 +36,7 @@ function asPool(v: unknown, what: string): PoolItem[] {
 function asSingles(v: unknown): SingleItem[] {
   for (const it of isArr(v)) {
     if (!isObj(it) || !isStr(it.id) || !isStr(it.char) || !isStr(it.from) || !isStr(it.book) ||
-        !BOOKS.has(it.book) || !isStr(it.line) || !isNum(it.foot) || !isNum(it.gap)) {
+        !BOOKS.has(it.book) || !isStr(it.line) || !isNum(it.foot) || !isNum(it.gap) || !isNum(it.lg)) {
       fail('singles 有结构不符的条目');
     }
   }
@@ -71,13 +72,18 @@ function asRadical(v: unknown): Record<string, '木' | '火' | '水' | '金' | '
   return v as Record<string, '木' | '火' | '水' | '金' | '土'>;
 }
 
+function asLineGloss(v: unknown): string[] {
+  for (const g of isArr(v)) if (!isStr(g) || !g) fail('line_gloss 有非字符串或空释义');
+  return v as string[];
+}
+
 function asGloss(v: unknown): Record<string, string> {
   if (!isObj(v)) fail('gloss 不是对象');
   for (const [k, g] of Object.entries(v)) if (!isStr(g)) fail(`gloss["${k}"] 不是字符串`);
   return v as Record<string, string>;
 }
 
-const META_KEYS = ['pool_B', 'singles', 'L0_size', 'L0_seed', 'L0_added', 'ship_gz_total', 'radical_chars', 'radical_named', 'gloss_chars'] as const;
+const META_KEYS = ['pool_B', 'singles', 'L0_size', 'L0_seed', 'L0_added', 'ship_gz_total', 'radical_chars', 'radical_named', 'gloss_chars', 'line_gloss'] as const;
 type Meta = {
   pool_B: number;
   by_gap: { gap1: number; gap2: number; gap3: number };
@@ -93,6 +99,7 @@ type Meta = {
   radical_named: number;
   shape_chars: number;
   gloss_chars: number;
+  line_gloss: number;
   given_freq_chars: number;
 };
 function asMeta(v: unknown): Meta {
@@ -104,6 +111,7 @@ function asMeta(v: unknown): Meta {
 
 export const POOL = asPool(candidatesJson, 'candidates');
 export const SINGLES = asSingles(singlesJson);
+export const LINE_GLOSS = asLineGloss(lineGlossJson);
 export const CHARS = asChars(charsJson);
 export const HOMO_FULL = asHomo(homophoneJson.full, 'homophone.full');
 export const HOMO_INIT = asHomo(homophoneJson.initial, 'homophone.initial');
@@ -115,4 +123,6 @@ export const GENDER_MALE = asStrSet((genderJson as { male: unknown }).male, 'gen
 export const RADICAL = asRadical(radicalJson);
 // 字义：名用字逐字短释义（本义优先）。只对 L0 字发布，查不到就留白
 export const GLOSS = asGloss(glossJson);
+// 出处今译：与候选/单字逐条对应，条目只存 lg 下标；越界就是构建产物坏了，启动即失败
+for (const it of [...POOL, ...SINGLES]) if (!LINE_GLOSS[it.lg]) fail(`${it.id} 的 lg=${it.lg} 取不到今译`);
 export const META = asMeta(metaJson);

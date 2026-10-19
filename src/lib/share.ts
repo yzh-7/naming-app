@@ -1,6 +1,6 @@
 // 导出下载、复制文本、分享卡片（Canvas 现画；二维码用零依赖的 uqr 在本地生成，无联网）
 import { encode } from 'uqr';
-import { glossOf, popularity, shapeTags } from '../engine/name';
+import { glossOf, lineGlossOf, popularity, shapeTags } from '../engine/name';
 import { BOOK_LABEL, type Result } from '../engine/types';
 
 export function downloadBlob(blob: Blob, filename: string) {
@@ -36,6 +36,7 @@ export function resultSummary(r: Result) {
     g && `字义：${g}`,
     `出处：《${BOOK_LABEL[r.book]}·${r.title}${r.author ? `·${r.author}` : ''}》`,
     `原句：${r.line}`,
+    `今译：${lineGlossOf(r)}`,
     sh.strokes > 0 && `字形：${sh.chars.map((c) => `${c.ch}${c.sx ?? ''}${c.st ? c.st + '画' : ''}`).join(' ')}（共 ${sh.strokes} 画）`,
     `用字常见度：${pop.band}（依据 114 万真实姓名用字频次估算）`,
     '—— 取名 · 典籍取词（完全离线）',
@@ -75,15 +76,31 @@ function drawQr(ctx: CanvasRenderingContext2D, url: string, x0: number, y0: numb
   }
 }
 
-// 分享卡片：羊皮纸竖版，含名字、读音、出处、字义与合注；给了 url 就在底部附二维码（离线生成）
+// 分享卡片：羊皮纸竖版，含名字、读音、出处、原句、今译与合注；给了 url 就在底部附二维码（离线生成）。
+// 高度按原句/今译的实际折行数算，长句（九歌整段）不会压到下面的合注与二维码。
 export function renderShareCard(r: Result, appName = '取名 · 典籍取词', url?: string): Promise<Blob> {
   const W = 1080;
-  const H = url ? 1560 : 1440;
   const c = document.createElement('canvas');
   c.width = W;
-  c.height = H;
+  c.height = 10;
   const ctx = c.getContext('2d')!;
 
+  const gloss = [...new Set([...r.name])].map((ch) => (glossOf(ch) ? `${ch} · ${glossOf(ch)}` : null)).filter(Boolean).join('    ');
+  const src = `《${BOOK_LABEL[r.book]}·${r.title}${r.author ? `·${r.author}` : ''}》`;
+
+  // 先按最终字号量折行，再定画布高度；wrap 里的 measureText 依赖当前 font
+  ctx.font = `400 36px ${SERIF}`;
+  const lines = wrap(ctx, r.line, W - 260, 4);
+  ctx.font = `400 28px ${SANS}`;
+  const gl = wrap(ctx, `今译 ${lineGlossOf(r)}`, W - 240, 3);
+
+  let y = 780;
+  y += lines.length * 56;
+  const gy = y + 18;
+  const afterGloss = gy + Math.max(gl.length - 1, 0) * 40;
+  const H = url ? Math.max(1560, afterGloss + 544) : Math.max(1440, afterGloss + 280);
+
+  c.height = H;
   paintParchment(ctx, W, H);
   const cx = W / 2;
   ctx.textAlign = 'center';
@@ -103,7 +120,6 @@ export function renderShareCard(r: Result, appName = '取名 · 典籍取词', u
   ctx.fillText(r.readings.join('  '), cx, 540);
 
   // 字义
-  const gloss = [...new Set([...r.name])].map((ch) => (glossOf(ch) ? `${ch} · ${glossOf(ch)}` : null)).filter(Boolean).join('    ');
   if (gloss) {
     ctx.font = `400 30px ${SANS}`;
     ctx.fillStyle = '#5a6b83';
@@ -111,17 +127,21 @@ export function renderShareCard(r: Result, appName = '取名 · 典籍取词', u
   }
 
   // 出处
-  const src = `《${BOOK_LABEL[r.book]}·${r.title}${r.author ? `·${r.author}` : ''}》`;
   ctx.font = `500 34px ${SERIF}`;
   ctx.fillStyle = '#1f3a5f';
   ctx.fillText(src, cx, 716);
 
-  // 原句（自动折行，最多 4 行）
-  const lines = wrap(ctx, r.line, W - 260, 4);
+  // 原句（最多 4 行，超出以省略号收尾）
   ctx.font = `400 36px ${SERIF}`;
   ctx.fillStyle = '#37465c';
-  let y = 780;
-  for (const ln of lines) { ctx.fillText(ln, cx, y); y += 56; }
+  let ly = 780;
+  for (const ln of lines) { ctx.fillText(ln, cx, ly); ly += 56; }
+
+  // 今译（小一号、低对比，最多 3 行）
+  ctx.font = `400 28px ${SANS}`;
+  ctx.fillStyle = '#5a6b83';
+  let gy2 = gy;
+  for (const ln of gl) { ctx.fillText(ln, cx, gy2); gy2 += 40; }
 
   // 合注
   const sh = shapeTags(r.name);
@@ -129,14 +149,14 @@ export function renderShareCard(r: Result, appName = '取名 · 典籍取词', u
   const note = [sh.strokes ? `共 ${sh.strokes} 画` : null, sh.chars.every((c) => c.sx) ? sh.chars.map((c) => c.sx).join('') : null, `用字常见度 ${pop.band}`].filter(Boolean).join(' · ');
   ctx.font = `400 28px ${SANS}`;
   ctx.fillStyle = '#7a8699';
-  ctx.fillText(note, cx, H - 200);
+  ctx.fillText(note, cx, H - (url ? 464 : 200));
 
   if (url) {
     const qs = 200;
-    drawQr(ctx, url, cx - qs / 2, 1130, qs);
+    drawQr(ctx, url, cx - qs / 2, H - 430, qs);
     ctx.font = `400 22px ${SANS}`;
     ctx.fillStyle = '#7a8699';
-    ctx.fillText('扫码打开', cx, 1370);
+    ctx.fillText('扫码打开', cx, H - 190);
   }
 
   ctx.font = `400 26px ${SANS}`;
@@ -210,7 +230,7 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, max
     if (ctx.measureText(cur + ch).width > maxWidth && cur) {
       out.push(cur);
       cur = ch;
-      if (out.length === maxLines) break;
+      if (out.length === maxLines) { out[out.length - 1] = out[out.length - 1].replace(/.$/, '…'); return out; }
     } else {
       cur += ch;
     }

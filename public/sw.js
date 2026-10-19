@@ -1,6 +1,6 @@
 // 离线 shell：首访后同源 GET 走 cache-first + 回填，断网也能打开。
 // 本应用运行时零网络请求，这里只是把静态产物缓存下来，方便离线/可安装。
-const CACHE = 'naming-app-v2';
+const CACHE = 'naming-app-v3';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -22,16 +22,20 @@ self.addEventListener('message', (e) => {
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  const put = (res) => {
+    if (res && res.status === 200 && res.type === 'basic') {
+      const copy = res.clone();
+      caches.open(CACHE).then((c) => c.put(req, copy));
+    }
+    return res;
+  };
+  // 导航请求走 network-first：新版本部署后刷新即可拿到新 index.html，不会被旧缓存顶住。
+  // 带哈希的静态资源仍是 cache-first（内容变了文件名就变，不存在陈旧问题）。
+  if (req.mode === 'navigate') {
+    e.respondWith(fetch(req).then(put).catch(() => caches.match(req).then((hit) => hit || caches.match('./index.html'))));
+    return;
+  }
   e.respondWith(
-    caches.match(req).then((hit) => {
-      const net = fetch(req).then((res) => {
-        if (res && res.status === 200 && res.type === 'basic') {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy));
-        }
-        return res;
-      }).catch(() => hit || caches.match('./index.html'));
-      return hit || net;
-    }),
+    caches.match(req).then((hit) => hit || fetch(req).then(put).catch(() => caches.match('./index.html'))),
   );
 });
