@@ -36,7 +36,7 @@
 - `passesShape(name, opts)`：可核对事实类筛选——`strokeMax`（整名笔画上限，0=不限）、`popFloor`（逐字常见度下限，用 `minGnOf`）、`noMonotone`（排除两字同结构）。选项档位见 `types.ts` 的 `STROKE_MAXES` / `POP_FLOORS`。
 - `plan(surname, opts, batch, reading)`：分页取一批，按 `opts.sort` 排序（score/strokes/popular/book）；仅 score/book 时按书分组展示，strokes/popular 保持所选顺序。
 - 打分：音韵（声调/声母/多音）、谐音避讳、字频、性别风格等。
-- 展示层：`glossOf`、`lineGlossOf`（按条目 `lg` 取出处今译）、`shapeTags`（笔画 + 结构，叠字不判同结构）、`polyphoneTags`、`nicknames`、`popularity` / `popBand` / `popScore` / `minGnOf`（常见度分档：≥8000 很常见 / ≥2000 常见 / ≥500 一般 / ≥100 少见 / <100 冷僻）、`searchText`。
+- 展示层：`glossOf`、`lineGlossOf`（按条目 `lg` 取出处今译）、`charFacts`（逐字事实）、`composeName`（自选组合核对）、`findCombo` / `pairCandidates`（出处精确查 / 同句读搭配）、`shapeTags`（笔画 + 结构，叠字不判同结构）、`polyphoneTags`、`nicknames`、`popularity` / `popBand` / `popScore` / `minGnOf`（常见度分档：≥8000 很常见 / ≥2000 常见 / ≥500 一般 / ≥100 少见 / <100 冷僻）、`searchText`。
 
 `src/engine/data.ts` 装配构建产物并导出 `META`、`GLOSS`、`LINE_GLOSS`；每份 JSON 在**加载时做一遍结构自检**（`asPool`/`asChars`/`asMeta`…），数据不合规就在启动阶段大声失败，替代裸 `as` 断言。类型在 `src/engine/types.ts`。
 
@@ -49,7 +49,8 @@
 
 - `App.tsx`：三 tab（生成 / 收藏 / 拉黑）、导出导入（**导入时弹合并/覆盖选择**）、复制链接、主题三态循环、离线 / 新版本提示、打印名单、URL 初始状态、跳过链接、`aria-live` 播报、tablist 语义。收藏页支持**搜索 / 排序（最近·分数·笔画·常见度）/ 分组过滤 / 导出名单长图**，勾 2–3 个做对比表 `Compare`。
 - `Controls.tsx`：姓氏/读音/字数/性别/书籍/叠字/每批条数/换一批 + 搜索框 + 排序下拉 + **整名笔画上限 / 用字常见度下限 / 避开同结构**。
-- `NameCard.tsx`：读音、出处、原句、**今译**、字义、字形、常见度、多音、小名、收藏/拉黑/分享/复制。局部变量 `shadow` 表示阴影，别改回 `shape`（与 `shapeTags` 冲突）。动作区与折叠详情带 `no-print`。
+- `NameCard.tsx`：读音、出处、原句、**今译**、字义、字形、常见度、多音、小名、收藏/拉黑/分享/复制。局部变量 `shadow` 表示阴影，别改回 `shape`（与 `shapeTags` 冲突）。动作区与折叠详情带 `no-print`。`Source` 与 `SourceRef` 单独导出，自选页复用同一套出处渲染。
+- `Compose.tsx`：**自选页**。用户自选姓与 1–2 个字（任意汉字，非 L0 字标注），`composeName` 只做读音/谐音/字形事实核对，**不套 Pool-B 分数**（那套分数只对池内候选有校准意义）。出处用 `findCombo` 精确查 Pool-B/singles：查到就渲染 `Source`，查不到明说「未见此搭配」，不拿别的句子凑。另有 `pairCandidates(ch)`（同句读搭配字，从 `candidates.json` 现算，零新增数据）与随机池（默认只随机有出处的）。无出处组合不给收藏入口——收藏按 `id` 回查，没有 id 会坏。草稿存 `localStorage`（`naming.compose.v1`）。
 - `ErrorBoundary.tsx`：包裹整棵应用，出错给兜底页而非白屏。
 
 深色模式用 Tailwind 4 的 `@custom-variant dark (&:where(.dark, .dark *))`（`src/styles.css`），令牌用 `dark:` 前缀。打印样式在 `styles.css` 的 `@media print`（隐藏 `.no-print`、卡片不跨页断开）。

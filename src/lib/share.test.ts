@@ -117,6 +117,20 @@ describe('分享卡', () => {
     expect(getCanvas().height).toBeGreaterThan(1560);
   });
 
+  it('无出处组合：摘要写「未见此搭配」，分享卡不画原句/今译也不崩', async () => {
+    const ctx = ctxStub();
+    mockCanvas(ctx);
+    const composed = { full: '苏龙凤', name: '龙凤', readings: ['sū', 'lóng', 'fèng'] };
+    const s = resultSummary(composed);
+    expect(s).toContain('苏龙凤');
+    expect(s).toContain('未见此搭配');
+    expect(s).not.toContain('出处：《');
+    const blob = await renderShareCard(composed, undefined, 'https://example.com/');
+    expect(blob).toBeInstanceOf(Blob);
+    expect(ctx.fillText.mock.calls.some((c) => String(c[0]).includes('未见这个搭配'))).toBe(true);
+    expect(ctx.fillText.mock.calls.some((c) => String(c[0]).startsWith('今译'))).toBe(false);
+  });
+
   it('名单图：高度随条数增长，画出每个名字与备注', async () => {
     const ctx = ctxStub();
     const getCanvas = mockCanvas(ctx);

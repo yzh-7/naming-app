@@ -1,7 +1,7 @@
 // 导出下载、复制文本、分享卡片（Canvas 现画；二维码用零依赖的 uqr 在本地生成，无联网）
 import { encode } from 'uqr';
 import { glossOf, lineGlossOf, popularity, shapeTags } from '../engine/name';
-import { BOOK_LABEL, type Result } from '../engine/types';
+import { BOOK_LABEL, type Result, type ShareName } from '../engine/types';
 
 export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -27,16 +27,17 @@ export async function copyText(text: string): Promise<boolean> {
   }
 }
 
-export function resultSummary(r: Result) {
+export function resultSummary(r: ShareName) {
   const g = [...new Set([...r.name])].map((ch) => (glossOf(ch) ? `${ch}：${glossOf(ch)}` : null)).filter(Boolean).join('；');
   const pop = popularity(r.name);
   const sh = shapeTags(r.name);
   return [
-    `${r.full}  ${r.readings.join(' ')}  ${r.total} 分`,
+    `${r.full}  ${r.readings.join(' ')}${r.total != null ? `  ${r.total} 分` : ''}`,
     g && `字义：${g}`,
-    `出处：《${BOOK_LABEL[r.book]}·${r.title}${r.author ? `·${r.author}` : ''}》`,
-    `原句：${r.line}`,
-    `今译：${lineGlossOf(r)}`,
+    r.book && r.title && `出处：《${BOOK_LABEL[r.book]}·${r.title}${r.author ? `·${r.author}` : ''}》`,
+    r.line && `原句：${r.line}`,
+    r.line && r.lg != null && `今译：${lineGlossOf({ lg: r.lg })}`,
+    !r.book && '出处：六本典籍中未见此搭配（自选组合）',
     sh.strokes > 0 && `字形：${sh.chars.map((c) => `${c.ch}${c.sx ?? ''}${c.st ? c.st + '画' : ''}`).join(' ')}（共 ${sh.strokes} 画）`,
     `用字常见度：${pop.band}（依据 114 万真实姓名用字频次估算）`,
     '—— 取名 · 典籍取词（完全离线）',
@@ -78,7 +79,7 @@ function drawQr(ctx: CanvasRenderingContext2D, url: string, x0: number, y0: numb
 
 // 分享卡片：羊皮纸竖版，含名字、读音、出处、原句、今译与合注；给了 url 就在底部附二维码（离线生成）。
 // 高度按原句/今译的实际折行数算，长句（九歌整段）不会压到下面的合注与二维码。
-export function renderShareCard(r: Result, appName = '取名 · 典籍取词', url?: string): Promise<Blob> {
+export function renderShareCard(r: ShareName, appName = '取名 · 典籍取词', url?: string): Promise<Blob> {
   const W = 1080;
   const c = document.createElement('canvas');
   c.width = W;
@@ -86,13 +87,16 @@ export function renderShareCard(r: Result, appName = '取名 · 典籍取词', u
   const ctx = c.getContext('2d')!;
 
   const gloss = [...new Set([...r.name])].map((ch) => (glossOf(ch) ? `${ch} · ${glossOf(ch)}` : null)).filter(Boolean).join('    ');
-  const src = `《${BOOK_LABEL[r.book]}·${r.title}${r.author ? `·${r.author}` : ''}》`;
+  const hasSource = !!(r.book && r.title && r.line);
+  const src = hasSource ? `《${BOOK_LABEL[r.book!]}·${r.title}${r.author ? `·${r.author}` : ''}》` : '自选组合';
+  const lineText = hasSource ? r.line! : '六本典籍中未见这个搭配的出处。';
+  const glossText = hasSource && r.lg != null ? `今译 ${lineGlossOf({ lg: r.lg })}` : null;
 
   // 先按最终字号量折行，再定画布高度；wrap 里的 measureText 依赖当前 font
   ctx.font = `400 36px ${SERIF}`;
-  const lines = wrap(ctx, r.line, W - 260, 4);
+  const lines = wrap(ctx, lineText, W - 260, 4);
   ctx.font = `400 28px ${SANS}`;
-  const gl = wrap(ctx, `今译 ${lineGlossOf(r)}`, W - 240, 3);
+  const gl = glossText ? wrap(ctx, glossText, W - 240, 3) : [];
 
   let y = 780;
   y += lines.length * 56;
@@ -137,11 +141,13 @@ export function renderShareCard(r: Result, appName = '取名 · 典籍取词', u
   let ly = 780;
   for (const ln of lines) { ctx.fillText(ln, cx, ly); ly += 56; }
 
-  // 今译（小一号、低对比，最多 3 行）
-  ctx.font = `400 28px ${SANS}`;
-  ctx.fillStyle = '#5a6b83';
-  let gy2 = gy;
-  for (const ln of gl) { ctx.fillText(ln, cx, gy2); gy2 += 40; }
+  // 今译（小一号、低对比，最多 3 行）；自选组合没有出处时这一行不画
+  if (gl.length) {
+    ctx.font = `400 28px ${SANS}`;
+    ctx.fillStyle = '#5a6b83';
+    let gy2 = gy;
+    for (const ln of gl) { ctx.fillText(ln, cx, gy2); gy2 += 40; }
+  }
 
   // 合注
   const sh = shapeTags(r.name);

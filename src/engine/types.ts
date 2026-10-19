@@ -106,6 +106,19 @@ export type Result = Named & {
   flags: string[];
 };
 
+// 分享/复制只需要这些字段：有出处的 Result 满足它，自选组合也可以直接构造（无 book/line/total）
+export type ShareName = {
+  full: string;
+  name: string;
+  readings: string[];
+  total?: number;
+  book?: Book;
+  title?: string;
+  author?: string;
+  line?: string;
+  lg?: number;
+};
+
 export const BOOK_LABEL: Record<Book, string> = {
   shijing: '诗经',
   chuci: '楚辞',

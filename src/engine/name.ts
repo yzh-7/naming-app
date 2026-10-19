@@ -1,5 +1,5 @@
 import { CHARS, GENDER_FEMALE, GENDER_MALE, GLOSS, HOMO_FULL, HOMO_INIT, LINE_GLOSS, POOL, RADICAL, RISK_HIGH, SINGLES } from './data';
-import type { Delta, GenderSide, GenderTag, Named, Opts, Result, SortKey } from './types';
+import type { Book, Delta, GenderSide, GenderTag, Named, Opts, Result, SortKey } from './types';
 import { BOOK_ORDER } from './types';
 
 const BILABIAL = new Set(['b', 'p', 'm']);
@@ -241,6 +241,104 @@ export const findItem = (id: string) => ALL_ITEMS.find((it) => it.id === id);
 
 // 出处今译：构建期按原句首次出现顺序编号，运行时按下标取；查不到返回空串，由界面决定是否留白
 export const lineGlossOf = (it: { lg: number }) => LINE_GLOSS[it.lg] ?? '';
+
+// 名用字表（293 字）：自选页的「仅名用字表」筛选与随机自由组合都基于它
+export const L0_CHARS = Object.keys(CHARS).filter((ch) => CHARS[ch].l0).sort();
+
+// 逐字可核对事实：字义/笔画/结构/用字频次/读音/是否在名用字表。查不到的字 known=false，界面留白
+export function charFacts(ch: string) {
+  const info = CHARS[ch];
+  return {
+    ch,
+    known: !!info,
+    l0: !!info?.l0,
+    gloss: GLOSS[ch] ?? null,
+    st: info?.st ?? null,
+    sx: info?.sx ?? null,
+    gn: info?.gn ?? 0,
+    band: popBand(info?.gn ?? 0),
+    reads: info?.pm ?? [],
+  };
+}
+
+// 自选组合：只做事实核对，不套 Pool-B 的分数（那套分数只对池内候选有校准意义）
+export type Composed = {
+  full: string;
+  name: string;
+  chars: string[];
+  readings: string[];
+  toneless: string;
+  initials: string;
+  flags: string[];
+  known: boolean;
+  allL0: boolean;
+};
+export function composeName(surname: string, name: string, surReading = 0): Composed {
+  const chars = [...name];
+  const ph = phonetics(surname, name, surReading);
+  return {
+    full: surname + name,
+    name,
+    chars,
+    readings: ph.readings,
+    toneless: ph.toneless,
+    initials: ph.initials,
+    flags: ph.flags,
+    known: chars.every((c) => !!CHARS[c]) && [...surname].every((c) => !!CHARS[c]),
+    allL0: chars.every((c) => !!CHARS[c]?.l0),
+  };
+}
+
+// 精确查出处：双名查 Pool-B，单名查 singles；查到就是「六本典籍里确有此搭配」，查不到不拿别的句子凑
+let comboIndex: Map<string, (typeof POOL)[number] | (typeof SINGLES)[number]> | null = null;
+export function findCombo(name: string) {
+  if (!comboIndex) {
+    comboIndex = new Map();
+    for (const p of POOL) if (!comboIndex.has(p.name)) comboIndex.set(p.name, p);
+    for (const s of SINGLES) if (!comboIndex.has(s.char)) comboIndex.set(s.char, s);
+  }
+  return comboIndex.get(name) ?? null;
+}
+
+export type PairHint = {
+  ch: string;
+  name: string;
+  book: Book;
+  title: string;
+  author: string;
+  line: string;
+  seg: string;
+  foot: number;
+  gap: number;
+  lg: number;
+  id: string;
+  score: number;
+};
+
+// 顺藤摸瓜：与某字在 Pool-B 同一个双名里出现过的搭配字（同一搭配字只留分数最高的一条出处）
+let pairIndex: Map<string, PairHint[]> | null = null;
+export function pairCandidates(ch: string): PairHint[] {
+  if (!pairIndex) {
+    const m = new Map<string, Map<string, PairHint>>();
+    for (const c of POOL) {
+      const [a, b] = c.chars;
+      if (a === b) continue;
+      for (const [self, other] of [[a, b], [b, a]] as const) {
+        const inner = m.get(self) ?? new Map<string, PairHint>();
+        const prev = inner.get(other);
+        if (!prev || c.score > prev.score) {
+          inner.set(other, {
+            ch: other, name: c.name, book: c.book, title: c.title, author: c.author,
+            line: c.line, seg: c.seg, foot: c.foot, gap: c.gap, lg: c.lg, id: c.id, score: c.score,
+          });
+        }
+        m.set(self, inner);
+      }
+    }
+    pairIndex = new Map([...m].map(([k, v]) => [k, [...v.values()].sort((x, y) => y.score - x.score)]));
+  }
+  return pairIndex.get(ch) ?? [];
+}
 
 function bookUniverse(opts: Opts): (Named & { famous?: boolean; tier?: string })[] {
   const src = opts.length === 2 ? POOL.filter((p) => p.tier === 'B') : SINGLE_ITEMS;

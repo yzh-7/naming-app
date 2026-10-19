@@ -28,6 +28,42 @@ test('主题按钮循环到深色时 html 上出现 dark', async ({ page }) => {
   await expect(page.locator('html')).toHaveClass(/dark/);
 });
 
+test('自选页：选字后给出出处与今译，无出处的组合明说没有', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('tab', { name: '自选' }).click();
+  await page.getByLabel('姓氏（自选）').fill('苏');
+  await page.getByLabel('选择第 1 字').click();
+  await page.getByLabel('第 1 字搜索').fill('子');
+  await page.locator('div.flex.max-h-56 button').first().click();
+  await page.getByLabel('选择第 2 字').click();
+  await page.getByLabel('第 2 字搜索').fill('归');
+  await page.locator('div.flex.max-h-56 button').first().click();
+  await expect(page.getByRole('heading', { name: '苏子归' })).toBeVisible();
+  await expect(page.getByText(/江有汜，之子归/)).toBeVisible();
+  await expect(page.getByText(/今译/)).toBeVisible();
+  await expect(page.getByRole('button', { name: '收藏' })).toBeVisible();
+
+  // 换一个典籍里没有的搭配
+  await page.getByLabel('选择第 1 字').click();
+  await page.getByLabel('第 1 字搜索').fill('龙凤');
+  await page.getByRole('button', { name: '直接使用「龙凤」' }).click();
+  await expect(page.getByText(/没有「龙凤」这个搭配的出处/)).toBeVisible();
+  await expect(page.getByRole('button', { name: '收藏' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '分享卡' })).toBeVisible();
+});
+
+test('axe：自选页无 serious/critical 级可访问性问题', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('tab', { name: '自选' }).click();
+  await page.getByLabel('姓氏（自选）').fill('苏');
+  await page.getByLabel('选择第 1 字').click();
+  await page.getByLabel('第 1 字搜索').fill('子');
+  await page.locator('div.flex.max-h-56 button').first().click();
+  const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+  const serious = violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+  expect(serious, serious.map((v) => `${v.id}: ${v.help}`).join('\n')).toEqual([]);
+});
+
 test('axe：生成页无 serious/critical 级可访问性问题', async ({ page }) => {
   await page.goto('/');
   await page.getByLabel('姓氏').fill('苏');

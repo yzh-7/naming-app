@@ -13,6 +13,7 @@ const K = {
   reading: 'naming.surnameReading.v1',
   opts: 'naming.opts.v1',
   theme: 'naming.theme.v1',
+  compose: 'naming.compose.v1',
 };
 
 function readRaw(key: string): unknown {
@@ -139,6 +140,17 @@ export function loadOpts(): Opts {
   }
 }
 export const saveOpts = (o: Opts) => localStorage.setItem(K.opts, JSON.stringify({ gender: o.gender, genderWeak: o.genderWeak, length: o.length, redupOnly: o.redupOnly, books: o.books, count: o.count, search: o.search, sort: o.sort, strokeMax: o.strokeMax, noMonotone: o.noMonotone, popFloor: o.popFloor }));
+
+// 自选页草稿：来回切 tab 不丢已选的字。只存纯数据，不存派生结果
+export type ComposeDraft = { length: 1 | 2; chars: string[]; free: boolean };
+export function loadCompose(): ComposeDraft {
+  const raw = readRaw(K.compose);
+  if (!raw || typeof raw !== 'object') return { length: 2, chars: [], free: false };
+  const r = raw as Record<string, unknown>;
+  const chars = Array.isArray(r.chars) ? r.chars.filter((c): c is string => typeof c === 'string' && /^[一-鿿]$/.test(c)).slice(0, 2) : [];
+  return { length: r.length === 1 ? 1 : 2, chars, free: !!r.free };
+}
+export const saveCompose = (d: ComposeDraft) => localStorage.setItem(K.compose, JSON.stringify(d));
 
 export const FAV_KEY = K.fav;
 export const BLOCK_KEY = K.block;

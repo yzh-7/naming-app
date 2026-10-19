@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  cleanSurname, genderOf, genderPass, genderStats, glossOf, isKnownSurname, lineGlossOf, minGnOf, namePinyin,
+  cleanSurname, composeName, findCombo, genderOf, genderPass, genderStats, glossOf, isKnownSurname, L0_CHARS,
+  lineGlossOf, minGnOf, namePinyin, pairCandidates,
   nicknames, plan, polyphoneTags, poolSize, popBand, popScore, popularity, radicalTags,
   readings, scoreItem, searchText, shapeTags, surnameReads,
 } from './name';
@@ -298,6 +299,50 @@ describe('出处今译', () => {
   });
   it('越界下标返回空串而不是 undefined（界面按留白处理）', () => {
     expect(lineGlossOf({ lg: 99999 })).toBe('');
+  });
+});
+
+describe('自选组合：只查事实，不套池内分数', () => {
+  it('有出处的组合能精确查到，出处字段与池内条目一致', () => {
+    const hit = findCombo('子归');
+    expect(hit).not.toBeNull();
+    expect(hit!.book).toBe('shijing');
+    expect(hit!.line).toContain('之子归');
+    expect(hit!.lg).toBeGreaterThanOrEqual(0);
+  });
+  it('单字名走 singles 查出处', () => {
+    const hit = findCombo('子');
+    expect(hit).not.toBeNull();
+    expect('char' in hit! ? hit!.char : '').toBe('子');
+  });
+  it('无出处的组合返回 null，不拿别的句子凑', () => {
+    expect(findCombo('龙凤')).toBeNull();
+  });
+  it('composeName 给读音与标记；非白名单字 known 仍为 true 但 allL0 为 false', () => {
+    const a = composeName('苏', '子归');
+    expect(a.readings).toEqual(['sū', 'zǐ', 'guī']);
+    expect(a.allL0).toBe(true);
+    expect(a.known).toBe(true);
+    const b = composeName('苏', '龙凤');
+    expect(b.allL0).toBe(true);
+    const c = composeName('苏', '龘');
+    expect(c.known).toBe(false);
+    expect(c.allL0).toBe(false);
+    expect(c.readings).toEqual([]);
+  });
+  it('搭配字：同一句读里与「子」配过的字，按分数降序且不重复', () => {
+    const hits = pairCandidates('子');
+    expect(hits.length).toBeGreaterThan(10);
+    const chs = hits.map((h) => h.ch);
+    expect(new Set(chs).size).toBe(chs.length);
+    expect(chs).toContain('归');
+    for (let i = 1; i < hits.length; i++) expect(hits[i - 1].score).toBeGreaterThanOrEqual(hits[i].score);
+    // 反向也要成立：每个搭配字回查时都能找到「子」
+    expect(pairCandidates('归').some((h) => h.ch === '子')).toBe(true);
+  });
+  it('名用字表 293 字，与 meta 对得上', () => {
+    expect(L0_CHARS).toHaveLength(META.L0_size);
+    expect(L0_CHARS).toContain('子');
   });
 });
 

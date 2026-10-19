@@ -1,5 +1,5 @@
 import { glossOf, lineGlossOf, nicknames, polyphoneTags, popularity, radicalTags, shapeTags } from '../engine/name';
-import { BOOK_LABEL, type Result } from '../engine/types';
+import { BOOK_LABEL, type Book, type Result } from '../engine/types';
 
 const WINDOW_MAX = 28;
 
@@ -23,7 +23,13 @@ function windowAround(line: string, from: number, to: number): Win {
   return { start: parts[lo].from, end: parts[hi].to, cutLeft: parts[lo].from > 0, cutRight: parts[hi].to < line.length };
 }
 
-function Source({ r }: { r: Result }) {
+// 出处行只依赖这些字段：有出处的 Result、PoolItem、SingleItem 都满足，自选页可复用同一套渲染
+export type SourceRef = {
+  book: Book; title: string; author: string; line: string;
+  seg: string; foot: number; gap: number; lg: number; strict: boolean;
+};
+
+export function Source({ r }: { r: SourceRef }) {
   const at = r.line.indexOf(r.seg);
   if (at < 0) {
     return (
