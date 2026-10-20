@@ -20,6 +20,7 @@ beforeEach(() => {
   vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((cb: BlobCallback) => cb(new Blob(['x'], { type: 'image/png' })));
 });
 afterEach(() => { vi.restoreAllMocks(); localStorage.clear(); });
+afterEach(() => { window.location.hash = ''; });
 
 describe('App 集成冒烟', () => {
   it('未填姓时给出引导，填姓后生成结果', () => {
@@ -36,11 +37,23 @@ describe('App 集成冒烟', () => {
     fireEvent.change(screen.getByLabelText('姓氏'), { target: { value: '苏' } });
     const favBtn = screen.getAllByRole('button', { name: '收藏' })[0];
     fireEvent.click(favBtn);
-    expect(screen.getByRole('button', { name: '已收藏' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '取消收藏' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('link', { name: /收藏 1/ }));
     const note = screen.getByPlaceholderText('为什么喜欢它') as HTMLInputElement;
     fireEvent.change(note, { target: { value: '喜欢它的意思' } });
     expect(note.value).toBe('喜欢它的意思');
+  });
+
+  it('hash 路由：#/compose 进自选页，#fav 进收藏页，清空回生成页', () => {
+    window.location.hash = '#/compose';
+    render(<App />);
+    expect(screen.getByLabelText('姓氏（自选）')).toBeInTheDocument();
+    window.location.hash = '#fav';
+    fireEvent(window, new HashChangeEvent('hashchange'));
+    expect(screen.getByLabelText('搜索收藏')).toBeInTheDocument();
+    window.location.hash = '';
+    fireEvent(window, new HashChangeEvent('hashchange'));
+    expect(screen.getByText(/先填姓氏/)).toBeInTheDocument();
   });
 
   it('对比表里带出处今译，两列都非空', () => {

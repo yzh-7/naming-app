@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { plan, scoreItem, findItem, poolSize, genderStats, cleanSurname, isKnownSurname, surnameReads, shapeTags, popularity, glossOf, lineGlossOf, namePinyin, popScore } from './engine/name';
+import { plan, scoreItem, findItem, poolSize, cleanSurname, isKnownSurname, surnameReads, shapeTags, popularity, glossOf, lineGlossOf, namePinyin, popScore } from './engine/name';
 import { META } from './engine/data';
 import { BOOK_LABEL, BOOK_ORDER, type Opts, type Result, type ShareName } from './engine/types';
 import Controls from './ui/Controls';
 import NameCard from './ui/NameCard';
 import TopNav from './ui/TopNav';
+import { type Tab } from './ui/TopNav';
+import Compose from './ui/Compose';
 import * as store from './store/local';
 import { buildState, serialize, parseState, toQuery, fromQuery, type SavedState } from './store/transfer';
 import { copyText, downloadText, downloadBlob, renderShareCard, renderListCard, resultSummary } from './lib/share';
@@ -20,12 +22,15 @@ const FAV_SORTS: { v: FavSort; label: string }[] = [
   { v: 'popular', label: '用字常见度' },
 ];
 
+// 导航链接写成 #/compose，也兼容手写的 #compose；未知/空一律回生成页
+function tabFromHash(hash: string): Tab {
+  const h = hash.replace(/^#\/?/, '');
+  return h === 'compose' || h === 'fav' || h === 'block' ? h : 'gen';
+}
+
 export default function App() {
   const initialUrl = useMemo(() => fromQuery(window.location.search), []);
-  const [tab, setTab] = useState<'gen' | 'fav' | 'block'>(() => {
-    const h = window.location.hash.replace('#', '');
-    return h === 'fav' || h === 'block' ? h : 'gen';
-  });
+  const [tab, setTab] = useState<Tab>(() => tabFromHash(window.location.hash));
   const [surname, setSurname] = useState(initialUrl?.surname ?? store.loadSurname());
   const [reading, setReading] = useState(initialUrl?.reading ?? store.loadReading());
   const [opts, setOpts] = useState<Opts>(() => ({ ...store.loadOpts(), ...(initialUrl?.opts ?? {}), exclude: [] }));
@@ -54,11 +59,7 @@ export default function App() {
   useEffect(() => store.saveReading(reading), [reading]);
   useEffect(() => store.saveOpts(opts), [opts]);
   useEffect(() => {
-    const onHash = () => {
-      const h = window.location.hash.replace('#', '');
-      if (h === 'fav' || h === 'block') setTab(h);
-      else setTab('gen');
-    };
+    const onHash = () => setTab(tabFromHash(window.location.hash));
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
@@ -79,7 +80,6 @@ export default function App() {
   );
   const results = paged.page;
   const poolCount = useMemo(() => poolSize(effective), [effective]);
-  const poolSame = useMemo(() => (opts.gender === 'any' ? null : genderStats(effective).same), [effective, opts.gender]);
 
   const scored = useCallback(
     (id: string) => { const it = findItem(id); return it ? scoreItem(sur, it, effective, reading) : null; },
@@ -188,17 +188,19 @@ export default function App() {
           </p>
         )}
 
-        <div className="flex flex-wrap items-center gap-2 text-sm no-print">
-          <button onClick={doExport} className="rounded px-3 py-1.5 ring-1 ring-neutral-200 hover:bg-neutral-50 dark:ring-neutral-700 dark:hover:bg-neutral-800">导出</button>
-          <button onClick={() => fileRef.current?.click()} className="rounded px-3 py-1.5 ring-1 ring-neutral-200 hover:bg-neutral-50 dark:ring-neutral-700 dark:hover:bg-neutral-800">导入</button>
-          <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" aria-hidden="true"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) void doImportFile(f); e.target.value = ''; }} />
-          <button onClick={doCopyLink} className="rounded px-3 py-1.5 ring-1 ring-neutral-200 hover:bg-neutral-50 dark:ring-neutral-700 dark:hover:bg-neutral-800">复制链接</button>
-          <button onClick={() => setTheme(store.THEME_ORDER[(store.THEME_ORDER.indexOf(theme) + 1) % store.THEME_ORDER.length])} aria-label={`主题：${store.THEME_LABEL[theme]}（点击切换）`}
-            className="rounded px-3 py-1.5 ring-1 ring-neutral-200 hover:bg-neutral-50 dark:ring-neutral-700 dark:hover:bg-neutral-800">
-            主题 · {store.THEME_LABEL[theme]}
-          </button>
-        </div>
+        {tab === 'gen' && (
+          <div className="flex flex-wrap items-center gap-2 text-sm no-print">
+            <button onClick={doExport} className="rounded px-3 py-1.5 ring-1 ring-neutral-200 hover:bg-neutral-50 dark:ring-neutral-700 dark:hover:bg-neutral-800">导出</button>
+            <button onClick={() => fileRef.current?.click()} className="rounded px-3 py-1.5 ring-1 ring-neutral-200 hover:bg-neutral-50 dark:ring-neutral-700 dark:hover:bg-neutral-800">导入</button>
+            <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" aria-hidden="true"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void doImportFile(f); e.target.value = ''; }} />
+            <button onClick={doCopyLink} className="rounded px-3 py-1.5 ring-1 ring-neutral-200 hover:bg-neutral-50 dark:ring-neutral-700 dark:hover:bg-neutral-800">复制链接</button>
+            <button onClick={() => setTheme(store.THEME_ORDER[(store.THEME_ORDER.indexOf(theme) + 1) % store.THEME_ORDER.length])} aria-label={`主题：${store.THEME_LABEL[theme]}（点击切换）`}
+              className="rounded px-3 py-1.5 ring-1 ring-neutral-200 hover:bg-neutral-50 dark:ring-neutral-700 dark:hover:bg-neutral-800">
+              主题 · {store.THEME_LABEL[theme]}
+            </button>
+          </div>
+        )}
 
         {pendingImport && (
           <div role="dialog" aria-label="导入方式" className="space-y-2 rounded-lg border border-sky-300 bg-sky-50 p-4 text-sm text-sky-900 no-print">
@@ -219,7 +221,7 @@ export default function App() {
           <>
             <Controls surname={surname} setSurname={changeSurname} reading={reading} setReading={setReading}
               opts={opts} setOpts={setOpts}
-              poolCount={poolCount} poolSame={poolSame} pageNo={paged.pageNo} pages={paged.pages}
+              poolCount={poolCount} pageNo={paged.pageNo} pages={paged.pages}
               onBatch={() => setBatch(batch + 1)} />
             {!sur && (
               <p className="rounded-lg border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500 dark:border-neutral-700">
@@ -252,6 +254,28 @@ export default function App() {
               </section>
             ))}
           </>
+        )}
+
+        {tab === 'compose' && (
+          <Compose
+            surname={surname}
+            setSurname={changeSurname}
+            reading={reading}
+            setReading={setReading}
+            opts={effective}
+            fav={favIds}
+            onFav={(r: Result) => {
+              if (favIds.has(r.id)) {
+                setFav(store.removeFavorite(r.id));
+                setNotice(`已取消收藏 ${r.full}`);
+              } else {
+                setFav(store.addFavorite(r.id));
+                setNotice(`已收藏 ${r.full}`);
+              }
+            }}
+            onShare={(r) => void doShare(r)}
+            onCopy={(r) => void doCopy(r)}
+          />
         )}
 
         {tab === 'fav' && (
@@ -367,7 +391,7 @@ function Compare({ pairs }: { pairs: Pair[] }) {
           {rows.map(([label, f]) => (
             <tr key={label} className="border-t border-neutral-100 dark:border-neutral-800">
               <th scope="row" className="whitespace-nowrap px-3 py-2 text-left align-top text-xs text-neutral-500">{label}</th>
-              {pairs.map((p) => <td key={p.rec.id} className="px-3 py-2 align-top">{f(p)}</td>)}
+              {pairs.map((p) => (<td key={p.rec.id} className="px-3 py-2 align-top">{f(p)}</td>))}
             </tr>
           ))}
         </tbody>

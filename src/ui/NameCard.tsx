@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { glossOf, lineGlossOf, nicknames, polyphoneTags, popularity, radicalTags, shapeTags } from '../engine/name';
 import { BOOK_LABEL, type Book, type Result } from '../engine/types';
 
@@ -29,6 +30,7 @@ export type SourceRef = {
   seg: string; foot: number; gap: number; lg: number; strict: boolean;
 };
 
+// 出处行：默认折叠，展开后显示原文高亮 + 今译
 export function Source({ r }: { r: SourceRef }) {
   const at = r.line.indexOf(r.seg);
   if (at < 0) {
@@ -63,9 +65,11 @@ export function Source({ r }: { r: SourceRef }) {
   return (
     <div className="text-sm leading-6 text-neutral-600 dark:text-neutral-300">
       {w.cutLeft && <span className="text-neutral-500 dark:text-neutral-400">…</span>}
-      {pieces.map((p, i) => p.mark
-        ? <mark key={i} className="rounded bg-amber-100 px-0.5 font-medium text-neutral-900 dark:text-neutral-100">{p.text}</mark>
-        : <span key={i}>{p.text}</span>)}
+      {pieces.map((p, i) => {
+        return p.mark
+          ? <mark key={i} className="rounded bg-amber-100 px-0.5 font-medium text-neutral-900 dark:text-neutral-100">{p.text}</mark>
+          : <span key={i}>{p.text}</span>;
+      })}
       {w.cutRight ? <span className="text-neutral-500 dark:text-neutral-400">…</span> : <span className="text-neutral-500 dark:text-neutral-400">。</span>}
       <div className="mt-0.5 text-xs text-neutral-500">
         《{BOOK_LABEL[r.book]}·{r.title}{r.author ? `·${r.author}` : ''}》 · {where}
@@ -88,52 +92,84 @@ export default function NameCard({ r, fav, blocked, onFav, onBlock, onShare, onC
   const shadow = r.flags.filter((f) => f.startsWith('同形'));
   const g = r.gender;
   const rad = radicalTags(r.name);
-  const gloss = [...new Set([...r.name])].map((ch) => ({ ch, g: glossOf(ch) })).filter((x): x is { ch: string; g: string } => !!x.g);
-  const shape = shapeTags(r.name);
-  const poly = polyphoneTags(r.name);
-  const pop = popularity(r.name);
+  const gloss = useMemo(() => [...new Set([...r.name])].map((ch) => ({ ch, g: glossOf(ch) })).filter((x): x is { ch: string; g: string } => !!x.g), [r.name]);
+  const shape = useMemo(() => shapeTags(r.name), [r.name]);
+  const poly = useMemo(() => polyphoneTags(r.name), [r.name]);
+  const pop = useMemo(() => popularity(r.name), [r.name]);
   const nns = nicknames(r.name);
-  const gBadge = g.side === 'n' ? null
-    : `${g.strong ? '' : '疑似'}${g.side === 'f' ? '偏女' : '偏男'}`;
+
+  // 性别标签：用颜色区分，偏女=粉色、偏男=蓝色
+  const gBadge = useMemo(() => {
+    if (g.side === 'n') return null;
+    const weak = g.strong ? '' : '疑似';
+    const side = g.side === 'f' ? '偏女' : '偏男';
+    const color = g.side === 'f' ? 'bg-pink-50 text-pink-800 ring-pink-200' : 'bg-sky-50 text-sky-800 ring-sky-200';
+    return { text: `${weak}${side}`, color, dotColor: g.side === 'f' ? 'bg-pink-400' : 'bg-sky-400' };
+  }, [g]);
+
   return (
     <article className="rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4">
-      <div className="flex items-baseline justify-between gap-3">
+      {/* Header: name + gender */}
+      <div className="flex items-baseline justify-between gap-2">
         <h3 className="font-serif text-3xl tracking-wider text-neutral-900 dark:text-neutral-100">{r.full}</h3>
-        <span className="text-xs tabular-nums text-neutral-500">{r.total} 分</span>
+        {gBadge && (
+          <span className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs ring-1 ${gBadge.color}`} title={g.why}>
+            <span className={`size-2 rounded-full ${gBadge.dotColor}`}></span>
+            {gBadge.text}
+          </span>
+        )}
       </div>
-      <div className="mt-1 text-sm text-neutral-500">{r.readings.join(' ')}</div>
-      {gloss.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-neutral-600 dark:text-neutral-300">
+
+      {/* Readings */}
+      <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">{r.readings.join(' ') || '读音留白'}</p>
+
+      {/* Source: book + title (collapsed by default) */}
+      <details className="mt-2 text-sm">
+        <summary className="cursor-pointer select-none text-xs text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300">
+          《{BOOK_LABEL[r.book]}·{r.title}{r.author ? `·${r.author}` : ''}》
+        </summary>
+        <div className="mt-2 border-t border-neutral-100 pt-2 dark:border-neutral-800">
+          <Source r={r} />
+        </div>
+      </details>
+
+      {/* Fact tags: gloss, shape, pop, poly */}
+      {(gloss.length > 0 || shape.chars.some((c) => c.sx) || poly.length > 0 || pop.lead) && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {gloss.map((x) => (
             <span key={x.ch}><span className="font-serif text-sm text-neutral-900 dark:text-neutral-100">{x.ch}</span> {x.g}</span>
           ))}
-        </div>
-      )}
-      {(shape.chars.some((c) => c.sx) || poly.length > 0 || pop.lead) && (
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          {shape.chars.filter((c) => c.sx).map((c) => (
-            <span key={c.ch} className="rounded bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.5 text-xs text-neutral-600 dark:text-neutral-300">
-              {c.ch}·{c.sx}{c.st ? ` ${c.st}画` : ''}
-            </span>
-          ))}
-          {shape.strokes > 0 && <span className="text-xs text-neutral-500 dark:text-neutral-400">共 {shape.strokes} 画</span>}
-          {shape.note && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800 ring-1 ring-amber-100">{shape.note}</span>}
-          {pop.lead && (
-            <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs text-violet-800 ring-1 ring-violet-100"
-              title={`用字常见度是估算：依据 114 万真实姓名去姓后的用字频次（${pop.chars.map((c) => `${c.ch} ${c.band}`).join('、')}），不是户籍重名率`}>
-              用字常见度 {pop.band}
-            </span>
+          {(shape.chars.some((c) => c.sx) || poly.length > 0 || pop.lead) && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {shape.chars.filter((c) => c.sx).map((c) => (
+                <span key={c.ch} className="rounded bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.5 text-xs text-neutral-600 dark:text-neutral-300">
+                  {c.ch}·{c.sx}{c.st ? ` ${c.st}画` : ''}
+                </span>
+              ))}
+              {shape.strokes > 0 && <span className="text-xs text-neutral-500 dark:text-neutral-400">共 {shape.strokes} 画</span>}
+              {shape.note && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800 ring-1 ring-amber-100">{shape.note}</span>}
+              {pop.lead && (
+                <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs text-violet-800 ring-1 ring-violet-100"
+                  title={`用字常见度是估算：依据 114 万真实姓名去姓后的用字频次（${pop.chars.map((c) => `${c.ch} ${c.band}`).join('、')}），不是户籍重名率`}>
+                  用字常见度 {pop.band}
+                </span>
+              )}
+              {poly.map((p) => (
+                <span key={p.ch} className="rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-800 ring-1 ring-sky-100">
+                  多音 {p.ch} {p.reads.join('/')}
+                </span>
+              ))}
+            </div>
           )}
-          {poly.map((p) => (
-            <span key={p.ch} className="rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-800 ring-1 ring-sky-100">
-              多音 {p.ch} {p.reads.join('/')}
-            </span>
-          ))}
         </div>
       )}
+
+      {/* Nicknames */}
       {nns.length > 0 && (
         <div className="mt-1.5 text-xs text-neutral-500">小名：{nns.join(' · ')}</div>
       )}
+
+      {/* Radical tags */}
       {rad.length > 0 && (
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5"
           title="部首提示＝该字在康熙字典里所属的部首，只标落在 木/火/水/金/土 五部的字，其余留白（留白不代表该字无五行）。本应用不做五行筛选、不判吉凶。">
@@ -143,13 +179,8 @@ export default function NameCard({ r, fav, blocked, onFav, onBlock, onShare, onC
           ))}
         </div>
       )}
-      {gBadge && (
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-800 ring-1 ring-sky-100">{gBadge}</span>
-          <span className="text-xs text-neutral-500 dark:text-neutral-400">{g.why}</span>
-        </div>
-      )}
-      <div className="mt-3"><Source r={r} /></div>
+
+      {/* Risk flags */}
       {(marked.length > 0 || shadow.length > 0) && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {marked.map((f) => (
@@ -160,6 +191,8 @@ export default function NameCard({ r, fav, blocked, onFav, onBlock, onShare, onC
           ))}
         </div>
       )}
+
+      {/* Score details (collapsed) */}
       <details className="mt-3 text-xs text-neutral-600 dark:text-neutral-300 no-print">
         <summary className="cursor-pointer select-none text-neutral-500">分数明细</summary>
         <ul className="mt-1.5 space-y-0.5">
@@ -171,12 +204,16 @@ export default function NameCard({ r, fav, blocked, onFav, onBlock, onShare, onC
           ))}
         </ul>
       </details>
-      <div className="mt-3 flex flex-wrap gap-2 no-print">
-        <button onClick={onFav} className={`rounded px-3 py-1 text-sm ring-1 ${fav ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'text-neutral-600 dark:text-neutral-300 ring-neutral-200 dark:ring-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800'}`}>
-          {fav ? '已收藏' : '收藏'}
+
+      {/* Action buttons: icon-based */}
+      <div className="mt-3 flex flex-wrap items-center gap-2 no-print">
+        <button onClick={onFav} aria-label={fav ? '取消收藏' : '收藏'}
+          className={`rounded px-3 py-1 text-sm ring-1 ${fav ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'text-neutral-600 dark:text-neutral-300 ring-neutral-200 dark:ring-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800'}`}>
+          {fav ? '❤ 已收藏' : '♡ 收藏'}
         </button>
-        <button onClick={onBlock} className={`rounded px-3 py-1 text-sm ring-1 ${blocked ? 'bg-red-50 text-red-700 ring-red-200' : 'text-neutral-600 dark:text-neutral-300 ring-neutral-200 dark:ring-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800'}`}>
-          {blocked ? '已拉黑（点取消）' : '不再看它'}
+        <button onClick={onBlock} aria-label={blocked ? '取消拉黑' : '不再看它'}
+          className={`rounded px-3 py-1 text-sm ring-1 ${blocked ? 'bg-red-50 text-red-700 ring-red-200' : 'text-neutral-600 dark:text-neutral-300 ring-neutral-200 dark:ring-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800'}`}>
+          {blocked ? '✕ 已拉黑' : '✕ 不再看它'}
         </button>
         {onCopy && <button onClick={onCopy} className="rounded px-3 py-1 text-sm text-neutral-600 dark:text-neutral-300 ring-1 ring-neutral-200 dark:ring-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800">复制信息</button>}
         {onShare && <button onClick={onShare} className="rounded px-3 py-1 text-sm text-neutral-600 dark:text-neutral-300 ring-1 ring-neutral-200 dark:ring-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800">分享卡</button>}

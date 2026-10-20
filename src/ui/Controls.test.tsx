@@ -16,8 +16,13 @@ function Harness({ initialSurname = '苏', pages = 1, onBatch = () => {} }: { in
   const [opts, setOpts] = useState<Opts>({ ...base });
   return (
     <Controls surname={surname} setSurname={setSurname} reading={0} setReading={() => {}}
-      opts={opts} setOpts={setOpts} poolCount={1505} poolSame={null} pageNo={0} pages={pages} onBatch={onBatch} />
+      opts={opts} setOpts={setOpts} poolCount={1505} pageNo={0} pages={pages} onBatch={onBatch} />
   );
+}
+
+// 笔画/常见度/典籍/叠字都在「高级筛选」折叠面板里，用到就先展开
+function openAdvanced() {
+  fireEvent.click(screen.getByRole('button', { name: /高级筛选/ }));
 }
 
 describe('Controls：输入与条件渲染', () => {
@@ -31,19 +36,22 @@ describe('Controls：输入与条件渲染', () => {
   });
 
   it('多音姓才显示读音选择，单音姓不显示', () => {
-    // 常驻 4 个 combobox（每批条数、排序、整名笔画、用字常见度）；多音姓（曾 céng/zēng）再多一个读音下拉
+    // 展开高级筛选后常驻 4 个 combobox（每批条数、排序、整名笔画、用字常见度）；多音姓（曾 céng/zēng）再多一个读音下拉
     const { unmount } = render(<Harness initialSurname="曾" />);
+    openAdvanced();
     expect(screen.getAllByRole('combobox')).toHaveLength(5);
     expect(screen.getByText('姓的读音（多音姓请选）')).toBeInTheDocument();
     unmount();
     // 单音姓（欧 ōu）不显示
     render(<Harness initialSurname="欧" />);
+    openAdvanced();
     expect(screen.getAllByRole('combobox')).toHaveLength(4);
     expect(screen.queryByText('姓的读音（多音姓请选）')).not.toBeInTheDocument();
   });
 
   it('切到单名时藏起「只看典籍叠字」（否则开关不可见却清空池子）', () => {
     render(<Harness />);
+    openAdvanced();
     expect(screen.getByRole('button', { name: '只看典籍叠字' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '单名' }));
     expect(screen.queryByRole('button', { name: '只看典籍叠字' })).not.toBeInTheDocument();
@@ -58,6 +66,7 @@ describe('Controls：输入与条件渲染', () => {
 
   it('典籍标签点击即切换选中态', () => {
     render(<Harness />);
+    openAdvanced();
     const shijing = screen.getByRole('button', { name: '诗经' });
     expect(shijing.className).toContain('bg-amber-50');
     fireEvent.click(shijing);
@@ -92,6 +101,7 @@ describe('Controls：输入与条件渲染', () => {
 
   it('字形筛选：笔画上限与常见度下限可切换', () => {
     render(<Harness />);
+    openAdvanced();
     const stroke = screen.getByLabelText('整名笔画上限') as HTMLSelectElement;
     expect(stroke.value).toBe('0');
     fireEvent.change(stroke, { target: { value: '20' } });
@@ -103,6 +113,7 @@ describe('Controls：输入与条件渲染', () => {
 
   it('「避开同结构」只在双名下出现，切换 aria-pressed', () => {
     render(<Harness />);
+    openAdvanced();
     const btn = screen.getByRole('button', { name: '避开同结构' });
     expect(btn).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(btn);

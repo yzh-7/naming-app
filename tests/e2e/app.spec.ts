@@ -13,8 +13,8 @@ test('收藏一个名字后能在收藏页搜到', async ({ page }) => {
   await page.getByLabel('姓氏').fill('苏');
   const card = page.locator('article').first();
   await card.getByRole('button', { name: '收藏' }).click();
-  await expect(card.getByRole('button', { name: '已收藏' })).toBeVisible();
-  await page.getByRole('tab', { name: /收藏 1/ }).click();
+  await expect(card.getByRole('button', { name: '取消收藏' })).toBeVisible();
+  await page.getByRole('link', { name: /收藏 1/ }).click();
   await expect(page.getByLabel('搜索收藏')).toBeVisible();
   await page.getByLabel('搜索收藏').fill('zzz-不存在');
   await expect(page.getByText(/没有符合搜索/)).toBeVisible();
@@ -29,7 +29,7 @@ test('主题按钮循环到深色时 html 上出现 dark', async ({ page }) => {
 });
 
 test('自选页：选字后给出出处与今译，无出处的组合明说没有', async ({ page }) => {
-  await page.goto('/compose.html');
+  await page.goto('/#/compose');
   await page.getByLabel('姓氏（自选）').fill('苏');
   await page.getByLabel('选择第 1 字').click();
   await page.getByLabel('第 1 字搜索').fill('子');
@@ -52,7 +52,7 @@ test('自选页：选字后给出出处与今译，无出处的组合明说没�
 });
 
 test('axe：自选页无 serious/critical 级可访问性问题', async ({ page }) => {
-  await page.goto('/compose.html');
+  await page.goto('/#/compose');
   await page.getByLabel('姓氏（自选）').fill('苏');
   await page.getByLabel('选择第 1 字').click();
   await page.getByLabel('第 1 字搜索').fill('子');
