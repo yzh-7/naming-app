@@ -3,7 +3,6 @@ import { plan, scoreItem, findItem, poolSize, genderStats, cleanSurname, isKnown
 import { META } from './engine/data';
 import { BOOK_LABEL, BOOK_ORDER, type Opts, type Result, type ShareName } from './engine/types';
 import Controls from './ui/Controls';
-import Compose from './ui/Compose';
 import NameCard from './ui/NameCard';
 import * as store from './store/local';
 import { buildState, serialize, parseState, toQuery, fromQuery, type SavedState } from './store/transfer';
@@ -22,7 +21,7 @@ const FAV_SORTS: { v: FavSort; label: string }[] = [
 
 export default function App() {
   const initialUrl = useMemo(() => fromQuery(window.location.search), []);
-  const [tab, setTab] = useState<'gen' | 'compose' | 'fav' | 'block'>('gen');
+  const [tab, setTab] = useState<'gen' | 'fav' | 'block'>('gen');
   const [surname, setSurname] = useState(initialUrl?.surname ?? store.loadSurname());
   const [reading, setReading] = useState(initialUrl?.reading ?? store.loadReading());
   const [opts, setOpts] = useState<Opts>(() => ({ ...store.loadOpts(), ...(initialUrl?.opts ?? {}), exclude: [] }));
@@ -162,13 +161,14 @@ export default function App() {
             <p className="mt-0.5 text-xs text-neutral-500">{BOOK_ORDER.map((b) => BOOK_LABEL[b]).join(' / ')} · 起点落音步、同句读内取两字 + 名用字白名单 · 完全离线</p>
           </div>
           <nav role="tablist" aria-label="视图" className="flex shrink-0 gap-1 self-start text-sm sm:self-auto">
-            {([['gen', '生成'], ['compose', '自选'], ['fav', `收藏 ${fav.length}`], ['block', `拉黑 ${block.length}`]] as const).map(([k, label]) => (
+            {([['gen', '生成'], ['fav', `收藏 ${fav.length}`], ['block', `拉黑 ${block.length}`]] as const).map(([k, label]) => (
               <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
                 className={`whitespace-nowrap rounded px-3 py-1.5 ${tab === k ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'}`}>
                 {label}
               </button>
             ))}
           </nav>
+          <a href="./compose.html" className="self-start whitespace-nowrap rounded px-3 py-1.5 text-sm text-neutral-600 ring-1 ring-neutral-200 hover:bg-neutral-100 sm:self-auto dark:text-neutral-300 dark:ring-neutral-700 dark:hover:bg-neutral-800">自选</a>
         </div>
       </header>
 
@@ -247,16 +247,6 @@ export default function App() {
               </section>
             ))}
           </>
-        )}
-
-        {tab === 'compose' && (
-          <Compose surname={surname} setSurname={changeSurname} reading={reading} setReading={setReading}
-            opts={effective} fav={favIds}
-            onFav={(r) => {
-              if (favIds.has(r.id)) { setFav(store.removeFavorite(r.id)); setNotice(`已取消收藏 ${r.full}`); }
-              else { setFav(store.addFavorite(r.id)); setNotice(`已收藏 ${r.full}`); }
-            }}
-            onShare={(r) => void doShare(r)} onCopy={(r) => void doCopy(r)} />
         )}
 
         {tab === 'fav' && (

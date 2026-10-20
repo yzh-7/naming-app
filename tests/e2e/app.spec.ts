@@ -29,8 +29,7 @@ test('主题按钮循环到深色时 html 上出现 dark', async ({ page }) => {
 });
 
 test('自选页：选字后给出出处与今译，无出处的组合明说没有', async ({ page }) => {
-  await page.goto('/');
-  await page.getByRole('tab', { name: '自选' }).click();
+  await page.goto('/compose.html');
   await page.getByLabel('姓氏（自选）').fill('苏');
   await page.getByLabel('选择第 1 字').click();
   await page.getByLabel('第 1 字搜索').fill('子');
@@ -53,8 +52,7 @@ test('自选页：选字后给出出处与今译，无出处的组合明说没�
 });
 
 test('axe：自选页无 serious/critical 级可访问性问题', async ({ page }) => {
-  await page.goto('/');
-  await page.getByRole('tab', { name: '自选' }).click();
+  await page.goto('/compose.html');
   await page.getByLabel('姓氏（自选）').fill('苏');
   await page.getByLabel('选择第 1 字').click();
   await page.getByLabel('第 1 字搜索').fill('子');

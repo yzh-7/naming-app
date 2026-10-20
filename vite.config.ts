@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
 const single = !!process.env.SINGLE;
+const entry = process.env.ENTRY ?? 'main';
 
 // base './'：相对路径产物，file:// 双击、局域网 http.server、任意子路径托管都能跑
 export default defineConfig({
@@ -20,18 +21,21 @@ export default defineConfig({
     // 它是构建期固化、运行时不请求的静态数据，已单独拆出以便长期缓存，故阈值定在它上方。
     // 真正的发布门禁是 scripts/size-check.mjs 的「资源 gzip 合计 ≤ 400 KB」，而非这条告警。
     chunkSizeWarningLimit: 1200,
-    // 单文件版（SINGLE=1）由 vite-plugin-singlefile 关掉 code splitting，禁用 manualChunks
-    ...(single ? {} : {
-      rollupOptions: {
-        output: {
-          // 把不变的数据/供应商代码与业务代码分开：既降低首屏主包体积，也让缓存更稳
-          manualChunks(id: string) {
-            if (id.includes('node_modules')) return 'vendor';
-            if (/[\\/]src[\\/]data[\\/]/.test(id)) return 'data';
-            return undefined;
+    emptyOutDir: !(single && entry === 'compose'),
+    rollupOptions: {
+      input: single
+        ? (entry === 'compose' ? 'compose.html' : 'index.html')
+        : { main: 'index.html', compose: 'compose.html' },
+      output: single
+        ? {}
+        : {
+            // 把不变的数据/供应商代码与业务代码分开：既降低首屏主包体积，也让缓存更稳
+            manualChunks(id: string) {
+              if (id.includes('node_modules')) return 'vendor';
+              if (/[\\/]src[\\/]data[\\/]/.test(id)) return 'data';
+              return undefined;
+            },
           },
-        },
-      },
-    }),
+    },
   },
 });
