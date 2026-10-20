@@ -4,6 +4,7 @@ import { META } from './engine/data';
 import { BOOK_LABEL, BOOK_ORDER, type Opts, type Result, type ShareName } from './engine/types';
 import Controls from './ui/Controls';
 import NameCard from './ui/NameCard';
+import TopNav from './ui/TopNav';
 import * as store from './store/local';
 import { buildState, serialize, parseState, toQuery, fromQuery, type SavedState } from './store/transfer';
 import { copyText, downloadText, downloadBlob, renderShareCard, renderListCard, resultSummary } from './lib/share';
@@ -21,7 +22,10 @@ const FAV_SORTS: { v: FavSort; label: string }[] = [
 
 export default function App() {
   const initialUrl = useMemo(() => fromQuery(window.location.search), []);
-  const [tab, setTab] = useState<'gen' | 'fav' | 'block'>('gen');
+  const [tab, setTab] = useState<'gen' | 'fav' | 'block'>(() => {
+    const h = window.location.hash.replace('#', '');
+    return h === 'fav' || h === 'block' ? h : 'gen';
+  });
   const [surname, setSurname] = useState(initialUrl?.surname ?? store.loadSurname());
   const [reading, setReading] = useState(initialUrl?.reading ?? store.loadReading());
   const [opts, setOpts] = useState<Opts>(() => ({ ...store.loadOpts(), ...(initialUrl?.opts ?? {}), exclude: [] }));
@@ -49,6 +53,15 @@ export default function App() {
   useEffect(() => store.saveSurname(sur), [sur]);
   useEffect(() => store.saveReading(reading), [reading]);
   useEffect(() => store.saveOpts(opts), [opts]);
+  useEffect(() => {
+    const onHash = () => {
+      const h = window.location.hash.replace('#', '');
+      if (h === 'fav' || h === 'block') setTab(h);
+      else setTab('gen');
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
   useEffect(() => {
     store.saveTheme(theme);
     const mq = window.matchMedia?.('(prefers-color-scheme: dark)');
@@ -160,15 +173,7 @@ export default function App() {
             <h1 className="font-serif text-2xl">取名 · 典籍取词</h1>
             <p className="mt-0.5 text-xs text-neutral-500">{BOOK_ORDER.map((b) => BOOK_LABEL[b]).join(' / ')} · 起点落音步、同句读内取两字 + 名用字白名单 · 完全离线</p>
           </div>
-          <nav role="tablist" aria-label="视图" className="flex shrink-0 gap-1 self-start text-sm sm:self-auto">
-            {([['gen', '生成'], ['fav', `收藏 ${fav.length}`], ['block', `拉黑 ${block.length}`]] as const).map(([k, label]) => (
-              <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
-                className={`whitespace-nowrap rounded px-3 py-1.5 ${tab === k ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'}`}>
-                {label}
-              </button>
-            ))}
-          </nav>
-          <a href="./compose.html" className="self-start whitespace-nowrap rounded px-3 py-1.5 text-sm text-neutral-600 ring-1 ring-neutral-200 hover:bg-neutral-100 sm:self-auto dark:text-neutral-300 dark:ring-neutral-700 dark:hover:bg-neutral-800">自选</a>
+          <TopNav current={tab} favCount={fav.length} blockCount={block.length} onNavigate={(t) => setTab(t)} />
         </div>
       </header>
 

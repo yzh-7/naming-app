@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import Compose from './Compose';
+import TopNav from './TopNav';
 import { cleanSurname } from '../engine/name';
 import { BOOK_LABEL, BOOK_ORDER, type Opts, type Result, type ShareName } from '../engine/types';
 import * as store from '../store/local';
@@ -68,14 +69,7 @@ export default function ComposePage() {
             <h1 className="font-serif text-2xl">自选组合</h1>
             <p className="mt-0.5 text-xs text-neutral-500">自选姓氏与用字 · 随机推荐有出处的组合 · 实时核对读音/字义/出处</p>
           </div>
-          <nav role="tablist" aria-label="视图" className="flex shrink-0 gap-1 self-start text-sm sm:self-auto">
-            <span role="tab" aria-selected="true" className="rounded bg-neutral-900 px-3 py-1.5 text-white">自选</span>
-          </nav>
-          <div className="flex shrink-0 gap-1 self-start text-sm sm:self-auto">
-            <a href="./" className="rounded px-3 py-1.5 text-neutral-600 ring-1 ring-neutral-200 hover:bg-neutral-100 dark:text-neutral-300 dark:ring-neutral-700 dark:hover:bg-neutral-800">生成</a>
-            <a href="./#fav" className="rounded px-3 py-1.5 text-neutral-600 ring-1 ring-neutral-200 hover:bg-neutral-100 dark:text-neutral-300 dark:ring-neutral-700 dark:hover:bg-neutral-800">收藏</a>
-            <a href="./#block" className="rounded px-3 py-1.5 text-neutral-600 ring-1 ring-neutral-200 hover:bg-neutral-100 dark:text-neutral-300 dark:ring-neutral-700 dark:hover:bg-neutral-800">拉黑</a>
-          </div>
+          <TopNav current="compose" favCount={fav.length} blockCount={block.length} />
         </div>
       </header>
 

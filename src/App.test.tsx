@@ -37,7 +37,7 @@ describe('App 集成冒烟', () => {
     const favBtn = screen.getAllByRole('button', { name: '收藏' })[0];
     fireEvent.click(favBtn);
     expect(screen.getByRole('button', { name: '已收藏' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('tab', { name: /收藏 1/ }));
+    fireEvent.click(screen.getByRole('link', { name: /收藏 1/ }));
     const note = screen.getByPlaceholderText('为什么喜欢它') as HTMLInputElement;
     fireEvent.change(note, { target: { value: '喜欢它的意思' } });
     expect(note.value).toBe('喜欢它的意思');
@@ -49,7 +49,7 @@ describe('App 集成冒烟', () => {
     const favs = screen.getAllByRole('button', { name: '收藏' });
     fireEvent.click(favs[0]);
     fireEvent.click(favs[1]);
-    fireEvent.click(screen.getByRole('tab', { name: /收藏 2/ }));
+    fireEvent.click(screen.getByRole('link', { name: /收藏 2/ }));
     const boxes = screen.getAllByLabelText('对比') as HTMLInputElement[];
     fireEvent.click(boxes[0]);
     fireEvent.click(boxes[1]);
@@ -100,7 +100,7 @@ describe('App 集成冒烟', () => {
     fireEvent.change(screen.getByLabelText('姓氏'), { target: { value: '苏' } });
     const firstName = screen.getAllByRole('heading', { level: 3 })[0].textContent!;
     fireEvent.click(screen.getAllByRole('button', { name: '不再看它' })[0]);
-    fireEvent.click(screen.getByRole('tab', { name: /拉黑 1/ }));
+    fireEvent.click(screen.getByRole('link', { name: /拉黑 1/ }));
     expect(within(screen.getByRole('main')).getAllByRole('heading', { level: 3 }).some((h) => h.textContent === firstName)).toBe(true);
   });
 
@@ -108,7 +108,7 @@ describe('App 集成冒烟', () => {
     render(<App />);
     fireEvent.change(screen.getByLabelText('姓氏'), { target: { value: '苏' } });
     fireEvent.click(screen.getAllByRole('button', { name: '收藏' })[0]);
-    fireEvent.click(screen.getByRole('tab', { name: /收藏 1/ }));
+    fireEvent.click(screen.getByRole('link', { name: /收藏 1/ }));
     fireEvent.change(screen.getByLabelText('搜索收藏'), { target: { value: 'zzz不存在' } });
     expect(screen.getByText(/没有符合搜索/)).toBeInTheDocument();
   });
@@ -127,6 +127,6 @@ describe('App 集成冒烟', () => {
     expect(within(dialog).getByRole('button', { name: /覆盖/ })).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole('button', { name: /合并/ }));
     expect(await screen.findByText(/已导入（合并）/)).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /收藏 1/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /收藏 1/ })).toBeInTheDocument();
   });
 });
