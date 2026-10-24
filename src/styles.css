@@ -220,7 +220,7 @@
   color: var(--ink-2); font-size: 0.875rem; line-height: 1.4; white-space: nowrap;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   &:hover { border-color: var(--line-strong); background: var(--neutral-soft); color: var(--ink); }
-  @media (min-width: 1024px) { min-height: 2rem; padding: 0.25rem 0.625rem; font-size: 0.8125rem; }
+  @media (min-width: 1024px) { min-height: 2rem; padding: 0.25rem 0.625rem; font-size: var(--text-meta); }
 }
 
 @utility field {
@@ -234,7 +234,7 @@
 
 /* 小标签（字段名、分组名） */
 @utility lab {
-  display: block; font-size: 0.8125rem; line-height: 1.5; color: var(--ink-3);
+  display: block; font-size: var(--text-meta); line-height: 1.5; color: var(--ink-3);
 }
 
 @utility card {
@@ -246,7 +246,7 @@
 /* 卡片元信息行：标签列 + 值列。值列用 minmax(0,1fr)，长内容（多音注音）才会换行而不是撑破卡片 */
 @utility meta-row {
   display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.125rem 0.75rem;
-  align-items: baseline; font-size: 0.8125rem; line-height: 1.7; color: var(--ink-2);
+  align-items: baseline; font-size: var(--text-meta); line-height: 1.7; color: var(--ink-2);
 }
 
 /* 分段控件：一条沟槽 + 抬起的选中块。选中靠「更亮的面 + 更实的边框」表达，
@@ -264,7 +264,7 @@
   font-size: 0.9375rem; line-height: 1.2; cursor: pointer; white-space: nowrap;
   transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
   &:hover { color: var(--ink); background: var(--neutral-soft); }
-  @media (min-width: 1024px) { min-height: 2rem; padding: 0.25rem 0.625rem; font-size: 0.8125rem; }
+  @media (min-width: 1024px) { min-height: 2rem; padding: 0.25rem 0.625rem; font-size: var(--text-meta); }
 }
 
 /* 选中态：与沟槽拉开层次（深色里靠更亮的面，不是靠阴影） */
