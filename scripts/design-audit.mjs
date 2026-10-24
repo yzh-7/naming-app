@@ -162,10 +162,16 @@ const ping = () => new Promise((res) => {
 });
 let server = null;
 if (!(await ping())) {
-  server = spawn('node', ['node_modules/vite/bin/vite.js', 'preview', '--host', '127.0.0.1', '--port', '5180', '--strictPort'], { stdio: 'ignore' });
+  server = spawn('node', ['node_modules/vite/bin/vite.js', 'preview', '--host', '127.0.0.1', '--port', '5180', '--strictPort'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  let previewLog = '';
+  server.stderr.on('data', (d) => { previewLog += String(d); });
+  server.stdout.on('data', (d) => { previewLog += String(d); });
   process.on('exit', () => server?.kill());
-  for (let i = 0; i < 40 && !(await ping()); i++) await new Promise((r) => setTimeout(r, 250));
-  if (!(await ping())) { console.error('起不了 vite preview：先 npm run build（dist 要存在）'); process.exit(2); }
+  for (let i = 0; i < 60 && !(await ping()); i++) await new Promise((r) => setTimeout(r, 250));
+  if (!(await ping())) {
+    console.error(`起不了 vite preview（先 npm run build，dist 要存在）。preview 输出：\n${previewLog || '（无输出）'}`);
+    process.exit(2);
+  }
 }
 
 const results = [];
