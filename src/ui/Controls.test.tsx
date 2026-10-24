@@ -28,7 +28,7 @@ function openAdvanced() {
 describe('Controls：输入与条件渲染', () => {
   it('姓氏输入双向绑定，池内条数可见', () => {
     render(<Harness />);
-    const input = screen.getByLabelText('姓氏') as HTMLInputElement;
+    const input = screen.getByLabelText('姓（可复姓）') as HTMLInputElement;
     expect(input.value).toBe('苏');
     fireEvent.change(input, { target: { value: '欧阳' } });
     expect(input.value).toBe('欧阳');
@@ -68,9 +68,11 @@ describe('Controls：输入与条件渲染', () => {
     render(<Harness />);
     openAdvanced();
     const shijing = screen.getByRole('button', { name: '诗经' });
-    expect(shijing.className).toContain('bg-amber-50');
+    expect(shijing.getAttribute('aria-pressed')).toBe('true');
+    expect(shijing.className).toContain('chip-accent');
     fireEvent.click(shijing);
-    expect(shijing.className).not.toContain('bg-amber-50');
+    expect(shijing.getAttribute('aria-pressed')).toBe('false');
+    expect(shijing.className).not.toContain('chip-accent');
   });
 
   it('搜索输入出现清除按钮，点清除后清空', () => {

@@ -29,7 +29,10 @@ export function usePwa() {
         });
       });
     }).catch(() => {});
-    const onController = () => location.reload();
+    // 只有「旧版 SW 已在控制、新版接管」时才自动刷新。首次访问时新装 SW 也会接管一次，
+    // 那时刷新会把用户刚输入的姓和候选清掉，所以不刷。
+    const hadController = sw.controller !== null;
+    const onController = () => { if (hadController) location.reload(); };
     sw.addEventListener('controllerchange', onController);
     return () => { cancelled = true; sw.removeEventListener('controllerchange', onController); };
   }, []);

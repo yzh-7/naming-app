@@ -17,7 +17,9 @@
     "test:e2e": "playwright test",
     "build": "npm run build:data && npm run verify && tsc --noEmit && npm run lint && npm run test && vite build && node scripts/size-check.mjs",
     "build:single": "npm run build:data && npm run verify && tsc --noEmit && npm run test && SINGLE=1 vite build",
-    "serve": "python3 -m http.server 5178 --directory dist"
+    "serve": "python3 -m http.server 5178 --directory dist",
+    "audit:design": "node scripts/design-audit.mjs",
+    "check": "npm run build && npm run test:e2e && npm run audit:design"
   },
   "dependencies": {
     "react": "19.3.1",

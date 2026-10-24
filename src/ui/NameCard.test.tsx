@@ -44,8 +44,8 @@ describe('NameCard 组件', () => {
   });
   it('已收藏时按钮文案变化，且不伪装成未收藏', () => {
     render(<NameCard r={r} fav blocked onFav={() => {}} onBlock={() => {}} />);
-    expect(screen.getByRole('button', { name: '取消收藏' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '取消拉黑' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '已收藏' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '已拉黑' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '收藏' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '不再看它' })).not.toBeInTheDocument();
   });

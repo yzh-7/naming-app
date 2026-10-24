@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" content="#f7f1e6" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#121211" media="(prefers-color-scheme: dark)" />
 <title>取名 · 网页版 + 安卓版：打包与迭代方案</title>
 <style>
   :root {
@@ -152,6 +155,23 @@
     border-top: 1px solid var(--line);
     color: var(--muted);
     font-size: 13px;
+  }
+  /* 夜里读：版面不动，令牌翻成深底（与应用内深浅两档同一取向） */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --parchment: #121211;
+      --surface: #1b1b19;
+      --ink: #efece4;
+      --accent: #9db6d8;
+      --muted: #9a948a;
+      --line: rgba(157, 182, 216, 0.20);
+      --line-strong: rgba(157, 182, 216, 0.42);
+      --good: #7fc99f;
+      --warn: #d9b45c;
+    }
+    code { background: rgba(157, 182, 216, 0.14); }
+    pre { background: #0d1220; border-color: rgba(255, 255, 255, 0.08); }
+    thead th { background: rgba(157, 182, 216, 0.10); }
   }
   @media (max-width: 640px) {
     .page { padding: 32px 16px 64px; }

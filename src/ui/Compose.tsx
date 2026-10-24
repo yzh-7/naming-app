@@ -114,29 +114,27 @@ export default function Compose({ surname, setSurname, reading, setReading, opts
 
   return (
     <div className="space-y-4">
-      <section className="space-y-3 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-        <div className="flex flex-wrap items-end gap-4">
-          <label className="block">
-            <span className="mb-1 block text-xs text-neutral-500">姓（可复姓）</span>
+      <section className="card space-y-4">
+        <div className="grid grid-cols-1 gap-3 xs:grid-cols-2 sm:flex sm:flex-wrap sm:items-end sm:gap-4">
+          <label className="col-span-full">
+            <span className="lab mb-1">姓（可复姓）</span>
             <input value={surname} onChange={(e) => setSurname(e.target.value)} onBlur={() => setSurname(sur)}
-              placeholder="如 苏 / 欧阳" aria-label="姓氏（自选）"
-              className="w-32 rounded border border-neutral-300 px-3 py-2 font-serif text-lg outline-none focus:border-neutral-500 dark:border-neutral-700" />
+              placeholder="如 苏 / 欧阳"               className="field w-full font-serif text-title sm:w-40" />
           </label>
           {surReads.length > 1 && (
-            <label className="block">
-              <span className="mb-1 block text-xs text-neutral-500">{sur.length > 1 ? `姓首字「${sur[0]}」的读音` : '姓的读音（多音姓请选）'}</span>
-              <select value={pick} onChange={(e) => setReading(Number(e.target.value))}
-                className="rounded border border-neutral-300 px-2 py-2 text-sm dark:border-neutral-700">
+            <label className="col-span-full">
+              <span className="lab mb-1">{sur.length > 1 ? `姓首字「${sur[0]}」的读音` : '姓的读音（多音姓请选）'}</span>
+              <select value={pick} onChange={(e) => setReading(Number(e.target.value))} className="field w-full sm:w-auto">
                 {surReads.map((r, i) => <option key={i} value={i}>{sur[0]} {r.mark}</option>)}
               </select>
             </label>
           )}
-          <div>
-            <span className="mb-1 block text-xs text-neutral-500">名字字数</span>
-            <div className="flex gap-1">
+          <div className="col-span-full sm:block">
+            <span className="lab mb-1">名字字数</span>
+            <div className="seg w-full sm:w-auto" role="group" aria-label="名字字数">
               {([2, 1] as const).map((n) => (
-                <button key={n} onClick={() => setLength(n)}
-                  className={`rounded px-3 py-2 text-sm ring-1 ${want === n ? 'bg-neutral-900 text-white ring-neutral-900' : 'ring-neutral-200 hover:bg-neutral-50 dark:ring-neutral-700 dark:hover:bg-neutral-800'}`}>
+                <button key={n} onClick={() => setLength(n)} aria-pressed={want === n}
+                  className={`seg-btn flex-1 sm:flex-none ${want === n ? 'seg-on' : ''}`}>
                   {n === 2 ? '双名' : '单名'}
                 </button>
               ))}
@@ -148,53 +146,52 @@ export default function Compose({ surname, setSurname, reading, setReading, opts
           {Array.from({ length: want }, (_, i) => {
             const ch = chars[i];
             return (
-              <div key={i} className="flex items-end gap-1">
-                <button onClick={() => { setPicker(i as 0 | 1); setQ(''); }} aria-label={`选择第 ${i + 1} 字`}
-                  className="flex h-20 w-20 flex-col items-center justify-center rounded-lg border border-dashed border-neutral-300 font-serif text-3xl hover:border-neutral-500 dark:border-neutral-700 dark:hover:border-neutral-500">
-                  {ch || <span className="text-sm text-neutral-500">第 {i + 1} 字</span>}
+              <div key={i} className="flex items-end gap-1.5">
+                <button onClick={() => { setPicker(i as 0 | 1); setQ(''); }} aria-label={ch ? `选择第 ${i + 1} 字：${ch}` : `选择第 ${i + 1} 字`} aria-expanded={picker === i}
+                  className="flex h-16 w-16 flex-col items-center justify-center gap-0.5 rounded-card border border-dashed border-line-strong bg-surface-2 font-serif text-name text-ink hover:border-accent hover:bg-accent-soft sm:h-20 sm:w-20 sm:text-name-lg">
+                  {ch || <span className="text-meta text-ink-3">第 {i + 1} 字</span>}
                 </button>
                 {ch && (
                   <button onClick={() => clearChar(i)} aria-label={`清除第 ${i + 1} 字`}
-                    className="mb-1 rounded px-1.5 py-1 text-xs text-neutral-500 ring-1 ring-neutral-200 hover:bg-neutral-50 dark:ring-neutral-700 dark:hover:bg-neutral-800">×</button>
+                    className="mb-1 size-11 rounded-ctl border border-line text-ink-3 hover:border-line-strong hover:text-ink lg:size-9"><span aria-hidden="true">×</span></button>
                 )}
               </div>
             );
           })}
-          <button onClick={fillRandom} className="rounded bg-neutral-900 px-4 py-2 text-sm text-white hover:bg-neutral-700">换一批随机</button>
-          <label className="mb-2 flex items-center gap-1.5 text-xs text-neutral-500">
-            <input type="checkbox" checked={freeRandom} onChange={(e) => setFreeRandom(e.target.checked)} className="size-4 accent-neutral-800" />
+          <button onClick={fillRandom} className="btn-primary w-full sm:ml-auto sm:w-auto">换一批随机</button>
+          <label className="flex min-h-11 w-full items-center gap-2 text-meta text-ink-3 sm:w-auto">
+            <input type="checkbox" checked={freeRandom} onChange={(e) => setFreeRandom(e.target.checked)} className="size-6 accent-accent" />
             随机自由组合（不看有无出处）
           </label>
         </div>
 
         {picker !== null && (
-          <div className="space-y-2 rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
+          <div className="space-y-3 rounded-card border border-line bg-surface-2 p-3 sm:p-4">
             <div className="flex flex-wrap items-center gap-2">
               <input value={q} onChange={(e) => setQ(e.target.value)} autoFocus aria-label={`第 ${picker + 1} 字搜索`}
-                placeholder="输入汉字或拼音，如 子 / zi" className="w-44 rounded border border-neutral-300 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900" />
+                placeholder="输入汉字或拼音，如 子 / zi" className="field w-full font-serif text-title sm:w-48" />
               <button onClick={() => setOnlyL0((v) => !v)} aria-pressed={onlyL0}
-                className={`rounded-full px-3 py-1 text-xs ring-1 ${onlyL0 ? 'bg-emerald-50 text-emerald-800 ring-emerald-200' : 'text-neutral-500 ring-neutral-200 dark:ring-neutral-700'}`}>
+                className={`chip ${onlyL0 ? 'chip-ok' : 'text-ink-3'}`}>
                 仅名用字表
               </button>
-              <span className="text-xs text-neutral-500">点字填入第 {picker + 1} 字；也可直接输入任意汉字</span>
-              <button onClick={() => { setPicker(null); setQ(''); }} className="ml-auto rounded px-2 py-1 text-xs text-neutral-500 ring-1 ring-neutral-200 hover:bg-neutral-50 dark:ring-neutral-700 dark:hover:bg-neutral-800">关闭</button>
+              <button onClick={() => { setPicker(null); setQ(''); }} className="btn ml-auto">关闭</button>
             </div>
+            <p className="text-meta text-ink-3">点字填入第 {picker + 1} 字；也可直接输入任意汉字（汉字按字找，拼音按音找）。</p>
             {CJK.test(q) && (
-              <button onClick={() => setChar(picker, q)}
-                className="rounded bg-amber-50 px-3 py-1.5 text-sm text-amber-900 ring-1 ring-amber-200">
+              <button onClick={() => setChar(picker, q)} className="btn btn-accent max-w-full whitespace-normal font-serif text-title">
                 使用「{q}」{charFacts(q).l0 ? '' : '（不在名用字表）'}
               </button>
             )}
             {/^[一-鿿]{2}$/.test(q) && (
               <button onClick={() => { setDraft((d) => ({ ...d, chars: [...q] })); setPicker(null); setQ(''); }}
-                className="rounded bg-amber-50 px-3 py-1.5 text-sm text-amber-900 ring-1 ring-amber-200">
+                className="btn btn-accent max-w-full whitespace-normal font-serif text-title">
                 直接使用「{q}」
               </button>
             )}
-            <div className="flex max-h-56 flex-wrap gap-1 overflow-y-auto">
+            <div data-char-grid role="group" aria-label="候选字" className="flex max-h-56 flex-wrap gap-1.5 overflow-y-auto pb-1">
               {charList(q, onlyL0).map((ch) => (
                 <button key={ch} onClick={() => setChar(picker, ch)}
-                  className="h-9 w-9 rounded font-serif text-lg ring-1 ring-neutral-200 hover:bg-amber-50 dark:ring-neutral-700 dark:hover:bg-neutral-800">
+                  className="h-11 w-11 rounded-ctl border border-line bg-surface font-serif text-glyph text-ink hover:border-accent-line hover:bg-accent-soft lg:h-10 lg:w-10">
                   {ch}
                 </button>
               ))}
@@ -203,86 +200,85 @@ export default function Compose({ surname, setSurname, reading, setReading, opts
         )}
 
         {facts.length > 0 && (
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-600 dark:text-neutral-300">
+          <dl className="meta-row">
             {facts.map((f) => (
-              <span key={f.ch}>
-                <span className="font-serif text-sm text-neutral-900 dark:text-neutral-100">{f.ch}</span>{' '}
-                {f.gloss ?? '字义留白'}
-                {f.st ? ` · ${f.st}画` : ''}{f.sx ? ` · ${f.sx}` : ''} · {f.band}
-                {!f.l0 && <span className="ml-1 rounded bg-amber-50 px-1 text-amber-800 ring-1 ring-amber-100">不在名用字表</span>}
-              </span>
+              <><dt key={f.ch} className="font-serif text-body text-ink">{f.ch}</dt>
+                <dd>
+                  {f.gloss ?? '字义留白'}
+                  {f.st ? ` · ${f.st}画` : ''}{f.sx ? ` · ${f.sx}` : ''} · <span className="tabular-nums">{f.band}</span>
+                  {!f.l0 && <span className="ml-1 text-warn">不在名用字表</span>}
+                </dd></>
             ))}
-          </div>
+          </dl>
         )}
       </section>
 
       {!sur && (
-        <p className="rounded-lg border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500 dark:border-neutral-700">
+        <p className="rounded-card border border-dashed border-line-strong bg-surface-2 p-6 text-center text-meta leading-6 text-ink-3">
           先填姓氏，再选第 1、2 个字（或只选一个字），下面会核对读音、字义与出处。
         </p>
       )}
 
       {sur && !ready && (
-        <p className="rounded-lg border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500 dark:border-neutral-700">
+        <p className="rounded-card border border-dashed border-line-strong bg-surface-2 p-6 text-center text-meta leading-6 text-ink-3">
           {want === 2 ? '还差一个字。也可以从下面的「随机」或「搭配」里挑。' : '还没选字。'}
         </p>
       )}
 
       {ready && composed && (
-        <section className="space-y-3 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-          <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <h2 className="font-serif text-3xl tracking-wider">{composed.full}</h2>
-            <span className="text-xs text-neutral-500">{composed.readings.join(' ') || '读音留白'}</span>
+        <section className="card space-y-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 className="font-serif text-name-lg text-ink">{composed.full}</h2>
+            <span className="text-meta tabular-nums text-ink-3">{composed.readings.join(' ') || '读音留白'}</span>
           </div>
-          {shape?.note && <p className="text-xs text-amber-800 dark:text-amber-200">{shape.note}</p>}
+          {shape?.note && <p className="text-meta text-warn">{shape.note}</p>}
           {composed.flags.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {composed.flags.map((f) => (
-                <span key={f} className="rounded-full bg-red-50 px-2 py-0.5 text-xs text-red-700 ring-1 ring-red-100">{f}</span>
+                <span key={f} className="chip chip-danger max-w-full whitespace-normal">{f}</span>
               ))}
             </div>
           )}
-          {!composed.allL0 && <p className="text-xs text-amber-800 dark:text-amber-200">有字不在名用字表：仍做读音与谐音核对，但字义/常见度可能留白。</p>}
+          {!composed.allL0 && <p className="text-meta text-warn">有字不在名用字表：仍做读音与谐音核对，但字义/常见度可能留白。</p>}
 
           {source ? (
-            <div className="border-t border-neutral-100 pt-3 dark:border-neutral-800">
+            <div className="border-t border-line pt-3">
               <Source r={source} />
             </div>
           ) : (
-            <p className="border-t border-neutral-100 pt-3 text-sm text-neutral-500 dark:border-neutral-800">
+            <p className="border-t border-line pt-3 text-body leading-7 text-ink-2">
               {BOOK_COUNT} 本典籍里没有「{name}」这个搭配的出处。这里只做事实核对，不拿别的句子凑出处。
             </p>
           )}
 
-          <div className="flex flex-wrap items-center gap-2 pt-1">
+          <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
             {scored && (
-              <button onClick={() => onFav(scored)}
-                className={`rounded px-3 py-1 text-sm ring-1 ${fav.has(scored.id) ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'text-neutral-600 ring-neutral-200 hover:bg-neutral-50 dark:text-neutral-300 dark:ring-neutral-700 dark:hover:bg-neutral-800'}`}>
+              <button onClick={() => onFav(scored)} className={fav.has(scored.id) ? 'btn btn-on' : 'btn'}>
                 {fav.has(scored.id) ? '已收藏' : '收藏'}
               </button>
             )}
             <button onClick={() => onShare(scored ?? { full: composed.full, name: composed.name, readings: composed.readings })}
-              className="rounded px-3 py-1 text-sm text-neutral-600 ring-1 ring-neutral-200 hover:bg-neutral-50 dark:text-neutral-300 dark:ring-neutral-700 dark:hover:bg-neutral-800">分享卡</button>
+              className="btn btn-quiet">分享卡</button>
             <button onClick={() => onCopy(scored ?? { full: composed.full, name: composed.name, readings: composed.readings })}
-              className="rounded px-3 py-1 text-sm text-neutral-600 ring-1 ring-neutral-200 hover:bg-neutral-50 dark:text-neutral-300 dark:ring-neutral-700 dark:hover:bg-neutral-800">复制信息</button>
-            {!scored && <span className="text-xs text-neutral-500">无出处的组合不进收藏（收藏按出处条目定位）</span>}
+              className="btn btn-quiet">复制信息</button>
+            {!scored && <span className="text-meta text-ink-3">无出处的组合不进收藏（收藏按出处条目定位）</span>}
           </div>
         </section>
       )}
 
       {randoms.length > 0 && (
-        <section className="space-y-2">
-          <h3 className="text-xs text-neutral-500">
+        <section className="space-y-2.5">
+          <h3 className="lab">
             随机 {randoms.length} 个{freeRandom ? '（自由组合，可能有出处也可能没有）' : '（都有典籍出处）'} · 点一下填入
           </h3>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
             {randoms.map((nm) => {
               const hit = findCombo(nm);
               return (
                 <button key={nm} onClick={() => applyRandom(nm)}
-                  className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-left hover:border-neutral-400 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-600">
-                  <span className="font-serif text-lg">{nm}</span>
-                  <span className="ml-2 text-xs text-neutral-500">{hit ? `· ${BOOK_LABEL[hit.book]}` : '· 无出处'}</span>
+                  className="min-h-11 rounded-card border border-line bg-surface px-3 py-2 text-left text-ink hover:border-line-strong lg:min-h-0">
+                  <span className="font-serif text-name">{nm}</span>
+                  <span className="ml-2 text-meta text-ink-3">{hit ? `· ${BOOK_LABEL[hit.book]}` : '· 无出处'}</span>
                 </button>
               );
             })}
@@ -291,14 +287,14 @@ export default function Compose({ surname, setSurname, reading, setReading, opts
       )}
 
       {pairHints.length > 0 && (
-        <section className="space-y-2">
-          <h3 className="text-xs text-neutral-500">
+        <section className="space-y-2.5">
+          <h3 className="lab">
             与「{chars[0] || chars[1]}」在典籍同一句读里搭配过的字（{pairHints.length} 个）· 点一下填入
           </h3>
           <div className="flex flex-wrap gap-1.5">
             {pairHints.map((h) => (
               <button key={h.ch} onClick={() => setChar(chars[0] ? 1 : 0, h.ch)} title={`${h.name} · 《${BOOK_LABEL[h.book]}·${h.title}》`}
-                className="rounded px-2.5 py-1 font-serif text-base ring-1 ring-neutral-200 hover:bg-amber-50 dark:ring-neutral-700 dark:hover:bg-neutral-800">
+                className="chip font-serif text-title hover:border-accent-line hover:bg-accent-soft">
                 {h.ch}
               </button>
             ))}

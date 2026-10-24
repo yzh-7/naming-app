@@ -26,7 +26,7 @@ describe('App 集成冒烟', () => {
   it('未填姓时给出引导，填姓后生成结果', () => {
     render(<App />);
     expect(screen.getByText(/先填姓氏/)).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('姓氏'), { target: { value: '苏' } });
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
     expect(screen.queryByText(/先填姓氏/)).not.toBeInTheDocument();
     // 至少渲染出一张名字卡片（卡片标题是 h3）
     expect(screen.getAllByRole('heading', { level: 3 }).length).toBeGreaterThan(0);
@@ -34,10 +34,10 @@ describe('App 集成冒烟', () => {
 
   it('收藏后计数更新，切到收藏页可见并可写备注', () => {
     render(<App />);
-    fireEvent.change(screen.getByLabelText('姓氏'), { target: { value: '苏' } });
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
     const favBtn = screen.getAllByRole('button', { name: '收藏' })[0];
     fireEvent.click(favBtn);
-    expect(screen.getByRole('button', { name: '取消收藏' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '已收藏' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('link', { name: /收藏 1/ }));
     const note = screen.getByPlaceholderText('为什么喜欢它') as HTMLInputElement;
     fireEvent.change(note, { target: { value: '喜欢它的意思' } });
@@ -47,7 +47,7 @@ describe('App 集成冒烟', () => {
   it('hash 路由：#/compose 进自选页，#fav 进收藏页，清空回生成页', () => {
     window.location.hash = '#/compose';
     render(<App />);
-    expect(screen.getByLabelText('姓氏（自选）')).toBeInTheDocument();
+    expect(screen.getByLabelText('姓（可复姓）')).toBeInTheDocument();
     window.location.hash = '#fav';
     fireEvent(window, new HashChangeEvent('hashchange'));
     expect(screen.getByLabelText('搜索收藏')).toBeInTheDocument();
@@ -58,7 +58,7 @@ describe('App 集成冒烟', () => {
 
   it('对比表里带出处今译，两列都非空', () => {
     render(<App />);
-    fireEvent.change(screen.getByLabelText('姓氏'), { target: { value: '苏' } });
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
     const favs = screen.getAllByRole('button', { name: '收藏' });
     fireEvent.click(favs[0]);
     fireEvent.click(favs[1]);
@@ -77,7 +77,7 @@ describe('App 集成冒烟', () => {
 
   it('导出触发一次下载并给出提示', () => {
     render(<App />);
-    fireEvent.change(screen.getByLabelText('姓氏'), { target: { value: '苏' } });
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
     fireEvent.click(screen.getAllByRole('button', { name: '收藏' })[0]);
     fireEvent.click(screen.getByRole('button', { name: '导出' }));
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
@@ -93,24 +93,26 @@ describe('App 集成冒烟', () => {
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining(location.origin));
   });
 
-  it('主题按 浅色→深色→跟随系统 循环，深色落到 documentElement 上', () => {
+  it('昼夜三档：深色给 documentElement 打上 dark，浅色撤掉，默认跟随系统', () => {
     render(<App />);
-    const btn = () => screen.getByRole('button', { name: /主题/ });
-    expect(btn()).toHaveTextContent('跟随系统');
-    fireEvent.click(btn()); // → 浅色
-    expect(btn()).toHaveTextContent('浅色');
+    const group = () => within(screen.getByRole('group', { name: '昼夜主题' }));
+    const pick = (label: string) => group().getByRole('button', { name: `${label}主题` });
+    expect(pick('跟随系统')).toHaveAttribute('aria-pressed', 'true');
     expect(document.documentElement.classList.contains('dark')).toBe(false);
-    fireEvent.click(btn()); // → 深色
-    expect(btn()).toHaveTextContent('深色');
+    fireEvent.click(pick('深色'));
+    expect(pick('深色')).toHaveAttribute('aria-pressed', 'true');
     expect(document.documentElement.classList.contains('dark')).toBe(true);
-    fireEvent.click(btn()); // → 跟随系统（无 matchMedia 偏好，浅色）
-    expect(btn()).toHaveTextContent('跟随系统');
+    fireEvent.click(pick('浅色'));
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+    expect(localStorage.getItem('naming.theme.v1')).toBe('light');
+    fireEvent.click(pick('跟随系统'));
+    expect(localStorage.getItem('naming.theme.v1')).toBe('system');
     expect(document.documentElement.classList.contains('dark')).toBe(false);
   });
 
   it('拉黑后卡片移出生成页、进入拉黑页', () => {
     render(<App />);
-    fireEvent.change(screen.getByLabelText('姓氏'), { target: { value: '苏' } });
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
     const firstName = screen.getAllByRole('heading', { level: 3 })[0].textContent!;
     fireEvent.click(screen.getAllByRole('button', { name: '不再看它' })[0]);
     fireEvent.click(screen.getByRole('link', { name: /拉黑 1/ }));
@@ -119,7 +121,7 @@ describe('App 集成冒烟', () => {
 
   it('收藏页：搜索无命中时给出空态提示', () => {
     render(<App />);
-    fireEvent.change(screen.getByLabelText('姓氏'), { target: { value: '苏' } });
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
     fireEvent.click(screen.getAllByRole('button', { name: '收藏' })[0]);
     fireEvent.click(screen.getByRole('link', { name: /收藏 1/ }));
     fireEvent.change(screen.getByLabelText('搜索收藏'), { target: { value: 'zzz不存在' } });

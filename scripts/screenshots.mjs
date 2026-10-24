@@ -14,13 +14,13 @@ const SHOTS = [
 
 async function composeFill(page) {
   // 复刻 e2e 的自选路径：苏子归（楚辞·江有汜）
-  await page.getByLabel('姓氏（自选）').fill('苏');
+  await page.getByLabel('姓（可复姓）').fill('苏');
   await page.getByLabel('选择第 1 字').click();
   await page.getByLabel('第 1 字搜索').fill('子');
-  await page.locator('div.flex.max-h-56 button').first().click();
+  await page.locator('[data-char-grid] button').first().click();
   await page.getByLabel('选择第 2 字').click();
   await page.getByLabel('第 2 字搜索').fill('归');
-  await page.locator('div.flex.max-h-56 button').first().click();
+  await page.locator('[data-char-grid] button').first().click();
   await page.getByRole('heading', { name: '苏子归' }).waitFor();
 }
 

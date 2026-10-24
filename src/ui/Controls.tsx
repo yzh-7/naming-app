@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { cleanSurname, readings, surnameReads } from '../engine/name';
 import { BOOK_LABEL, BOOK_ORDER, MUST_POS_LABEL, POP_FLOORS, STROKE_MAXES, type Book, type Gender, type MustPos, type Opts, type SortKey } from '../engine/types';
 
-const GENDERS: { v: Gender; label: string; color: string }[] = [
-  { v: 'any', label: '不限', color: '' },
-  { v: 'm', label: '偏男', color: 'bg-sky-50 text-sky-800 ring-sky-200' },
-  { v: 'f', label: '偏女', color: 'bg-pink-50 text-pink-800 ring-pink-200' },
+const GENDERS: { v: Gender; label: string; on: string }[] = [
+  { v: 'any', label: '不限', on: 'seg-on' },
+  { v: 'm', label: '偏男', on: 'seg-cool' },   /* 选中态：冷色，与卡片上的偏男同色 */
+  { v: 'f', label: '偏女', on: 'seg-warm' },   /* 选中态：暖色，与卡片上的偏女同色 */
 ];
 const PRESETS = [12, 24, 48];
 const SORTS: { v: SortKey; label: string }[] = [
@@ -41,57 +41,28 @@ export default function Controls({ surname, setSurname, reading, setReading, opt
   const toggleBook = (b: Book) => setOpts((o) => ({ ...o, books: { ...o.books, [b]: !o.books[b] } }));
 
   return (
-    <section className="space-y-3 rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4">
-      {/* Primary controls */}
-      <div className="flex flex-wrap items-end gap-4">
-        <label className="block">
-          <span className="mb-1 block text-xs text-neutral-500">姓（可复姓）</span>
+    <section className="card space-y-4">
+      {/* 第一组：姓、读音、名字形态、批量。手机端两列栅格，桌面一行流式 */}
+      <div className="grid grid-cols-1 gap-3 xs:grid-cols-2 sm:flex sm:flex-wrap sm:items-end sm:gap-4">
+        <label className="col-span-full">
+          <span className="lab mb-1">姓（可复姓）</span>
           <input value={surname} onChange={(e) => setSurname(e.target.value)} onBlur={() => setSurname(sur)}
-            placeholder="如 苏 / 欧阳" aria-label="姓氏"
-            className="w-32 rounded border border-neutral-300 dark:border-neutral-700 px-3 py-2 font-serif text-lg outline-none focus:border-neutral-500" />
+            placeholder="如 苏 / 欧阳"
+            className="field w-full font-serif text-title sm:w-40" />
         </label>
         {surReads.length > 1 && (
           <label className="block">
-            <span className="mb-1 block text-xs text-neutral-500">{sur.length > 1 ? `姓首字「${sur[0]}」的读音` : '姓的读音（多音姓请选）'}</span>
-            <select value={pick} onChange={(e) => setReading(Number(e.target.value))}
-              className="rounded border border-neutral-300 dark:border-neutral-700 px-2 py-2 text-sm">
+            <span className="lab mb-1">{sur.length > 1 ? `姓首字「${sur[0]}」的读音` : '姓的读音（多音姓请选）'}</span>
+            <select value={pick} onChange={(e) => setReading(Number(e.target.value))} className="field w-full">
               {surReads.map((r, i) => <option key={i} value={i}>{sur[0]} {r.mark}</option>)}
             </select>
           </label>
         )}
         <label className="block">
-          <span className="mb-1 block text-xs text-neutral-500">名字字数</span>
-          <div className="flex gap-1">
-            {([2, 1] as const).map((n) => (
-              <button key={n} onClick={() => patch(n === 1 ? { length: 1, redupOnly: false } : { length: 2 })}
-                className={`rounded px-3 py-2 text-sm ring-1 ${opts.length === n ? 'bg-neutral-900 text-white ring-neutral-900' : 'ring-neutral-200 dark:ring-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800'}`}>
-                {n === 2 ? '双名' : '单名'}
-              </button>
-            ))}
-          </div>
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs text-neutral-500" title="选定后反向名不进候选池">性别风格</span>
-          <div className="flex gap-1">
-            {GENDERS.map((g) => (
-              <button key={g.v} onClick={() => patch({ gender: g.v })}
-                className={`rounded px-3 py-2 text-sm ring-1 ${opts.gender === g.v ? (g.color ? `${g.color} ring-current` : 'bg-neutral-900 text-white ring-neutral-900') : 'ring-neutral-200 dark:ring-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800'}`}>
-                {g.label}
-              </button>
-            ))}
-          </div>
-        </label>
-        {opts.gender !== 'any' && (
-          <button onClick={() => patch({ genderWeak: !opts.genderWeak })} title="疑似＝只有一个字在性别字表里，其余字两侧都不在"
-            className={`self-center rounded-full px-3 py-1 text-xs ring-1 ${opts.genderWeak ? 'bg-amber-50 text-amber-800 ring-amber-200' : 'text-neutral-500 dark:text-neutral-400 ring-neutral-200 dark:ring-neutral-700'}`}>
-            含「疑似{opts.gender === 'f' ? '偏女' : '偏男'}」
-          </button>
-        )}
-        <label className="block">
-          <span className="mb-1 block text-xs text-neutral-500" title="决定一屏几条，也决定要翻几页">每批条数</span>
+          <span className="lab mb-1" title="决定一屏几条，也决定要翻几页">每批条数</span>
           <select value={opts.count === 0 ? 'all' : String(opts.count)}
             onChange={(e) => patch({ count: e.target.value === 'all' ? 0 : Number(e.target.value) })}
-            className="rounded border border-neutral-300 dark:border-neutral-700 px-2 py-2 text-sm">
+            className="field w-full sm:w-auto">
             {PRESETS.map((n) => <option key={n} value={String(n)}>{n} 条</option>)}
             {opts.count > 0 && opts.count < poolCount && !PRESETS.includes(opts.count) && (
               <option value={String(opts.count)}>{opts.count} 条</option>
@@ -99,59 +70,87 @@ export default function Controls({ surname, setSurname, reading, setReading, opt
             <option value="all">全部 {poolCount} 条</option>
           </select>
         </label>
-        <button onClick={onBatch} className="rounded bg-neutral-900 px-4 py-2 text-sm text-white hover:bg-neutral-700">
+        <label className="col-span-full sm:block">
+          <span className="lab mb-1">名字字数</span>
+          <div className="seg w-full sm:w-auto" role="group" aria-label="名字字数">
+            {([2, 1] as const).map((n) => (
+              <button key={n} onClick={() => patch(n === 1 ? { length: 1, redupOnly: false } : { length: 2 })}
+                aria-pressed={opts.length === n}
+                className={`seg-btn flex-1 sm:flex-none ${opts.length === n ? 'seg-on' : ''}`}>
+                {n === 2 ? '双名' : '单名'}
+              </button>
+            ))}
+          </div>
+        </label>
+        <label className="col-span-full sm:block">
+          <span className="lab mb-1" title="选定后反向名不进候选池">性别风格</span>
+          <div className="seg w-full sm:w-auto" role="group" aria-label="性别风格">
+            {GENDERS.map((g) => (
+              <button key={g.v} onClick={() => patch({ gender: g.v })} aria-pressed={opts.gender === g.v}
+                className={`seg-btn flex-1 sm:flex-none ${opts.gender === g.v ? g.on : ''}`}>
+                {g.label}
+              </button>
+            ))}
+          </div>
+        </label>
+        {opts.gender !== 'any' && (
+          <button onClick={() => patch({ genderWeak: !opts.genderWeak })} aria-pressed={opts.genderWeak}
+            title="疑似＝只有一个字在性别字表里，其余字两侧都不在"
+            className={`chip self-start ${opts.genderWeak ? 'chip-warm' : ''}`}>
+            含「疑似{opts.gender === 'f' ? '偏女' : '偏男'}」
+          </button>
+        )}
+        <button onClick={onBatch} className="btn-primary col-span-full sm:ml-auto">
           换一批{pages > 1 ? ` · ${pageNo + 1}/${pages}` : ''}
         </button>
       </div>
 
-      {/* Search + Sort */}
-      <div className="flex flex-wrap items-center gap-2">
+      {/* 第二组：搜索、指定字、排序 */}
+      <div className="grid grid-cols-1 gap-3 border-t border-line pt-4 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
         <label className="flex items-center gap-2">
-          <span className="text-xs text-neutral-500">搜索</span>
+          <span className="lab shrink-0">搜索</span>
           <input value={opts.search} onChange={(e) => patch({ search: e.target.value })} aria-label="搜索名字、拼音或篇名"
-            placeholder="名字 / 拼音 / 篇名" className="w-44 rounded border border-neutral-300 dark:border-neutral-700 px-2 py-1.5 text-sm outline-none focus:border-neutral-500" />
-          {opts.search && <button onClick={() => patch({ search: '' })} aria-label="清除搜索"
-            className="rounded px-2 py-1 text-xs text-neutral-500 ring-1 ring-neutral-200 dark:ring-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800">清除</button>}
+            placeholder="名字 / 拼音 / 篇名" className="field w-full sm:w-44" />
+          {opts.search && <button onClick={() => patch({ search: '' })} aria-label="清除搜索" className="btn">清除</button>}
         </label>
-        <label className="flex items-center gap-2">
-          <span className="text-xs text-neutral-500" title="结果里每条名字都必须含这个字；双名还能限定它当首字或末字">指定字</span>
+        <label className="flex flex-wrap items-center gap-2">
+          <span className="lab shrink-0" title="结果里每条名字都必须含这个字；双名还能限定它当首字或末字">指定字</span>
           {/* 不回填输入框：中文输入法组字时框里会先出现拉丁字母，回填会把组字打断；失焦时再对齐真实值 */}
           <input key={opts.mustChar} defaultValue={opts.mustChar}
             onChange={(e) => patch({ mustChar: [...e.target.value].find((c) => /[一-鿿]/.test(c)) ?? '' })}
             onBlur={(e) => { e.target.value = opts.mustChar; }}
             maxLength={2} aria-label="指定用字（结果必须包含）" placeholder="如 清"
-            className="w-12 rounded border border-neutral-300 dark:border-neutral-700 px-2 py-1.5 text-center font-serif text-base outline-none focus:border-neutral-500" />
+            className="field w-16 text-center font-serif text-title sm:w-20" />
           {opts.mustChar && opts.length === 2 && (
             <select value={opts.mustPos} onChange={(e) => patch({ mustPos: e.target.value as MustPos })} aria-label="指定字的位置"
-              className="rounded border border-neutral-300 dark:border-neutral-700 px-2 py-1.5 text-sm">
+              className="field w-full sm:w-auto">
               {(['any', 'first', 'last'] as const).map((p) => <option key={p} value={p}>{MUST_POS_LABEL[p]}</option>)}
             </select>
           )}
           {opts.mustChar && (
-            <button onClick={() => patch({ mustChar: '' })} aria-label="清除指定字"
-              className="rounded px-2 py-1 text-xs text-neutral-500 ring-1 ring-neutral-200 dark:ring-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800">清除</button>
+            <button onClick={() => patch({ mustChar: '' })} aria-label="清除指定字" className="btn">清除</button>
           )}
         </label>
         <label className="flex items-center gap-2">
-          <span className="text-xs text-neutral-500">排序</span>
+          <span className="lab shrink-0">排序</span>
           <select value={opts.sort} onChange={(e) => patch({ sort: e.target.value as SortKey })} aria-label="结果排序"
-            className="rounded border border-neutral-300 dark:border-neutral-700 px-2 py-1.5 text-sm">
+            className="field w-full sm:w-auto">
             {SORTS.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}
           </select>
         </label>
       </div>
 
-      {/* Advanced filters (collapsible) */}
+      {/* 第三组：高级筛选（默认收起，手机端少占屏） */}
       <AdvancedFilters opts={opts} patch={patch} toggleBook={toggleBook} />
 
       {/* 池内计数常驻：筛选折叠起来时也要看得见命中多少 */}
-      <p className="text-xs tabular-nums text-neutral-500" title="「换一批」往后翻，翻满页数看遍全部">
+      <p className="measure text-meta tabular-nums text-ink-3" title="「换一批」往后翻，翻满页数看遍全部">
         {poolSummary(poolCount, perPage, pages, pageNo)}
       </p>
       {opts.mustChar && poolCount === 0 && (
-        <p className="rounded bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 ring-1 ring-amber-200">
+        <p className="measure rounded-card border border-warn-line bg-warn-soft p-3 text-meta text-warn">
           典籍里没有含「{opts.mustChar}」的可用搭配（这个字多半不在名用字表，或所在句读配不出符合其它条件的名字）。
-          可换个字，或到 <a className="underline" href="#/compose">自选页</a> 自由搭配这个字并逐字核对事实。
+          可换个字，或到 <a className="text-accent-ink underline" href="#/compose">自选页</a> 自由搭配这个字并逐字核对事实。
         </p>
       )}
     </section>
@@ -165,55 +164,61 @@ function AdvancedFilters({ opts, patch, toggleBook }: {
 
   return (
     <div>
-      <button onClick={() => setOpen((o) => !o)} aria-expanded={open}
-        className="flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300">
-        <svg className={`size-3 transition-transform ${open ? 'rotate-90' : ''}`} viewBox="0 0 12 12" fill="currentColor">
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls="adv-filters" className="btn w-full sm:w-auto">
+        <svg className={`size-3 transition-transform ${open ? 'rotate-90' : ''}`} viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
           <path d="M4.5 2l5 4-5 4z" />
         </svg>
         {open ? '收起筛选' : '高级筛选'}
       </button>
       {open && (
-        <div className="mt-3 space-y-3">
+        <div id="adv-filters" className="mt-3 space-y-3">
           {/* Fact-based filters */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="grid grid-cols-1 gap-3 xs:grid-cols-2 sm:flex sm:flex-wrap sm:items-center">
             <label className="flex items-center gap-2">
-              <span className="text-xs text-neutral-500">整名笔画</span>
+              <span className="lab shrink-0">整名笔画</span>
               <select value={opts.strokeMax} onChange={(e) => patch({ strokeMax: Number(e.target.value) })} aria-label="整名笔画上限"
-                className="rounded border border-neutral-300 dark:border-neutral-700 px-2 py-1.5 text-sm">
+                className="field w-full sm:w-auto">
                 {STROKE_MAXES.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}
               </select>
             </label>
             <label className="flex items-center gap-2">
-              <span className="text-xs text-neutral-500">用字常见度</span>
+              <span className="lab shrink-0">用字常见度</span>
               <select value={opts.popFloor} onChange={(e) => patch({ popFloor: Number(e.target.value) })} aria-label="用字常见度下限"
-                className="rounded border border-neutral-300 dark:border-neutral-700 px-2 py-1.5 text-sm">
+                className="field w-full sm:w-auto">
                 {POP_FLOORS.map((p) => <option key={p.v} value={p.v}>{p.label}</option>)}
               </select>
             </label>
             {opts.length === 2 && (
               <button onClick={() => patch({ noMonotone: !opts.noMonotone })} aria-pressed={opts.noMonotone}
                 title="两字结构相同（都是左右/上下…）时字形偏单调，勾上只看不同结构的"
-                className={`rounded-full px-3 py-1 text-xs ring-1 ${opts.noMonotone ? 'bg-emerald-50 text-emerald-800 ring-emerald-200' : 'text-neutral-500 dark:text-neutral-400 ring-neutral-200 dark:ring-neutral-700'}`}>
+                className={`chip self-start ${opts.noMonotone ? 'chip-ok' : ''}`}>
                 避开同结构
               </button>
             )}
           </div>
 
+          <p className="measure text-meta text-ink-3">
+            「含疑似」＝只有一个字在性别字表里；「避开同结构」＝两字结构相同（都左右、都上下）时字形偏单调。
+          </p>
+
           {/* Books */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-neutral-500">典籍</span>
-            {BOOK_ORDER.map((b) => (
-              <button key={b} onClick={() => toggleBook(b)}
-                className={`rounded-full px-3 py-1 text-xs ring-1 ${opts.books[b] ? 'bg-amber-50 text-amber-900 ring-amber-200' : 'text-neutral-500 dark:text-neutral-400 ring-neutral-200 dark:ring-neutral-700'}`}>
-                {BOOK_LABEL[b]}
-              </button>
-            ))}
-            {opts.length === 2 && (
-              <button onClick={() => patch({ redupOnly: !opts.redupOnly })} title="单名层没有叠字，切到双名才能筛"
-                className={`rounded-full px-3 py-1 text-xs ring-1 ${opts.redupOnly ? 'bg-emerald-50 text-emerald-800 ring-emerald-200' : 'text-neutral-500 dark:text-neutral-400 ring-neutral-200 dark:ring-neutral-700'}`}>
-                只看典籍叠字
-              </button>
-            )}
+          <div className="space-y-2">
+            <span className="lab">典籍</span>
+            <div className="flex flex-wrap items-center gap-2">
+              {BOOK_ORDER.map((b) => (
+                <button key={b} onClick={() => toggleBook(b)} aria-pressed={opts.books[b]}
+                  className={`chip ${opts.books[b] ? 'chip-accent' : 'text-ink-3'}`}>
+                  {BOOK_LABEL[b]}
+                </button>
+              ))}
+              {opts.length === 2 && (
+                <button onClick={() => patch({ redupOnly: !opts.redupOnly })} aria-pressed={opts.redupOnly}
+                  title="单名层没有叠字，切到双名才能筛"
+                  className={`chip ${opts.redupOnly ? 'chip-ok' : 'text-ink-3'}`}>
+                  只看典籍叠字
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

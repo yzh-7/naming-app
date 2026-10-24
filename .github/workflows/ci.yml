@@ -31,7 +31,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - name: 构建后跑端到端 + axe 可访问性扫描
+      - name: 构建后跑端到端 + axe 可访问性扫描 + 设计体检
         run: |
           npm run build
           npm run test:e2e
+          npm run audit:design

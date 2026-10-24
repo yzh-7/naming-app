@@ -27,6 +27,8 @@ npm run serve      # 用 python3 静态伺服 dist（端口 5178）
 npm run lint       # ESLint（flat config）
 npm run format     # Prettier 写回
 npm run test:e2e   # Playwright + axe（需先 npm run build；首次 npx playwright install chromium）
+npm run audit:design   # 设计体检：320/390/768/1024/1440 × 深浅 × 四个页共 40 组，量溢出、触控目标、对比度、行长（自动起预览服务）
+npm run check      # build + test:e2e + audit:design 一条龙
 ```
 
 Node 需要 **22.19+**（vitest 4 的 fetch 依赖 undici 8，要求 ≥22.19；Node 20 已 EOL。见 `.nvmrc` / `package.json` 的 `engines`，CI 跑 22 与 24）。
@@ -50,7 +52,8 @@ Node 需要 **22.19+**（vitest 4 的 fetch 依赖 undici 8，要求 ≥22.19；
 - **收藏**：备注 / 分组 / 搜索 / 排序（最近·分数·笔画·常见度）/ 按分组过滤；勾选 2–3 个进入**对比表**。
 - **导出/导入**：JSON 备份（导入时可选**合并**或**覆盖**）；当前筛选下的**候选全量导出**（JSON / CSV，含出处原句与今译）；**复制链接**只带轻量筛选，收藏与拉黑留在本机。
 - **分享**：单名羊皮纸卡片（含原句与今译，附离线生成的**二维码**）、收藏页**导出名单长图**、**打印名单**（打印样式只保留卡片正文）；「复制信息」同样带今译；自选组合若无出处，卡片与摘要会明确写「未见此搭配」。
-- **主题**：浅色 / 深色 / **跟随系统**三态，随系统偏好实时切换。
+- **主题**：浅色 / 深色 / **跟随系统**三态，随系统偏好实时切换；深浅两档在四个页面（含分享卡、对比表、导入弹窗）都成套，不是只翻背景色。
+- **界面**：手机端 320px 起不横向溢出；触控目标在 1023px 以下一律按手指尺寸（≥44px）给，平板（768）也算手指；名字用衬线大字、界面文案用无衬线，正文行长控制在约 40 字以内。具体由 `scripts/design-audit.mjs` 实测把关（见「测试」）。
 - **PWA**：可安装，离线可用；有新版本或离线时顶部给出提示。
 
 ## 截图
@@ -107,6 +110,10 @@ npm run typecheck   # tsc --noEmit
 npm run lint        # ESLint
 npm test            # Vitest（9 个文件，148 用例）
 npm run test:e2e    # Playwright + axe（先 npm run build）
+npm run audit:design # 设计体检（自己起 vite preview）
+npm run check        # 上面三条一条龙
 ```
 
-单测覆盖引擎（取词口径、打分、音韵、字形、常见度、检索排序、**笔画/结构/常见度筛选**）、store（持久化、导入导出往返、URL 编解码、导入写回）、分享（卡片/二维码/名单图）、以及 Controls / NameCard / App 的组件与集成渲染。端到端在真实 Chromium 上跑关键路径，并做 axe（WCAG 2 A/AA）扫描。
+单测覆盖引擎（取词口径、打分、音韵、字形、常见度、检索排序、**笔画/结构/常见度筛选**）、store（持久化、导入导出往返、URL 编解码、导入写回）、分享（卡片/二维码/名单图）、以及 Controls / NameCard / App 的组件与集成渲染。端到端在真实 Chromium 上跑关键路径，并做 axe（WCAG 2 A/AA）扫描，含手机端的 target-size 规则与深色模式对比度。
+
+设计不是靠眼睛看，靠量：`scripts/design-audit.mjs` 在 320×640 / 390×844 / 768×900 / 1024×900 / 1440×1000 五个视口 × 浅色/深色 × 四个页共 40 个组合上实测横向溢出、触控目标尺寸、文字对比度、方块字行长、粘性页头是否压住首屏，硬违规非零就退出码 1（`--verbose` 逐条列出，`--json` 出 `design-audit.json`）。CI 的 e2e job 会跑它。
