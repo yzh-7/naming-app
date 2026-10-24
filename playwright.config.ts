@@ -10,7 +10,9 @@ export default defineConfig({
   reporter: process.env.CI ? 'github' : 'list',
   use: { baseURL: 'http://127.0.0.1:5180', trace: 'on-first-retry' },
   webServer: {
-    command: 'npx vite preview --port 5180 --strictPort',
+    // --host 127.0.0.1：runner 上 localhost 可能优先解析到 IPv6 ::1，
+    // 与 baseURL 的 127.0.0.1 对不上，health check 会一直超时。
+    command: 'npx vite preview --host 127.0.0.1 --port 5180 --strictPort',
     url: 'http://127.0.0.1:5180',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

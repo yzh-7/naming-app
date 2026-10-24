@@ -29,7 +29,7 @@ npm run format     # Prettier 写回
 npm run test:e2e   # Playwright + axe（需先 npm run build；首次 npx playwright install chromium）
 ```
 
-Node 需要 20.19+（开发用 22，见 `.nvmrc` / `package.json` 的 `engines`）。
+Node 需要 **22.19+**（vitest 4 的 fetch 依赖 undici 8，要求 ≥22.19；Node 20 已 EOL。见 `.nvmrc` / `package.json` 的 `engines`，CI 跑 22 与 24）。
 
 ## 部署（GitHub Pages）
 
@@ -52,6 +52,18 @@ Node 需要 20.19+（开发用 22，见 `.nvmrc` / `package.json` 的 `engines`�
 - **分享**：单名羊皮纸卡片（含原句与今译，附离线生成的**二维码**）、收藏页**导出名单长图**、**打印名单**（打印样式只保留卡片正文）；「复制信息」同样带今译；自选组合若无出处，卡片与摘要会明确写「未见此搭配」。
 - **主题**：浅色 / 深色 / **跟随系统**三态，随系统偏好实时切换。
 - **PWA**：可安装，离线可用；有新版本或离线时顶部给出提示。
+
+## 截图
+
+对构建产物实拍（`scripts/screenshots.mjs`，Chromium 2x 渲染）：
+
+| 生成页（浅色） | 生成页（深色） |
+|---|---|
+| ![生成页浅色](docs/screenshots/generate-light.png) | ![生成页深色](docs/screenshots/generate-dark.png) |
+
+| 自选页（苏子归，楚辞·江有汜） | 生成页（手机 390px） |
+|---|---|
+| ![自选页](docs/screenshots/compose.png) | ![手机视图](docs/screenshots/generate-mobile.png) |
 
 ## 目录
 
