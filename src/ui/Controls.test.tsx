@@ -8,15 +8,15 @@ const base: Opts = {
   gender: 'any', genderWeak: false, length: 2,
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
   redupOnly: false, exclude: [], count: 12, search: '', sort: 'score',
-  strokeMax: 0, noMonotone: false, popFloor: 0,
+  strokeMax: 0, noMonotone: false, popFloor: 0, mustChar: '', mustPos: 'any',
 };
 
-function Harness({ initialSurname = '苏', pages = 1, onBatch = () => {} }: { initialSurname?: string; pages?: number; onBatch?: () => void }) {
+function Harness({ initialSurname = '苏', pages = 1, onBatch = () => {}, poolCount = 1505 }: { initialSurname?: string; pages?: number; onBatch?: () => void; poolCount?: number }) {
   const [surname, setSurname] = useState(initialSurname);
   const [opts, setOpts] = useState<Opts>({ ...base });
   return (
     <Controls surname={surname} setSurname={setSurname} reading={0} setReading={() => {}}
-      opts={opts} setOpts={setOpts} poolCount={1505} pageNo={0} pages={pages} onBatch={onBatch} />
+      opts={opts} setOpts={setOpts} poolCount={poolCount} pageNo={0} pages={pages} onBatch={onBatch} />
   );
 }
 
@@ -120,5 +120,39 @@ describe('Controls：输入与条件渲染', () => {
     expect(btn).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: '单名' }));
     expect(screen.queryByRole('button', { name: '避开同结构' })).not.toBeInTheDocument();
+  });
+});
+
+describe('指定字', () => {
+  const mcInput = () => screen.getByLabelText('指定用字（结果必须包含）') as HTMLInputElement;
+  it('输入汉字后出现位置选择；清除后消失', () => {
+    render(<Harness />);
+    fireEvent.change(mcInput(), { target: { value: '清' } });
+    expect(mcInput().value).toBe('清');
+    const sel = screen.getByLabelText('指定字的位置') as HTMLSelectElement;
+    fireEvent.change(sel, { target: { value: 'first' } });
+    expect(sel.value).toBe('first');
+    fireEvent.click(screen.getByRole('button', { name: '清除指定字' }));
+    expect(screen.queryByLabelText('指定字的位置')).not.toBeInTheDocument();
+  });
+  it('单名模式不显示位置选择（位置对单字没有意义）', () => {
+    render(<Harness />);
+    fireEvent.change(mcInput(), { target: { value: '清' } });
+    fireEvent.click(screen.getByRole('button', { name: '单名' }));
+    expect(screen.queryByLabelText('指定字的位置')).not.toBeInTheDocument();
+  });
+  it('拉丁字母不回填输入框（输入法组字不被打断），失焦后对齐真实值', () => {
+    render(<Harness />);
+    const input = mcInput();
+    fireEvent.change(input, { target: { value: 'qing' } });
+    expect(input.value).toBe('qing');
+    fireEvent.blur(input);
+    expect(input.value).toBe('');
+  });
+  it('指定字命中 0 条时给出「去自选页」的出口', () => {
+    render(<Harness poolCount={0} />);
+    fireEvent.change(mcInput(), { target: { value: '清' } });
+    expect(screen.getByText(/典籍里没有含「清」的可用搭配/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '自选页' })).toHaveAttribute('href', '#/compose');
   });
 });

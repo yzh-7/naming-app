@@ -60,7 +60,13 @@ export type Opts = {
   strokeMax: number; // 0 = 不限
   noMonotone: boolean; // 排除「两字同结构」的名字
   popFloor: number; // 0 = 不限；每字用字频次须 ≥ 此值（排除冷僻）
+  // 指定用字：结果必须含这个字（双名可按位置限定）；''＝不限
+  mustChar: string;
+  mustPos: MustPos;
 };
+
+export type MustPos = 'any' | 'first' | 'last';
+export const MUST_POS_LABEL: Record<MustPos, string> = { any: '不限位置', first: '用作首字', last: '用作末字' };
 
 // 用字常见度门槛的可选档（与 popBand 的分档对齐）
 export const POP_FLOORS: { v: number; label: string }[] = [

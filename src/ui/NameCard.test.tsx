@@ -9,7 +9,7 @@ const opts: Opts = {
   gender: 'any', genderWeak: false, length: 2,
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
   redupOnly: false, exclude: [], count: 12, search: '', sort: 'score',
-  strokeMax: 0, noMonotone: false, popFloor: 0,
+  strokeMax: 0, noMonotone: false, popFloor: 0, mustChar: '', mustPos: 'any',
 };
 
 // 挑一个两个字都有字义的名，稳定断言字义出现在卡片上

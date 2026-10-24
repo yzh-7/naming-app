@@ -43,6 +43,8 @@ export function sanitizeOpts(raw: unknown): Opts {
     strokeMax: Number.isInteger(o.strokeMax) && (o.strokeMax as number) >= 0 && (o.strokeMax as number) <= 64 ? (o.strokeMax as number) : 0,
     noMonotone: !!o.noMonotone,
     popFloor: POP_FLOORS.includes(Number(o.popFloor)) ? Number(o.popFloor) : 0,
+    mustChar: typeof o.mustChar === 'string' && /^[一-鿿]$/.test(o.mustChar) ? o.mustChar : '',
+    mustPos: o.mustPos === 'first' || o.mustPos === 'last' ? o.mustPos : 'any',
     exclude: [],
   };
 }
@@ -85,6 +87,10 @@ export function toQuery(s: Pick<SavedState, 'surname' | 'reading' | 'opts'>): st
   const bits = BOOK_ORDER.map((b) => (o.books[b] ? '1' : '0')).join('');
   if (bits !== '1'.repeat(BOOK_ORDER.length)) q.set('b', bits);
   if (o.redupOnly) q.set('d', '1');
+  if (o.mustChar) {
+    q.set('mc', o.mustChar);
+    if (o.mustPos !== 'any') q.set('mp', o.mustPos);
+  }
   return q.toString();
 }
 
@@ -108,8 +114,18 @@ export function fromQuery(qs: string): { surname?: string; reading?: number; opt
   const pf = q.get('pf');
   if (pf && POP_FLOORS.includes(Number(pf)) && Number(pf) > 0) opts.popFloor = Number(pf);
   const b = q.get('b');
-  if (b && /^[01]{6}$/.test(b)) opts.books = Object.fromEntries(BOOK_ORDER.map((k, i) => [k, b[i] === '1'])) as Opts['books'];
+  // 兼容旧链接：书数增加后，6 位（或任意短一位）一律按「新书默认开」补齐
+  if (b && /^[01]{6,}$/.test(b)) {
+    const bits = b.length < BOOK_ORDER.length ? b + '1'.repeat(BOOK_ORDER.length - b.length) : b.slice(0, BOOK_ORDER.length);
+    opts.books = Object.fromEntries(BOOK_ORDER.map((k, i) => [k, bits[i] === '1'])) as Opts['books'];
+  }
   if (q.get('d') === '1') opts.redupOnly = true;
+  const mc = q.get('mc');
+  if (mc && /^[一-鿿]$/.test(mc)) {
+    opts.mustChar = mc;
+    const mp = q.get('mp');
+    if (mp === 'first' || mp === 'last') opts.mustPos = mp;
+  }
   const surname = q.get('s') ? clean(q.get('s'), 2) : undefined;
   const r = q.get('r');
   return { surname, reading: r && /^\d+$/.test(r) ? Number(r) : undefined, opts };

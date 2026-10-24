@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { cleanSurname, readings, surnameReads } from '../engine/name';
-import { BOOK_LABEL, BOOK_ORDER, POP_FLOORS, STROKE_MAXES, type Book, type Gender, type Opts, type SortKey } from '../engine/types';
+import { BOOK_LABEL, BOOK_ORDER, MUST_POS_LABEL, POP_FLOORS, STROKE_MAXES, type Book, type Gender, type MustPos, type Opts, type SortKey } from '../engine/types';
 
 const GENDERS: { v: Gender; label: string; color: string }[] = [
   { v: 'any', label: '不限', color: '' },
@@ -114,6 +114,25 @@ export default function Controls({ surname, setSurname, reading, setReading, opt
             className="rounded px-2 py-1 text-xs text-neutral-500 ring-1 ring-neutral-200 dark:ring-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800">清除</button>}
         </label>
         <label className="flex items-center gap-2">
+          <span className="text-xs text-neutral-500" title="结果里每条名字都必须含这个字；双名还能限定它当首字或末字">指定字</span>
+          {/* 不回填输入框：中文输入法组字时框里会先出现拉丁字母，回填会把组字打断；失焦时再对齐真实值 */}
+          <input key={opts.mustChar} defaultValue={opts.mustChar}
+            onChange={(e) => patch({ mustChar: [...e.target.value].find((c) => /[一-鿿]/.test(c)) ?? '' })}
+            onBlur={(e) => { e.target.value = opts.mustChar; }}
+            maxLength={2} aria-label="指定用字（结果必须包含）" placeholder="如 清"
+            className="w-12 rounded border border-neutral-300 dark:border-neutral-700 px-2 py-1.5 text-center font-serif text-base outline-none focus:border-neutral-500" />
+          {opts.mustChar && opts.length === 2 && (
+            <select value={opts.mustPos} onChange={(e) => patch({ mustPos: e.target.value as MustPos })} aria-label="指定字的位置"
+              className="rounded border border-neutral-300 dark:border-neutral-700 px-2 py-1.5 text-sm">
+              {(['any', 'first', 'last'] as const).map((p) => <option key={p} value={p}>{MUST_POS_LABEL[p]}</option>)}
+            </select>
+          )}
+          {opts.mustChar && (
+            <button onClick={() => patch({ mustChar: '' })} aria-label="清除指定字"
+              className="rounded px-2 py-1 text-xs text-neutral-500 ring-1 ring-neutral-200 dark:ring-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800">清除</button>
+          )}
+        </label>
+        <label className="flex items-center gap-2">
           <span className="text-xs text-neutral-500">排序</span>
           <select value={opts.sort} onChange={(e) => patch({ sort: e.target.value as SortKey })} aria-label="结果排序"
             className="rounded border border-neutral-300 dark:border-neutral-700 px-2 py-1.5 text-sm">
@@ -129,6 +148,12 @@ export default function Controls({ surname, setSurname, reading, setReading, opt
       <p className="text-xs tabular-nums text-neutral-500" title="「换一批」往后翻，翻满页数看遍全部">
         {poolSummary(poolCount, perPage, pages, pageNo)}
       </p>
+      {opts.mustChar && poolCount === 0 && (
+        <p className="rounded bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 ring-1 ring-amber-200">
+          典籍里没有含「{opts.mustChar}」的可用搭配（这个字多半不在名用字表，或所在句读配不出符合其它条件的名字）。
+          可换个字，或到 <a className="underline" href="#/compose">自选页</a> 自由搭配这个字并逐字核对事实。
+        </p>
+      )}
     </section>
   );
 }

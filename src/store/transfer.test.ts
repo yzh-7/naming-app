@@ -84,4 +84,26 @@ describe('可分享链接', () => {
   it('空查询串返回 null', () => {
     expect(fromQuery('')).toBeNull();
   });
+  it('指定字 mc/mp 往返一致；不限位置不写 mp', () => {
+    const o = { ...baseOpts(), mustChar: '清', mustPos: 'last' as const };
+    const back = fromQuery(toQuery({ surname: '苏', reading: 0, opts: o }))!;
+    expect(back.opts.mustChar).toBe('清');
+    expect(back.opts.mustPos).toBe('last');
+    expect(toQuery({ surname: '', reading: 0, opts: { ...baseOpts(), mustChar: '清' } })).not.toContain('mp=');
+  });
+  it('非法指定字一律丢弃：多字、非汉字、未知位置', () => {
+    expect(sanitizeOpts({ mustChar: '清清' }).mustChar).toBe('');
+    expect(sanitizeOpts({ mustChar: 'a清' }).mustChar).toBe('');
+    expect(sanitizeOpts({ mustPos: 'middle' }).mustPos).toBe('any');
+    expect(fromQuery('mc=%E6%B8%85%E6%98%8E')!.opts.mustChar).toBeUndefined();
+    expect(fromQuery('mc=abc')!.opts.mustChar).toBeUndefined();
+  });
+  it('旧链接兼容：6 位典籍位解析不变，之后新增的书默认开', () => {
+    const back = fromQuery('b=101011')!;
+    const books = back.opts.books!;
+    expect(Object.keys(books)).toHaveLength(BOOK_ORDER.length);
+    const bits = '101011';
+    BOOK_ORDER.slice(0, 6).forEach((k, i) => expect(books[k], k).toBe(bits[i] === '1'));
+    BOOK_ORDER.slice(6).forEach((k) => expect(books[k], k).toBe(true));
+  });
 });

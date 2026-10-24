@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   addBlock, addFavorite, BLOCK_KEY, DEFAULT_OPTS, FAV_KEY, loadBlocklist, loadCompose, loadFavorites,
   loadOpts, loadReading, loadSurname, loadTheme, removeBlock, removeFavorite, resolveDark,
-  saveBlocklist, saveCompose, saveFavorites, saveReading, saveSurname, saveTheme, updateFavorite,
+  saveBlocklist, saveCompose, saveFavorites, saveOpts, saveReading, saveSurname, saveTheme, updateFavorite,
 } from './local';
 import { BOOK_ORDER } from '../engine/types';
 
@@ -138,6 +138,16 @@ describe('loadOpts：默认值与越界收敛', () => {
   it('存储损坏回默认，不抛异常', () => {
     localStorage.setItem(K.opts, 'not json');
     expect(loadOpts()).toEqual(DEFAULT_OPTS);
+  });
+  it('指定字与位置：存进去读得回；非法值回默认', () => {
+    saveOpts({ ...DEFAULT_OPTS, mustChar: '清', mustPos: 'last' });
+    expect(loadOpts().mustChar).toBe('清');
+    expect(loadOpts().mustPos).toBe('last');
+    localStorage.setItem(K.opts, JSON.stringify({ mustChar: '清明', mustPos: 'middle' }));
+    expect(loadOpts().mustChar).toBe('');
+    expect(loadOpts().mustPos).toBe('any');
+    localStorage.setItem(K.opts, JSON.stringify({ mustChar: 'x' }));
+    expect(loadOpts().mustChar).toBe('');
   });
   it('strokeMax 越界回默认，0..64 整数保留', () => {
     for (const [input, expected] of [[-1, 0], [65, 0], [1.5, 0], ['x', 0], [16, 16], [0, 0]] as const) {

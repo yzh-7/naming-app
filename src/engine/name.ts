@@ -355,11 +355,23 @@ export function genderPass(name: string, opts: Opts): boolean {
   return g.strong || opts.genderWeak;
 }
 
+// 指定用字：双名查原句配对（这个字与谁在同句读内成对），单名就是该字本身。
+// 字不在名用字白名单时池内可能一条没有——那是事实，界面如实说明，不硬凑。
+export function mustPass(name: string, opts: Opts): boolean {
+  const mc = opts.mustChar;
+  if (!mc) return true;
+  if (opts.length === 1 || name.length === 1) return name === mc;
+  if (opts.mustPos === 'first') return name[0] === mc;
+  if (opts.mustPos === 'last') return name[name.length - 1] === mc;
+  return name.includes(mc);
+}
+
 function universe(opts: Opts): (Named & { famous?: boolean; tier?: string })[] {
   const q = (opts.search ?? '').trim().toLowerCase();
   return bookUniverse(opts)
     .filter((it) => genderPass(it.name, opts))
     .filter((it) => passesShape(it.name, opts))
+    .filter((it) => mustPass(it.name, opts))
     .filter((it) => !q || searchText(it).includes(q));
 }
 

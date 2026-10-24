@@ -78,6 +78,7 @@ const DEFAULT: Opts = {
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
   redupOnly: false, exclude: [], count: 12, search: '', sort: 'score',
   strokeMax: 0, noMonotone: false, popFloor: 0,
+  mustChar: '', mustPos: 'any',
 };
 export { DEFAULT as DEFAULT_OPTS };
 
@@ -107,10 +108,12 @@ export function loadOpts(): Opts {
       strokeMax: intIn(raw.strokeMax, 0, 64) ?? DEFAULT.strokeMax,
       noMonotone: !!raw.noMonotone,
       popFloor: POP_FLOORS.includes(Number(raw.popFloor)) ? Number(raw.popFloor) : DEFAULT.popFloor,
+      mustChar: typeof raw.mustChar === 'string' && /^[一-鿿]$/.test(raw.mustChar) ? raw.mustChar : DEFAULT.mustChar,
+      mustPos: pickOne(raw.mustPos, ['any', 'first', 'last'] as const) ?? DEFAULT.mustPos,
     };
   } catch { return DEFAULT; }
 }
-export const saveOpts = (o: Opts) => localStorage.setItem(K.opts, JSON.stringify({ gender: o.gender, genderWeak: o.genderWeak, length: o.length, redupOnly: o.redupOnly, books: o.books, count: o.count, search: o.search, sort: o.sort, strokeMax: o.strokeMax, noMonotone: o.noMonotone, popFloor: o.popFloor }));
+export const saveOpts = (o: Opts) => localStorage.setItem(K.opts, JSON.stringify({ gender: o.gender, genderWeak: o.genderWeak, length: o.length, redupOnly: o.redupOnly, books: o.books, count: o.count, search: o.search, sort: o.sort, strokeMax: o.strokeMax, noMonotone: o.noMonotone, popFloor: o.popFloor, mustChar: o.mustChar, mustPos: o.mustPos }));
 
 export type ComposeDraft = { length: 1 | 2; chars: string[]; free: boolean };
 export function loadCompose(): ComposeDraft {

@@ -14,7 +14,7 @@ const ALL_BOOKS = Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Record
 const opts = (p: Partial<Opts> = {}): Opts => ({
   gender: 'any', genderWeak: false, length: 2, books: { ...ALL_BOOKS },
   redupOnly: false, exclude: [], count: 12, search: '', sort: 'score',
-  strokeMax: 0, noMonotone: false, popFloor: 0, ...p,
+  strokeMax: 0, noMonotone: false, popFloor: 0, mustChar: '', mustPos: 'any', ...p,
 });
 
 describe('姓氏输入归一化', () => {
@@ -426,5 +426,37 @@ describe('字形/用字筛选（可核对的事实，不掺命理）', () => {
   });
   it('三档都为默认值时不改变池子（不限 = 不过滤）', () => {
     expect(poolSize(opts({ strokeMax: 0, popFloor: 0, noMonotone: false }))).toBe(poolSize(opts()));
+  });
+});
+
+describe('指定用字（mustChar / mustPos）', () => {
+  const mc = '清';
+  it('不限位置：池子只留名字含该字的搭配，条数与池内实况一致', () => {
+    const n = poolSize(opts({ mustChar: mc }));
+    expect(n).toBe(POOL.filter((p) => p.name.includes(mc)).length);
+    expect(n).toBeGreaterThan(0);
+    for (const r of plan('苏', opts({ mustChar: mc, count: 0 }), 0).page) expect(r.name).toContain(mc);
+  });
+  it('首字 / 末字：位置各自精确', () => {
+    expect(poolSize(opts({ mustChar: mc, mustPos: 'first' }))).toBe(POOL.filter((p) => p.name[0] === mc).length);
+    expect(poolSize(opts({ mustChar: mc, mustPos: 'last' }))).toBe(POOL.filter((p) => p.name[1] === mc).length);
+    for (const r of plan('苏', opts({ mustChar: mc, mustPos: 'first', count: 0 }), 0).page) expect(r.name[0]).toBe(mc);
+    for (const r of plan('苏', opts({ mustChar: mc, mustPos: 'last', count: 0 }), 0).page) expect(r.name[1]).toBe(mc);
+  });
+  it('单名模式：指定字就是该字本身（有对齐出处才在池）', () => {
+    expect(poolSize(opts({ length: 1, mustChar: mc }))).toBe(SINGLES.filter((s) => s.char === mc).length);
+    expect(poolSize(opts({ length: 1, mustChar: mc, mustPos: 'first' }))).toBe(SINGLES.filter((s) => s.char === mc).length);
+  });
+  it('字不在名用字表时结果为 0——那是事实，不硬凑', () => {
+    expect(poolSize(opts({ mustChar: '龘' }))).toBe(0);
+  });
+  it('指定字与其它筛选是交集，不会互相覆盖', () => {
+    const both = poolSize(opts({ mustChar: mc, search: 'qing' }));
+    expect(both).toBeLessThanOrEqual(poolSize(opts({ mustChar: mc })));
+    expect(both).toBeGreaterThan(0);
+    for (const r of plan('苏', opts({ mustChar: mc, search: 'qing', count: 0 }), 0).page) {
+      expect(r.name).toContain(mc);
+      expect(searchText(r).toLowerCase()).toContain('qing');
+    }
   });
 });
