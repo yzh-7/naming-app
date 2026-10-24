@@ -1,8 +1,9 @@
 // 文档截图：对 `vite preview` 伺服的 dist 产物实拍，产物存 docs/screenshots/。
-// 用法：先 npm run build，再 npx vite preview --port 5180 --strictPort（后台），
-//      node scripts/screenshots.mjs && node scripts/screenshots.mjs --clean
+// 用法：先 npm run build，再 node scripts/screenshots.mjs（5180 上没人应答就自己起 preview）
 // --clean：清掉 Service Worker 与持久化状态后补拍（避免 SW 缓存旧版、卡片带收藏勾）。
 import { chromium } from 'playwright';
+import { spawn } from 'node:child_process';
+import http from 'node:http';
 
 const BASE = 'http://127.0.0.1:5180/';
 const SHOTS = [
@@ -22,6 +23,20 @@ async function composeFill(page) {
   await page.getByLabel('第 2 字搜索').fill('归');
   await page.locator('[data-char-grid] button').first().click();
   await page.getByRole('heading', { name: '苏子归' }).waitFor();
+}
+
+const ping = () => new Promise((res) => {
+  const req = http.get(BASE, (r) => { r.resume(); res(true); });
+  req.on('error', () => res(false));
+  req.setTimeout(400, () => { req.destroy(); res(false); });
+});
+
+let server = null;
+if (!(await ping())) {
+  server = spawn('node', ['node_modules/vite/bin/vite.js', 'preview', '--host', '127.0.0.1', '--port', '5180', '--strictPort'], { stdio: 'ignore' });
+  process.on('exit', () => server?.kill());
+  for (let i = 0; i < 60 && !(await ping()); i++) await new Promise((r) => setTimeout(r, 250));
+  if (!(await ping())) { console.error('起不了 vite preview：先 npm run build（dist 要存在）'); process.exit(2); }
 }
 
 const clean = process.argv.includes('--clean');
@@ -50,3 +65,5 @@ for (const s of SHOTS) {
   await page.close();
 }
 await browser.close();
+server?.kill();
+process.exit(0);
