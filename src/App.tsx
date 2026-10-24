@@ -57,6 +57,9 @@ export default function App() {
     setSurname(s);
   };
 
+  // 换页时回到顶部：粘性页头常驻，若沿上一页的滚动位置落下，第一张卡片会被页头压在下面
+  useEffect(() => { if (window.scrollY > 0) window.scrollTo(0, 0); }, [tab]);
+
   useEffect(() => store.saveSurname(sur), [sur]);
   useEffect(() => store.saveReading(reading), [reading]);
   useEffect(() => store.saveOpts(opts), [opts]);

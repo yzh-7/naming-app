@@ -209,6 +209,8 @@ for (const vp of VIEWPORTS) {
     }, [theme]);
     const page = await ctx.newPage();
     const m = async (name) => {
+      // 「首屏」就是滚到顶之后的那一屏：先把滚动归零，再量页头有没有压住第一张卡片
+      await page.evaluate(() => window.scrollTo(0, 0));
       await page.waitForTimeout(160);
       const r = await page.evaluate(measure, [vp.width, vp.mobile]);
       results.push({ vp: `${vp.name}×${vp.height}`, mobile: vp.mobile, theme, page: name, ...r });
