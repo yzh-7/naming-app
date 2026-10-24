@@ -16,6 +16,9 @@ const VIEWPORTS = [
 const THEMES = ['light', 'dark'];
 // 每个视口×主题里按 生成 → 自选 → 收藏 → 拉黑 的顺序走一遍（同一次会话，id 都是真的）
 
+const inCI = !!process.env.GITHUB_ACTIONS;
+const annotate = (level, msg) => { if (inCI) console.log(`::${level}::${msg}`); };
+
 const jsonOut = process.argv.includes('--json');
 const verbose = process.argv.includes('--verbose');
 
@@ -126,8 +129,26 @@ function measure([vw, mobile]) {
   const themeCtl = document.querySelector('[aria-label="昼夜主题"]');
   const tr = themeCtl ? themeCtl.getBoundingClientRect() : null;
 
+  const probe = (() => {
+    const widthOf = (family) => {
+      const sp = document.createElement('span');
+      sp.textContent = '名字笔画出处今译';
+      sp.style.cssText = `position:absolute;left:-9999px;top:0;font-size:24px;white-space:nowrap;font-family:${family}`;
+      document.body.appendChild(sp);
+      const w = Math.round(sp.getBoundingClientRect().width);
+      sp.remove();
+      return w;
+    };
+    return {
+      ua: (navigator.userAgent || '').slice(0, 64),
+      serif: widthOf('"Songti SC","Noto Serif CJK SC",serif'),
+      sans: widthOf('"PingFang SC","Noto Sans CJK SC",sans-serif'),
+      latin: widthOf('"PingFang SC",sans-serif'),
+    };
+  })();
+
   return {
-    docScroll, vw,
+    docScroll, vw, probe,
     overflow, targetsSmall, targetsShort,
     contrastBad, longLines,
     fonts: Object.entries(fonts).sort((a, b) => a[0] - b[0]).map(([k, v]) => `${k}px×${v}`).join(' '),
@@ -169,7 +190,9 @@ if (!(await ping())) {
   process.on('exit', () => server?.kill());
   for (let i = 0; i < 60 && !(await ping()); i++) await new Promise((r) => setTimeout(r, 250));
   if (!(await ping())) {
-    console.error(`起不了 vite preview（先 npm run build，dist 要存在）。preview 输出：\n${previewLog || '（无输出）'}`);
+    const msg = `起不了 vite preview（先 npm run build，dist 要存在）。preview 输出：${(previewLog || '（无输出）').slice(0, 800)}`;
+    console.error(msg);
+    annotate('error', msg);
     process.exit(2);
   }
 }
@@ -211,6 +234,7 @@ for (const vp of VIEWPORTS) {
 await browser.close();
 
 const hard = [];
+let annotatedProbe = false;
 for (const r of results) {
   const tag = `${r.vp} ${r.theme} ${r.page}`;
   const flags = [];
@@ -226,6 +250,7 @@ for (const r of results) {
     + ` 手机偏矮=${String(r.targetsShort.length).padStart(3)} 对比度最差=${worstContrast === null ? 'ok' : worstContrast}`
     + ` 行长>42字=${String(r.longLines.length).padStart(2)} 页头高=${String(r.headerH).padStart(3)}${flags.length ? `  ⚠ ${flags.join(' / ')}` : ''}`,
   );
+  if (!annotatedProbe) { annotatedProbe = true; annotate('notice', `字体探针 ${r.vp} ${r.theme} ${r.page}: ${JSON.stringify(r.probe)}`); }
   for (const o of r.overflow) hard.push([tag, '出界', `${o.sel} left=${o.left} right=${o.right} w=${o.w} 「${o.text}」`]);
   for (const t of r.targetsSmall) hard.push([tag, '目标<24px', `${t.sel} ${t.w}×${t.h} 「${t.text}」`]);
   for (const c of r.contrastBad) hard.push([tag, `对比度 ${c.ratio}<${c.need}`, `${c.sel} ${c.size}px/${c.weight} ${c.color} 「${c.text}」`]);
@@ -252,7 +277,11 @@ if (jsonOut) {
 const code = hard.length ? 1 : 0;
 if (hard.length) {
   console.log(`\n硬违规 ${hard.length} 条：`);
-  for (const [tag, kind, detail] of hard) console.log(`  [${tag}] ${kind}: ${detail}`);
+  for (const [tag, kind, detail] of hard) {
+    console.log(`  [${tag}] ${kind}: ${detail}`);
+    annotate('error', `[${tag}] ${kind}: ${detail}`);
+  }
+  annotate('notice', `共 ${hard.length} 条硬违规（前 40 条已作为 annotation 输出）`);
 } else {
   console.log('\n无硬违规（溢出/目标尺寸/对比度/页头遮挡）。');
 }
