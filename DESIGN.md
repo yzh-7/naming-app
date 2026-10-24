@@ -47,7 +47,7 @@
 
 ## 4. UI（`src/ui/`、`src/App.tsx`）
 
-- `App.tsx`：三 tab（生成 / 收藏 / 拉黑）、导出导入（**导入时弹合并/覆盖选择**）、复制链接、主题三态循环、离线 / 新版本提示、打印名单、URL 初始状态、跳过链接、`aria-live` 播报、tablist 语义。收藏页支持**搜索 / 排序（最近·分数·笔画·常见度）/ 分组过滤 / 导出名单长图**，勾 2–3 个做对比表 `Compare`。
+- `App.tsx`：三 tab（生成 / 收藏 / 拉黑）、导出导入（**导入时弹合并/覆盖选择**）、复制链接、sticky 页头 + 主题三档、离线 / 新版本提示、打印名单、URL 初始状态、跳过链接、`aria-live` 播报、tablist 语义。收藏页支持**搜索 / 排序（最近·分数·笔画·常见度）/ 分组过滤 / 导出名单长图**，勾 2–3 个做对比表 `Compare`。
 - `Controls.tsx`：姓氏/读音/字数/性别/书籍/叠字/每批条数/换一批 + 搜索框 + 排序下拉 + **整名笔画上限 / 用字常见度下限 / 避开同结构**。
 - `NameCard.tsx`：读音、出处、原句、**今译**、字义、字形、常见度、多音、小名、收藏/拉黑/分享/复制。局部变量 `shadow` 表示阴影，别改回 `shape`（与 `shapeTags` 冲突）。动作区与折叠详情带 `no-print`。`Source` 与 `SourceRef` 单独导出，自选页复用同一套出处渲染。
 - `Compose.tsx`：**自选页**。用户自选姓与 1–2 个字（任意汉字，非 L0 字标注），`composeName` 只做读音/谐音/字形事实核对，**不套 Pool-B 分数**（那套分数只对池内候选有校准意义）。出处用 `findCombo` 精确查 Pool-B/singles：查到就渲染 `Source`，查不到明说「未见此搭配」，不拿别的句子凑。另有 `pairCandidates(ch)`（同句读搭配字，从 `candidates.json` 现算，零新增数据）与随机池（默认只随机有出处的）。无出处组合不给收藏入口——收藏按 `id` 回查，没有 id 会坏。草稿存 `localStorage`（`naming.compose.v1`）。
@@ -62,11 +62,12 @@ Tailwind 4 的 CSS-first 写法：`@theme` 定义刻度，`@utility` 定义可�
 - 字号（6 档，各有独立 line-height）：`meta` 13（<1024px 时 14）、`body` 15、`title` 17、`glyph` 19（字格单字）、`name` 24、`name-lg` 30。方块字用衬线（`font-serif`），界面文案用无衬线；数字 `tabular-nums`。
 - 组件工具类：`card` `field` `lab` `seg/seg-btn/seg-on` `btn/btn-primary/btn-quiet/btn-accent/btn-danger/btn-on` `chip/chip-cool|warm|accent|ok|warn|danger` `meta-row`（两列 label/value 的 `dl`）`measure`（正文上限 40em ≈ 一行 40 字）`rounded-card` `rounded-ctl` `pb-safe` `anchor-offset` `no-print`。次要动作一律 `btn-quiet`（幽灵按钮）以压低边框噪声。
 - 断点：`xs` 384（自定义）→ 表单两列；`sm` 640 → 侧栏 / 一行布局、页头收成一行；触控尺寸（44px）一直保持到 1023px，紧凑档（36px）只在 `lg` ≥1024 生效——768 宽的平板仍按手指尺寸给。`@media print` 隐藏 `.no-print`、卡片不跨页断开。
-- 可访问性硬约定：可见文字必须是可访问名的一部分（所以 `aria-label` 只用于图标按钮与分组）；状态按钮靠 `aria-pressed` 而不是改文案；折叠用 `details/summary` 并带 `aria-expanded` 语义；装饰字符 `aria-hidden`。
+- 可访问性硬约定：可见文字必须是可访问名的一部分（所以 `aria-label` 只用于图标按钮与分组——页头的三档主题在手机上就是图标 + `aria-label`）；状态按钮靠 `aria-pressed` 而不是改文案；折叠用 `details/summary` 并带 `aria-expanded` 语义；装饰字符 `aria-hidden`。
+- 页头是 sticky 的，所以换 tab 一律 `window.scrollTo(0, 0)`：否则沿上一页的滚动位置落下，第一张卡片会被页头压住（体检里这条是硬违规）。
 
 ### 4.2 设计门禁（`scripts/design-audit.mjs`）
 
-`npm run build` 后 `npx vite preview --host 127.0.0.1 --port 5180 --strictPort`，再 `node scripts/design-audit.mjs`（`--verbose` 看逐条）。它用 Playwright 在 320×640 / 390×844 / 768×900 / 1024×900 / 1440×1000 × 浅 / 深 × 四个页共 40 个组合上实测：横向溢出 >1px、触控目标 <24px（复选框按整条 label 量）、文字对比度不达 WCAG（3:1 / 4.5:1，按字号判定）、方块字行长 >42 字（按 Range 逐行量，不是盒子宽）、页头遮挡首屏卡片、页头高度。硬违规非零就 exit 1。Playwright 侧另有 axe 扫描与 target-size 规则（`tests/e2e/`）。
+`node scripts/design-audit.mjs`（`--verbose` 看逐条，`--json` 出 `design-audit.json`）：若 5180 上没人应答就自己起 `vite preview`（所以顺序是 `npm run build` 之后直接跑它）。它用 Playwright 在 320×640 / 390×844 / 768×900 / 1024×900 / 1440×1000 × 浅 / 深 × 四个页共 40 个组合上实测：横向溢出 >1px、触控目标 <24px（复选框按整条 label 量）、1023px 以下目标 <44px（软指标）、文字对比度不达 WCAG（3:1 / 4.5:1，按字号判定）、方块字行长 >42 字（按 `Range` 逐行量实际行宽，不是盒子宽）、页头遮挡首屏卡片（量之前先 `scrollTo(0, 0)`，「首屏」就是滚到顶的那一屏）、页头高度。硬违规非零就 exit 1。CI 的构建 job 读日志要权限，所以体检把违规写成 `::error::` 注解、另发一条字体探针注解（CI 机器没有 Songti SC / PingFang SC，回落字宽会变，先量出来再判断是不是真问题）。Playwright 侧另有 axe 扫描与 target-size 规则（`tests/e2e/`）。一条龙：`npm run check`。
 
 ## 5. 离线 / PWA
 
