@@ -1,7 +1,7 @@
 // 导出下载、复制文本、分享卡片（Canvas 现画；二维码用零依赖的 uqr 在本地生成，无联网）
 import { encode } from 'uqr';
 import { glossOf, lineGlossOf, popularity, shapeTags } from '../engine/name';
-import { BOOK_LABEL, type Result, type ShareName } from '../engine/types';
+import { BOOK_COUNT, BOOK_LABEL, type Result, type ShareName } from '../engine/types';
 
 export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -37,7 +37,7 @@ export function resultSummary(r: ShareName) {
     r.book && r.title && `出处：《${BOOK_LABEL[r.book]}·${r.title}${r.author ? `·${r.author}` : ''}》`,
     r.line && `原句：${r.line}`,
     r.line && r.lg != null && `今译：${lineGlossOf({ lg: r.lg })}`,
-    !r.book && '出处：六本典籍中未见此搭配（自选组合）',
+    !r.book && `出处：${BOOK_COUNT} 本典籍中未见此搭配（自选组合）`,
     sh.strokes > 0 && `字形：${sh.chars.map((c) => `${c.ch}${c.sx ?? ''}${c.st ? c.st + '画' : ''}`).join(' ')}（共 ${sh.strokes} 画）`,
     `用字常见度：${pop.band}（依据 114 万真实姓名用字频次估算）`,
     '—— 取名 · 典籍取词（完全离线）',
@@ -89,7 +89,7 @@ export function renderShareCard(r: ShareName, appName = '取名 · 典籍取词'
   const gloss = [...new Set([...r.name])].map((ch) => (glossOf(ch) ? `${ch} · ${glossOf(ch)}` : null)).filter(Boolean).join('    ');
   const hasSource = !!(r.book && r.title && r.line);
   const src = hasSource ? `《${BOOK_LABEL[r.book!]}·${r.title}${r.author ? `·${r.author}` : ''}》` : '自选组合';
-  const lineText = hasSource ? r.line! : '六本典籍中未见这个搭配的出处。';
+  const lineText = hasSource ? r.line! : `${BOOK_COUNT} 本典籍中未见这个搭配的出处。`;
   const glossText = hasSource && r.lg != null ? `今译 ${lineGlossOf({ lg: r.lg })}` : null;
 
   // 先按最终字号量折行，再定画布高度；wrap 里的 measureText 依赖当前 font

@@ -1,4 +1,4 @@
-export type Book = 'shijing' | 'chuci' | 'lunyu' | 'shuimo' | 'song300' | 'daofa';
+export type Book = 'shijing' | 'chuci' | 'lunyu' | 'shuimo' | 'song300' | 'daofa' | 'yuefu';
 
 export type CharInfo = {
   py: string[];
@@ -132,6 +132,9 @@ export const BOOK_LABEL: Record<Book, string> = {
   shuimo: '唐诗',
   song300: '宋词',
   daofa: '道法',
+  yuefu: '乐府',
 };
 
-export const BOOK_ORDER: Book[] = ['shijing', 'chuci', 'lunyu', 'shuimo', 'song300', 'daofa'];
+export const BOOK_ORDER: Book[] = ['shijing', 'chuci', 'lunyu', 'shuimo', 'song300', 'daofa', 'yuefu'];
+// 文案里凡是要报「几本典籍」的都用它，加书时不再漏改
+export const BOOK_COUNT = BOOK_ORDER.length;

@@ -369,7 +369,7 @@ export default function App() {
           卡片上的「部首」只是康熙字典五部（木{META.radical_dist.木}·火{META.radical_dist.火}·水{META.radical_dist.水}·金{META.radical_dist.金}·土{META.radical_dist.土} 共 {META.radical_chars} 字）的事实标注，覆盖 {META.radical_named}/{META.pool_B} 条双名；字义（本义）来自开放词典，用字常见度来自 114 万真实姓名用字频次（估算）。未标不代表该字无五行；本应用不做五行筛选、不做八字五格、不判吉凶。
           {sur && surnameReads(sur) > 1 && ' 你的姓首字是多音字，请在上方确认读音。'}
           <br />
-          语料 chinese-poetry（MIT）＋ 道法 22 行手工录入 · 字表 general_standard_chinese（Apache-2.0）· 名用字种子 cnname（MIT）· 词频 jieba（MIT）· 字义/笔画/结构 chinese-dictionary（MIT）· 用字频次 Chinese-Names-Corpus（Apache-2.0）·
+          语料 chinese-poetry（MIT）＋ 乐府诗集（公共领域，维基文库整理本）＋ 道法 22 行手工录入 · 字表 general_standard_chinese（Apache-2.0）· 名用字种子 cnname（MIT）· 词频 jieba（MIT）· 字义/笔画/结构 chinese-dictionary（MIT）· 用字频次 Chinese-Names-Corpus（Apache-2.0）·
           部首 Unicode Unihan · 拼音仅构建期使用 pinyin-pro（MIT）。
         </footer>
       </main>

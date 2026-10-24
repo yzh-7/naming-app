@@ -49,7 +49,7 @@ const singles = JSON.parse(fs.readFileSync(`${OUT}/singles.json`, 'utf8'));
 const lineGloss = JSON.parse(fs.readFileSync(`${OUT}/line_gloss.json`, 'utf8'));
 const names = new Set(cand.map((c) => c.name));
 
-console.log('2) 实测规模（口径：起点落音步、同句读内间隔≤3、排除叠词粘连、六本典籍）');
+console.log('2) 实测规模（口径：起点落音步、同句读内间隔≤3、排除叠词粘连、七本典籍）');
 // 种子版（没有人工判定）时，下面每个数都精确钉死；一旦人工判定扩表，同样的检查换成「只增不减」的下界，
 // 外加结构恒等式（按书之和＝全池＝按间隔之和）——扩表不许让任何一条老名字消失，也不许让数字对不上账。
 const SEED_MODE = !meta.L0_added;
@@ -78,15 +78,21 @@ const floorGate = (label, actual, seed) => ok(SEED_MODE ? actual === seed : actu
 }
 const segs = Object.values(meta.units_by_book).reduce((a, b) => a + b.segs, 0);
 const chs = Object.values(meta.units_by_book).reduce((a, b) => a + b.chars, 0);
-ok(segs === 22704 && chs === 99671, `取词段 22,704 / 99,671 字（实际 ${segs} / ${chs}）`);
-// 第 6 本是「逐条收录」的 curated 语料（22 条句读行），它只该新增、不该改写老池；唯一的出处改判是天清。
+const expectLater = []; // 四元组要等 expect() 定义后再执行（见第 3 节末）
+ok(segs === 23133 && chs === 101805, `取词段 23,133 / 101,805 字（实际 ${segs} / ${chs}）`);
+// 第 6 本道法是「逐条收录」的 curated 语料（22 条句读行），第 7 本乐府是 vendored 语料。
+// 加书只该新增、不该删老名字；出处改判只允许间隔严格变小，且必须逐条钉死、不许悄悄发生。
 {
   const nonDf = cand.filter((c) => c.book !== 'daofa');
   const tq = cand.find((c) => c.name === '天清');
   ok(nonDf.length >= 429 && tq?.book === 'daofa' && tq?.gap === 1 && tq?.title === '清静经',
-    `加书不动老池：五书侧 ${nonDf.length} 条（种子版基线 429＝原 430 减唯一改判 天清→清静经 gap 3→1），天清实际挂 ${tq?.book}·${tq?.title} gap ${tq?.gap}`);
+    `加书不动老池：非道法侧 ${nonDf.length} 条（种子版基线 429＝原 430 减唯一改判 天清→清静经 gap 3→1），天清实际挂 ${tq?.book}·${tq?.title} gap ${tq?.gap}`);
   ok(meta.units_by_book.daofa.segs === 68 && meta.units_by_book.daofa.chars === 321,
     `道法语料规模锁定 68 段 / 321 字（实际 ${meta.units_by_book.daofa.segs} / ${meta.units_by_book.daofa.chars}）——curated 语料不许悄悄变胖`);
+  ok(meta.per_book.yuefu >= 20 && meta.units_by_book.yuefu.segs === 429 && meta.units_by_book.yuefu.chars === 2134,
+    `乐府语料规模锁定 429 段 / 2,134 字（实际 ${meta.units_by_book.yuefu.segs} / ${meta.units_by_book.yuefu.chars}，按书新增 ${meta.per_book.yuefu} 条）`);
+  // 乐府并入时全池只发生这两条出处改判，间隔都从 3 缩到 2；任何别的改判都会在这里显形
+  expectLater.push(['依山', 'yuefu', '琅琊王歌辞', '猛虎依深山', 2, 2], ['江可', 'yuefu', '江南', '江南可采莲', 0, 2]);
 }
 
 console.log('3) 四元组断言：名字 + 出处原句 + 音步下标 + 间隔，缺一即无效');
@@ -114,6 +120,7 @@ expect('玄德', 'daofa', '第六十五章', '是谓玄德', 2, 1);
 expect('东华', 'daofa', '清静经', '吾昔受之于东华帝君', 5, 1);
 expect('天健', 'daofa', '乾·象', '天行健', 0, 2);
 expect('心渊', 'daofa', '第八章', '心善渊', 0, 2);
+for (const a of expectLater) expect(...a);
 // 道法是「逐条收录」的 curated 语料：下面这些配对只有整本 vendoring 才会出现。它们不在池＝语料没被换成 scraped 全本。
 for (const w of ['锐可', '智慧', '圣智', '可天', '可渊', '义克', '义宾', '鼎金', '威天', '腾紫', '可圣', '静基', '志可', '志光', '心天', '天柔', '祥天', '强天', '圣天', '柔丽', '龙天', '龙野', '美天', '承德', '心语', '天泽', '震龙', '坤天', '震坤', '坤震', '震天', '坤泽', '鼎鼎']) ok(!names.has(w), `整本才会出现的道法噪声不在池：${w}`);
 for (const w of ['思柔', '清馨', '承宇', '淑清', '玄鹤', '白露', '昭华', '弘毅']) ok(names.has(w), `名篇词在池：${w}`);
@@ -125,7 +132,7 @@ ok(names.has('雪天'), '雪天（年年移帐雪中天，两字都不在叠词�
 
 console.log('4) 结构不变量（全池）');
 const offsets = (book, n) => {
-  if (book === 'shijing' || book === 'shuimo') return ({ 4: [0, 2], 5: [0, 2], 7: [0, 2, 4] })[n] ?? [...Array(n - 1).keys()];
+  if (book === 'shijing' || book === 'shuimo' || book === 'yuefu') return ({ 4: [0, 2], 5: [0, 2], 7: [0, 2, 4] })[n] ?? [...Array(n - 1).keys()];
   if (book === 'chuci') return ({ 4: [0, 2], 5: [0, 3], 7: [0, 2, 4] })[n] ?? [...Array(n - 1).keys()];
   return [...Array(n - 1).keys()];
 };
@@ -171,9 +178,9 @@ console.log('4b) 出处今译：覆盖全部唯一原句，条目只存下标');
     const tab = line.indexOf('\t');
     rawGloss.set(line.slice(0, tab), line.slice(tab + 1));
   }
-  ok(rawGloss.size === 1123, `raw 今译 1,123 行（实际 ${rawGloss.size}）`);
+  ok(rawGloss.size === 1140, `raw 今译 1,140 行（实际 ${rawGloss.size}）`);
   const lines = new Set([...cand, ...singles].map((c) => c.line));
-  ok(lines.size === 1123 && lineGloss.length === lines.size,
+  ok(lines.size === 1140 && lineGloss.length === lines.size,
     `唯一原句 ${lines.size} 条、今译 ${lineGloss.length} 条一一对应`);
   ok([...cand, ...singles].every((c) => Number.isInteger(c.lg) && c.lg >= 0 && c.lg < lineGloss.length),
     '每个候选/单字出处的 lg 都指向有效今译');

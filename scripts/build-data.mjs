@@ -1,4 +1,4 @@
-// 构建期数据管线：把六本典籍 + 字表 + 词典固化成运行时只读的 JSON（candidates / poolC / singles / chars / homophone / risk / whitelist-L0）。
+// 构建期数据管线：把典籍语料 + 字表 + 词典固化成运行时只读的 JSON（candidates / poolC / singles / chars / homophone / risk / whitelist-L0）。
 // 规则来源是 namer-research/measure_ladder.py（已实测复现 Pool-B 202），逐条对齐，不是重新设计。
 import fs from 'node:fs';
 import path from 'node:path';
@@ -103,6 +103,7 @@ const BOOKS = [
   { key: 'shuimo', code: 'ts', label: '唐诗', strict: true },
   { key: 'song300', code: 'song', label: '宋词', strict: false },
   { key: 'daofa', code: 'df', label: '道法', strict: false },
+  { key: 'yuefu', code: 'yf', label: '乐府', strict: true },
 ];
 const BOOK_STRICT = Object.fromEntries(BOOKS.map((b) => [b.key, b.strict]));
 
@@ -111,7 +112,7 @@ const MAX_GAP = 3;
 
 // 音步按体裁配，不按字数配（这是自审时改掉的 bug）
 function offsets(book, n) {
-  if (book === 'shijing' || book === 'shuimo') return ({ 4: [0, 2], 5: [0, 2], 7: [0, 2, 4] })[n] ?? [...Array(n - 1).keys()];
+  if (book === 'shijing' || book === 'shuimo' || book === 'yuefu') return ({ 4: [0, 2], 5: [0, 2], 7: [0, 2, 4] })[n] ?? [...Array(n - 1).keys()];
   if (book === 'chuci') return ({ 4: [0, 2], 5: [0, 3], 7: [0, 2, 4] })[n] ?? [...Array(n - 1).keys()];
   return [...Array(n - 1).keys()];
 }

@@ -289,7 +289,7 @@ export function composeName(surname: string, name: string, surReading = 0): Comp
   };
 }
 
-// 精确查出处：双名查 Pool-B，单名查 singles；查到就是「六本典籍里确有此搭配」，查不到不拿别的句子凑
+// 精确查出处：双名查 Pool-B，单名查 singles；查到就是「典籍语料里确有此搭配」，查不到不拿别的句子凑
 let comboIndex: Map<string, (typeof POOL)[number] | (typeof SINGLES)[number]> | null = null;
 export function findCombo(name: string) {
   if (!comboIndex) {

@@ -4,7 +4,7 @@ import {
   readings, scoreItem, shapeTags, surnameReads,
 } from '../engine/name';
 import { CHARS, POOL, SINGLES } from '../engine/data';
-import { BOOK_LABEL, type Opts, type Result, type ShareName } from '../engine/types';
+import { BOOK_COUNT, BOOK_LABEL, type Opts, type Result, type ShareName } from '../engine/types';
 import * as store from '../store/local';
 import { Source } from './NameCard';
 
@@ -250,7 +250,7 @@ export default function Compose({ surname, setSurname, reading, setReading, opts
             </div>
           ) : (
             <p className="border-t border-neutral-100 pt-3 text-sm text-neutral-500 dark:border-neutral-800">
-              六本典籍里没有「{name}」这个搭配的出处。这里只做事实核对，不拿别的句子凑出处。
+              {BOOK_COUNT} 本典籍里没有「{name}」这个搭配的出处。这里只做事实核对，不拿别的句子凑出处。
             </p>
           )}
 
