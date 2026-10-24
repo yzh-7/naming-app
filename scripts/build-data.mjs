@@ -3,11 +3,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { gzipSync } from 'node:zlib';
 import { pinyin } from 'pinyin-pro';
 import { NAME_NOISE } from './name-noise.mjs';
 
-const gzipSize = (file) => gzipSync(fs.readFileSync(file), { level: 9 }).length;
 
 const RAW = 'data/raw';
 const OUT = 'src/data';
@@ -459,8 +457,9 @@ fs.mkdirSync('data/measured', { recursive: true });
 fs.writeFileSync('data/measured/poolC.json', JSON.stringify(
   poolMix.map((c) => ({ name: c.name, book: c.book, title: c.title, seg: c.seg, foot: c.foot, gap: c.gap, score: c.score }))) + '\n');
 const SHIPPED = ['candidates.json', 'singles.json', 'chars.json', 'homophone.json', 'risk.json', 'whitelist-L0.json', 'gender.json', 'radical.json', 'gloss.json', 'line_gloss.json'];
-meta.ship_gz = Object.fromEntries(SHIPPED.map((f) => [f, gzipSize(path.join(OUT, f))]));
-meta.ship_gz_total = Object.values(meta.ship_gz).reduce((a, b) => a + b, 0);
+// 只记未压缩字节数：gzip 结果和压缩器版本有关，写进包体会让构建不可复现（体积门槛由 size-check 现算，不进包）
+meta.ship_bytes = Object.fromEntries(SHIPPED.map((f) => [f, fs.statSync(path.join(OUT, f)).size]));
+meta.ship_bytes_total = Object.values(meta.ship_bytes).reduce((a, b) => a + b, 0);
 write('meta.json', meta);
 
 console.log(JSON.stringify(meta, null, 1));

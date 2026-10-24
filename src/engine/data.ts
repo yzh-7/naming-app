@@ -83,7 +83,7 @@ function asGloss(v: unknown): Record<string, string> {
   return v as Record<string, string>;
 }
 
-const META_KEYS = ['pool_B', 'singles', 'L0_size', 'L0_seed', 'L0_added', 'ship_gz_total', 'radical_chars', 'radical_named', 'gloss_chars', 'line_gloss'] as const;
+const META_KEYS = ['pool_B', 'singles', 'L0_size', 'L0_seed', 'L0_added', 'ship_bytes_total', 'radical_chars', 'radical_named', 'gloss_chars', 'line_gloss'] as const;
 type Meta = {
   pool_B: number;
   by_gap: { gap1: number; gap2: number; gap3: number };
@@ -93,7 +93,7 @@ type Meta = {
   L0_seed: number;
   L0_added: number;
   per_book: Record<string, number>;
-  ship_gz_total: number;
+  ship_bytes_total: number;
   radical_chars: number;
   radical_dist: Record<string, number>;
   radical_named: number;

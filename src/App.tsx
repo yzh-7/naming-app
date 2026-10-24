@@ -10,6 +10,7 @@ import Compose from './ui/Compose';
 import * as store from './store/local';
 import { buildState, serialize, parseState, toQuery, fromQuery, type SavedState } from './store/transfer';
 import { copyText, downloadText, downloadBlob, renderShareCard, renderListCard, resultSummary } from './lib/share';
+import { candidatesCsv, candidatesJson } from './lib/candidates';
 import { usePwa } from './lib/pwa';
 
 type Pair = { rec: store.FavRecord; r: Result };
@@ -122,6 +123,15 @@ export default function App() {
     downloadText(serialize(st), `naming-${new Date().toISOString().slice(0, 10)}.json`);
     setNotice(`已导出：收藏 ${fav.length} · 拉黑 ${block.length}`);
   };
+  // 候选全量导出：count:0＝一屏全展，paginate 会把整个筛选结果放进同一页，导出的就是「翻不完的池」本身
+  const doExportCandidates = (fmt: 'csv' | 'json') => {
+    const all = plan(sur, { ...effective, count: 0 }, 0, reading).page;
+    if (!all.length) { setNotice('当前筛选没有候选可导出'); return; }
+    const stamp = new Date().toISOString().slice(0, 10);
+    if (fmt === 'csv') downloadText(candidatesCsv(all), `候选-${sur || '无姓'}-${stamp}.csv`, 'text/csv');
+    else downloadText(candidatesJson(all), `候选-${sur || '无姓'}-${stamp}.json`);
+    setNotice(`已导出候选 ${all.length} 条（当前筛选全量，不只这一屏）`);
+  };
   const doImportFile = async (file: File) => {
     const st = parseState(await file.text());
     if (!st) { setNotice('导入失败：不是本应用的导出文件（缺少 favorites / opts）'); return; }
@@ -191,6 +201,10 @@ export default function App() {
         {tab === 'gen' && (
           <div className="flex flex-wrap items-center gap-2 text-sm no-print">
             <button onClick={doExport} className="rounded px-3 py-1.5 ring-1 ring-neutral-200 hover:bg-neutral-50 dark:ring-neutral-700 dark:hover:bg-neutral-800">导出</button>
+            <button onClick={() => doExportCandidates('csv')} disabled={poolCount === 0} title="把当前筛选命中的全部候选（不只这一屏）存成表格，Excel/WPS 可直接打开"
+              className="rounded px-3 py-1.5 ring-1 ring-neutral-200 hover:bg-neutral-50 disabled:opacity-40 dark:ring-neutral-700 dark:hover:bg-neutral-800">候选CSV</button>
+            <button onClick={() => doExportCandidates('json')} disabled={poolCount === 0} title="同一份候选全量清单的 JSON 版，适合程序处理"
+              className="rounded px-3 py-1.5 ring-1 ring-neutral-200 hover:bg-neutral-50 disabled:opacity-40 dark:ring-neutral-700 dark:hover:bg-neutral-800">候选JSON</button>
             <button onClick={() => fileRef.current?.click()} className="rounded px-3 py-1.5 ring-1 ring-neutral-200 hover:bg-neutral-50 dark:ring-neutral-700 dark:hover:bg-neutral-800">导入</button>
             <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" aria-hidden="true"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) void doImportFile(f); e.target.value = ''; }} />
@@ -350,7 +364,7 @@ export default function App() {
 
         <footer className="pt-2 text-xs leading-5 text-neutral-500 no-print">
           候选池 Pool-B {META.pool_B} 条（L0 名用字 {META.L0_size} 字{META.L0_added > 0 ? `＝cnname 全表种子 ${META.L0_seed}＋人工过字保留 ${META.L0_added}` : '（种子版）'}；相邻音步对 {META.by_gap.gap1} · 跨一字 {META.by_gap.gap2} · 跨两字 {META.by_gap.gap3}）· 单字名有对齐出处 {META.singles} 字 ·
-          数据 {Math.round(META.ship_gz_total / 1024)} KB gzip，运行时零网络请求。
+          数据 {Math.round(META.ship_bytes_total / 1024)} KB（未压缩，全部打进应用包），运行时零网络请求。
           <br />
           卡片上的「部首」只是康熙字典五部（木{META.radical_dist.木}·火{META.radical_dist.火}·水{META.radical_dist.水}·金{META.radical_dist.金}·土{META.radical_dist.土} 共 {META.radical_chars} 字）的事实标注，覆盖 {META.radical_named}/{META.pool_B} 条双名；字义（本义）来自开放词典，用字常见度来自 114 万真实姓名用字频次（估算）。未标不代表该字无五行；本应用不做五行筛选、不做八字五格、不判吉凶。
           {sur && surnameReads(sur) > 1 && ' 你的姓首字是多音字，请在上方确认读音。'}
