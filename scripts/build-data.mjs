@@ -11,6 +11,9 @@ const RAW = 'data/raw';
 const OUT = 'src/data';
 const NOT_CJK = /[^一-鿿]/g;
 
+// 语料指纹：SHA256SUMS 清单本身的哈希。输入变了指纹就变，供 meta.json、verify 与页脚三处共用。
+const corpusSha = createHash('sha256').update(fs.readFileSync(path.join(RAW, 'SHA256SUMS'))).digest('hex').slice(0, 12);
+
 function read(p) { return fs.readFileSync(path.join(RAW, p), 'utf-8'); }
 function json(p) { return JSON.parse(read(p)); }
 
@@ -261,8 +264,9 @@ function makeList(entries, tier) {
   return entries.map(([name, v]) => {
     const bookCode = BOOKS.find((b) => b.key === v.book).code;
     const k = `${tier}${bookCode}_${ascii(v.title)}`;
-    // id 里带名字、序号只按同名同题计数：池子扩容时旧 id 不位移，收藏/拉黑不会静默指向别的名字。
-    // 计数键用「去声调拼音前缀」而不是汉字，否则 依依/翼翼 在同篇会拼成同一个 id。
+    // id 里带名字、序号只按「篇＋去声调拼音」计数：池子扩容时旧 id 不位移。
+    // 计数键用拼音而不是汉字，所以同篇同音不同字（采薇的 依依/翼翼）共用前缀，
+    // 按出现顺序递增 _001/_002。碰撞规模由 verify 4c 计数并记进 meta（见 DESIGN.md）。
     const base = `${k}_${ascii(name)}`;
     seq[base] = (seq[base] ?? 0) + 1;
     const gapPenalty = v.gap === 1 ? 0 : v.gap === 2 ? -4 : -8;
@@ -408,6 +412,16 @@ const meta = {
   units_by_book: unitsByBook,
   foot_pairs: foot.size,
   pool_B: candidates.length,
+  corpus_sha: corpusSha,
+  id_prefix_stats: (() => {
+    const byBase = new Map();
+    for (const c of candidates) {
+      const base = c.id.replace(/_\d{3}$/, '');
+      byBase.set(base, (byBase.get(base) ?? 0) + 1);
+    }
+    const sizes = [...byBase.values()];
+    return { groups: sizes.length, collisions: sizes.filter((n) => n > 1).length, max_group: Math.max(...sizes) };
+  })(),
   by_gap: Object.fromEntries([1, 2, 3].map((g) => [`gap${g}`, candidates.filter((c) => c.gap === g).length])),
   pool_C: pC_all.size,
   pool_mix_measured: poolMix.length,

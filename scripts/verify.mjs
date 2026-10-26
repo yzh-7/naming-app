@@ -203,6 +203,18 @@ console.log('4b) 出处今译：覆盖全部唯一原句，条目只存下标');
   }
 }
 
+console.log('4c) 编号前缀碰撞：计数键是去声调拼音，同篇同音不同字共用前缀（这是事实，不是缺陷隐藏）');
+{
+  const baseOf = (id) => id.replace(/_\d{3}$/, '');
+  const byBase = new Map();
+  for (const c of cand) byBase.set(baseOf(c.id), (byBase.get(baseOf(c.id)) ?? 0) + 1);
+  const colliding = [...byBase.entries()].filter(([, n]) => n > 1).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+  const stats = { groups: byBase.size, collisions: colliding.length, max_group: Math.max(...byBase.values()) };
+  ok(stats.groups === meta.id_prefix_stats.groups && stats.collisions === meta.id_prefix_stats.collisions
+    && stats.max_group === meta.id_prefix_stats.max_group,
+  `前缀 ${stats.groups} 组，其中 ${stats.collisions} 组 2 条以上，最大组 ${stats.max_group} 条（与 meta 一致）：${colliding.map(([b, n]) => `${b}×${n}`).join(' ')}`);
+}
+
 console.log('5) 性别风格：字表未漂移 + 强弱两级 + 真筛选不变量');
 {
   const rawAttr = JSON.parse(fs.readFileSync('data/raw/cnname_attributes.json', 'utf8'));
