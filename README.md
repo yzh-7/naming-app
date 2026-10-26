@@ -54,10 +54,11 @@ $ npm run dev
 | `npm test` | Vitest 单元测试 |
 | `npm run test:e2e` | Playwright 端到端测试与 axe 可访问性扫描，需先执行 `npm run build` |
 | `npm run audit:design` | 设计体检，5 视口 × 深浅主题 × 4 页面共 40 组，需先执行 `npm run build` |
-| `npm run build` | 依次执行 `build:data`、`verify`、`tsc --noEmit`、`eslint .`、`vitest`、`vite build`、体积检查 |
-| `npm run build:single` | 同上，产出单个 HTML 文件（`SINGLE=1`） |
+| `npm run build` | 依次执行 `build:data`、`verify`、`tsc --noEmit`、`eslint .`、`vitest`、`vite build`、体积检查。ESLint 覆盖 `public/sw.js`（Service Worker 全局），不检查 `dist/`、`dist-single/` 等产物目录 |
+| `npm run build:single` | 先跑完 `npm run build`，再执行单文件构建（`SINGLE=1`）到 `dist-single/`，并对该产物再跑一次体积检查 |
+| `npm run single` | 只执行单文件构建与体积检查，用于已经构建过的场合（CI 在 `build` 之后跑这一步） |
 | `npm run serve` | 以 `python3 -m http.server` 静态伺服 `dist/`，端口 5178 |
-| `npm run typecheck` / `npm run lint` / `npm run format` | 类型检查、ESLint、Prettier |
+| `npm run typecheck` / `npm run lint` / `npm run format` | 类型检查、ESLint、Prettier。Markdown 文档与脚本生成的 JSON 不参与格式化，排除项见 `.prettierignore` |
 | `npm run check` | `build`、`test:e2e`、`audit:design` 三项连跑 |
 
 ## 功能
@@ -82,7 +83,7 @@ $ npm run dev
 
 - 导出收藏、拉黑与筛选配置为 JSON；导入时可选择合并或覆盖，导入文件会先校验。
 - 导出当前筛选命中的全部候选为 JSON 或 CSV（含出处原句与今译），不限于当前页。
-- 复制当前页面的链接。URL 只编码筛选条件（姓氏、读音、性别、字数、搜索词、排序、笔画上限、常见度下限、典籍开关等），不包含收藏与拉黑。
+- 复制当前页面的链接。URL 只编码筛选条件（姓氏、读音、性别、是否含「疑似」一档、字数、搜索词、排序、笔画上限、常见度下限、典籍开关等），不包含收藏与拉黑。链接里出现某一项，这一项就进入状态；取值不可信时回默认值，不夹到边界，也不静默丢弃。链接没有出现的项沿用本机已存的偏好。
 
 ### 分享与打印
 
@@ -103,7 +104,7 @@ $ npm run dev
 
 ### PWA
 
-`public/manifest.webmanifest` 与 Service Worker 支持安装与离线访问。有新版本或处于离线状态时，页面顶部给出提示。
+`public/manifest.webmanifest` 与 Service Worker 支持安装与离线访问。有新版本或处于离线状态时，页面顶部给出提示。应用版本只有一个来源（`package.json`），页脚、页面 meta 与 Service Worker 注册参数三处出口都由它注入；离线缓存名按当前构建产物算出，不手工维护。口径见 `DESIGN.md`「版本与缓存」。
 
 ## 界面
 
@@ -150,17 +151,25 @@ docs/screenshots/  文档截图
 
 | 层 | 命令 | 覆盖内容 |
 |---|---|---|
-| 单元测试 | `npm test` | 9 个文件、148 个用例：取词口径、打分、音韵、字形与常见度筛选、检索排序、持久化与导入导出往返、URL 编解码、分享卡片与名单图、组件渲染 |
-| 端到端 | `npm run test:e2e` | 16 个用例，在 Chromium 上跑关键路径，含 axe（WCAG 2 A/AA）扫描与 target-size 规则，深浅主题均覆盖 |
+| 单元测试 | `npm test` | 9 个文件、162 个用例：取词口径、打分、音韵、字形与常见度筛选、检索排序、持久化与导入导出往返、URL 编解码、分享卡片与名单图、组件渲染 |
+| 端到端 | `npm run test:e2e` | 24 个用例：关键路径 14 项（生成、自选、收藏与分组、篇名筛选、按拼音搜索、导出、名单图、页脚版本、链接参数、Service Worker 缓存）＋ 390×844 与 320×640 两档视口各 5 项，含 axe（WCAG 2 A/AA）扫描与 target-size 规则，深浅主题均覆盖 |
 | 设计体检 | `npm run audit:design` | 40 个组合：320×640、390×844、768×900、1024×900、1440×1000 五个视口 × 浅色与深色 × 四个页面，检查横向溢出、触控目标尺寸、文字对比度、方块字行长、页头是否遮挡首屏卡片 |
 
-设计体检在硬违规出现时以退出码 1 结束。硬违规判定：横向溢出超过 1px、触控目标小于 24px、宽度小于 1024px 时目标小于 44px（软指标）、文字对比度低于 WCAG 要求（大字 3:1、正文 4.5:1）、单行方块字超过 42 字、页头压住首屏第一张卡片。`--verbose` 列出逐条结果，`--json` 输出 `design-audit.json`。
+设计体检在硬违规出现时以退出码 1 结束。硬违规判定共五条：横向溢出超过 1px、触控目标小于 24px、文字对比度低于 WCAG 要求（大字 3:1、正文 4.5:1）、页头压住首屏第一张卡片、主题切换控件在窄视口不可见。「单行方块字超过 42 字」与「窄视口目标小于 44px 但不少于 24px」只作为报告段落输出，不影响退出码。`--verbose` 列出逐条结果，`--json` 输出 `design-audit.json`。
 
 ## 构建与体积预算
 
 `vite.config.ts` 用 `manualChunks` 把产物分成三块：`vendor`（React 等依赖）、`data`（固化的词典与候选 JSON）、`index`（业务代码）。数据块只打包、不发起请求，单独分块便于长期缓存。
 
-体积门禁由 `scripts/size-check.mjs` 执行，两处判定都按 gzip 体积计算。当前实测：站点资源 gzip 合计约 379 KB（预算 400 KB）；`npm run build:single` 产出的 `index.html` 为 1.57 MB，gzip 约 368 KB（预算 1.5 MB）。
+体积门禁由 `scripts/size-check.mjs` 执行，两条判定都按 gzip 计，也都进退出码：非 HTML 资源合计不超过 400 KiB；HTML 自身不超过 400 KiB——站点版这一条量的是页面壳，单文件版量的是整个产物，同时打印原文件大小。当前实测（gzip level 9）：
+
+| 产物 | 原文件 | gzip | 预算 |
+|---|---:|---:|---:|
+| 站点 `dist/` 非 HTML 资源合计 | — | 385,587 B（376.6 KiB） | 409,600 B |
+| 站点 `dist/index.html` 页面壳 | 2,921 B | 1,298 B | 409,600 B |
+| 单文件 `dist-single/index.html` | 1,675,319 B（1.60 MiB） | 407,880 B（398.3 KiB） | 409,600 B |
+
+单文件产物的 gzip 只比预算小 1,720 B（0.4%）。语料或字表扩充会先撞这条线，扩充前先看这一行；`dist-single/` 只用于体积核对，不发布。
 
 ## 部署
 
@@ -168,7 +177,7 @@ docs/screenshots/  文档截图
 
 | 工作流 | 文件 | 步骤 |
 |---|---|---|
-| CI | `.github/workflows/ci.yml` | 构建；端到端与 axe 扫描；设计体检 |
+| CI | `.github/workflows/ci.yml` | 构建（Node 22 与 24）；单文件版构建与体积检查；端到端与 axe 扫描；设计体检 |
 | 发布 | `.github/workflows/deploy-pages.yml` | 构建并上传 Pages 产物 |
 
 首次配置：
@@ -191,4 +200,5 @@ docs/screenshots/  文档截图
 ## 进一步阅读
 
 - `DESIGN.md`：数据管线、引擎接口、状态与迁移、样式令牌、门禁与诊断脚本。
+- `CHANGELOG.md`：版本记录。版本号来源、每版用户可见影响与门禁变化。
 - `ANDROID.md`：将同一份构建产物打包为 Android 应用的方案对比与实施步骤。

@@ -20,6 +20,18 @@
 | `line_gloss.tsv` | 本项目自撰，1,140 行，与候选及单字名的原句逐条对应 | 本项目原创，随本仓库发布 | 出处今译：每个唯一原句配一句白话释义，只解释句意，不增补典故与命理判断 | 是，进 `line_gloss.json`，按原句首次出现顺序的字符串数组 |
 | `name_given_freq.json` | wainshine/Chinese-Names-Corpus 的 `Chinese_Names_Corpus（120W）.txt`，经 `scripts/derive-dict.mjs` 裁剪 | Apache-2.0 | 派生数据：对 114 万条真实姓名去掉首字后的用字计数（共 211 万次用字），用作字在真实姓名中常见程度的估算 | 是，进 `chars.json` 的 `gn` 字段，运行时换算为档位 |
 
+## 语料与字表的更新链
+
+| 步骤 | 做什么 | 谁来核对 |
+|---|---|---|
+| 1 | 替换或修改本目录里的输入文件 | — |
+| 2 | 重新生成指纹清单，在本目录执行 `ls \| grep -v -e SHA256SUMS -e LICENSES.md -e licenses -e l0-verdicts.txt \| xargs sha256sum > SHA256SUMS`。该命令的产物与仓库现有清单逐行一致，已核对 | `npm run verify` 第 0 节 |
+| 3 | 执行 `npm run build` 重新固化 `src/data/` | `meta.json` 的 `corpus_sha` 变成新清单的 SHA-256 前 12 位，页脚随即显示新指纹，用户能看到自己拿到的是哪一份语料 |
+| 4 | 复核规模类断言与文档计数：`verify.mjs` 的篇数、段数、覆盖率，`README.md` 与本文件的候选池计数 | 门禁失败即暴露 |
+| 5 | 在 `CHANGELOG.md` 记一条，写明语料变化与用户可见的影响 | 版本号与语料指纹共同回答「这次发布用的是哪份语料」 |
+
+`l0-verdicts.txt` 不在 `SHA256SUMS` 里：它由 `verify.mjs` 单独校验文本指纹（`meta.L0_verdicts_sha256`）。改动名用字判定要走 `scripts/l0-unlock.mjs` 的流程，见 `DESIGN.md` 1.5 节。
+
 ## 关于部首与笔画
 
 部首提示陈述的是「该字的《康熙字典》部首属于哪一部」这一可核对的事实，不是五行归属判断。民间按偏旁定五行的做法只对木、火、水、金、土五部成立，其它部首没有可靠对应，因此一律不标注；未标注不代表该字没有五行属性。本项目不提供五行筛选、八字与五格计算、吉凶或「补缺」建议。

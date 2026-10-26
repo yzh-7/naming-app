@@ -7,9 +7,9 @@
 | 事实 | 位置 | 对 Android 分发的影响 |
 |---|---|---|
 | 静态站点，运行时不发起网络请求 | `README.md`、`scripts/size-check.mjs` | 产物可直接内嵌安装包，不需要后端 |
-| 数据随包发布，`data` chunk 约 248 KB gzip | `src/engine/data.ts`、`vite.config.ts` | 数据以静态资源形式打进安装包 |
+| 数据随包发布，`data` chunk 原文件 1,236,511 B，gzip 254,325 B（248.4 KiB） | `src/engine/data.ts`、`vite.config.ts` | 数据以静态资源形式打进安装包 |
 | 产物使用相对路径（`base: './'`） | `vite.config.ts` | 可在 `file://`、WebView 与子路径下运行 |
-| 支持产出单个 HTML 文件（约 1.57 MB，gzip 约 368 KB） | `npm run build:single` | 可作为极简分发形态 |
+| 支持产出单个 HTML 文件：原文件 1,675,319 B（1.60 MiB），gzip 407,880 B（398.3 KiB）；这条判定受 400 KiB 门禁约束 | `npm run build:single` | 可作为极简分发形态；语料扩充会先撞这条线 |
 | 已有 manifest、Service Worker 与图标 | `public/manifest.webmanifest`、`public/sw.js`、`public/icon-*.png` | Chrome 支持「添加到主屏幕」直接安装 |
 | 分享与文件下载基于 Web API | `src/lib/share.ts`、`src/App.tsx` | 这是唯一需要按平台分流的区域 |
 
