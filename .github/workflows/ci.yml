@@ -12,9 +12,6 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
-# 卡住的作业最多占 20 分钟，超时即失败，不占着 runner 等死
-timeout-minutes: 20
-
 # CI 只需要读代码，不给写权限（最小权限；Pages 发布另有一个 workflow 带 pages 权限）
 permissions:
   contents: read
@@ -22,6 +19,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # 卡住的作业最多占 20 分钟，超时即失败，不占着 runner 等死。
+    # 这个键写在 job 一级：GitHub 只认 jobs.<job_id>.timeout-minutes，写在 workflow 顶层整个工作流文件会被判非法
+    timeout-minutes: 20
     strategy:
       matrix:
         node: [22, 24]
