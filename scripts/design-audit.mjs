@@ -222,7 +222,7 @@ for (const vp of VIEWPORTS) {
     await m('生成');
     await page.getByRole('button', { name: '收藏' }).first().click();
     await page.getByRole('button', { name: '收藏' }).first().click();
-    await page.getByRole('button', { name: '不再看它' }).first().click();
+    await page.getByRole('button', { name: '拉黑' }).first().click();
     await page.getByRole('link', { name: '自选' }).click();
     await fillCompose(page);
     await m('自选');

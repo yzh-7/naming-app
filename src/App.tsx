@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { plan, scoreItem, findItem, poolSize, cleanSurname, isKnownSurname, surnameReads, shapeTags, popularity, glossOf, lineGlossOf, namePinyin, popScore } from './engine/name';
+import { plan, scoreItem, findItem, poolSize, cleanSurname, isKnownSurname, surnameReads, shapeTags, popularity, glossOf, lineGlossOf, namePinyin, popScore, resolveSaved } from './engine/name';
 import { META } from './engine/data';
 import { BOOK_LABEL, BOOK_ORDER, type Opts, type Result, type ShareName } from './engine/types';
 import Controls from './ui/Controls';
@@ -11,10 +11,13 @@ import Compose from './ui/Compose';
 import * as store from './store/local';
 import { buildState, serialize, parseState, toQuery, fromQuery, type SavedState } from './store/transfer';
 import { copyText, downloadText, downloadBlob, renderShareCard, renderListCard, resultSummary } from './lib/share';
-import { candidatesCsv, candidatesJson } from './lib/candidates';
+import { candidatesCsv, candidatesJson, favoritesCsv } from './lib/candidates';
 import { usePwa } from './lib/pwa';
 
-type Pair = { rec: store.FavRecord; r: Result };
+type Pair = { rec: store.FavRecord; r: Result; stale: boolean };
+// 收藏里的 id 查不到时按卡片记下的名字＋出处回退找；两条路都走不通就是「找不回来」的旧条目
+const favSnap = (r: Result) => ({ name: r.name, book: r.book, title: r.title, line: r.line });
+const num = (n: number) => n.toLocaleString('en-US');
 type FavSort = 'recent' | 'score' | 'strokes' | 'popular';
 
 const FAV_SORTS: { v: FavSort; label: string }[] = [
@@ -29,6 +32,13 @@ function tabFromHash(hash: string): Tab {
   const h = hash.replace(/^#\/?/, '');
   return h === 'compose' || h === 'fav' || h === 'block' ? h : 'gen';
 }
+// 页签写回地址栏：刷新停在同页、浏览器后退能退回上一页页签、复制的链接也带上当前页签
+function hashFor(tab: Tab): string {
+  return tab === 'gen' ? '#/' : `#/${tab}`;
+}
+const goTab = (t: Tab) => {
+  if (window.location.hash !== hashFor(t)) window.location.hash = hashFor(t);
+};
 
 export default function App() {
   const initialUrl = useMemo(() => fromQuery(window.location.search), []);
@@ -42,6 +52,7 @@ export default function App() {
   const [theme, setTheme] = useState<store.Theme>(() => store.loadTheme());
   const [compare, setCompare] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const [storageBroken, setStorageBroken] = useState(() => !store.storageUsable());
   const [pendingImport, setPendingImport] = useState<SavedState | null>(null);
   const [favQuery, setFavQuery] = useState('');
   const [favSort, setFavSort] = useState<FavSort>('recent');
@@ -57,12 +68,17 @@ export default function App() {
     setSurname(s);
   };
 
+  // 本机存储不可用（隐私模式、配额写满、站点策略禁用）时写入不再抛出，但必须让人看见「这次没保存」
+  const warnStorage = useCallback(() => { if (store.storageUnavailable()) setStorageBroken(true); }, []);
+  // 保存失败由存储层通知，不在 effect 里同步 setState
+  useEffect(() => store.subscribeStorageFailure(() => setStorageBroken(true)), []);
+
   // 换页时回到顶部：粘性页头常驻，若沿上一页的滚动位置落下，第一张卡片会被页头压在下面
   useEffect(() => { if (window.scrollY > 0) window.scrollTo(0, 0); }, [tab]);
 
-  useEffect(() => store.saveSurname(sur), [sur]);
-  useEffect(() => store.saveReading(reading), [reading]);
-  useEffect(() => store.saveOpts(opts), [opts]);
+  useEffect(() => { store.saveSurname(sur); }, [sur]);
+  useEffect(() => { store.saveReading(reading); }, [reading]);
+  useEffect(() => { store.saveOpts(opts); }, [opts]);
   useEffect(() => {
     const onHash = () => setTab(tabFromHash(window.location.hash));
     window.addEventListener('hashchange', onHash);
@@ -90,10 +106,18 @@ export default function App() {
     (id: string) => { const it = findItem(id); return it ? scoreItem(sur, it, effective, reading) : null; },
     [sur, effective, reading],
   );
-  const favPairs: Pair[] = useMemo(
-    () => fav.map((rec) => { const r = scored(rec.id); return r ? { rec, r } : null; }).filter((x): x is Pair => !!x),
-    [fav, scored],
-  );
+  const favPairs: Pair[] = useMemo(() => {
+    const out: Pair[] = [];
+    for (const rec of fav) {
+      const m = resolveSaved(rec);
+      if (m.item) out.push({ rec, r: scoreItem(sur, m.item, effective, reading), stale: m.by === 'name' });
+    }
+    return out;
+  }, [fav, sur, effective, reading]);
+  const favLost = useMemo(() => {
+    const ids = new Set(favPairs.map((p) => p.rec.id));
+    return fav.filter((rec) => !ids.has(rec.id));
+  }, [fav, favPairs]);
   const blockList = useMemo(
     () => block.map((id) => scored(id)).filter((x): x is Result => !!x),
     [block, scored],
@@ -118,10 +142,38 @@ export default function App() {
   }, [results]);
 
   const favIds = useMemo(() => new Set(fav.map((f) => f.id)), [fav]);
-  const toggleFav = (r: Result) => setFav(favIds.has(r.id) ? store.removeFavorite(r.id) : store.addFavorite(r.id));
-  const toggleBlock = (r: Result) => setBlock(block.includes(r.id) ? store.removeBlock(r.id) : store.addBlock(r.id));
+  const toggleFav = (r: Result) => {
+    setFav(favIds.has(r.id) ? store.removeFavorite(r.id) : store.addFavorite(r.id, favSnap(r)));
+    warnStorage();
+  };
+  const toggleBlock = (r: Result) => {
+    setBlock(block.includes(r.id) ? store.removeBlock(r.id) : store.addBlock(r.id));
+    warnStorage();
+  };
+  // 分组改名 / 删组（连同条目一起删）。改名后当前视图跟到新名字上
+  const doRenameGroup = (from: string, to: string) => {
+    if (!to || to === from) return;
+    setFav(store.renameGroup(from, to));
+    setFavGroup(to);
+    warnStorage();
+    setNotice(`分组「${from}」已改名为「${to}」`);
+  };
+  const doDeleteGroup = (g: string) => {
+    const before = fav.filter((f) => f.group === g).length;
+    setFav(store.clearGroup(g));
+    setFavGroup('');
+    warnStorage();
+    setNotice(`分组「${g}」已解散，${before} 条收藏回到未分组（收藏本身没删）`);
+  };
   const toggleCompare = (id: string) => setCompare((c) => (c.includes(id) ? c.filter((x) => x !== id) : c.length >= 3 ? c : [...c, id]));
 
+  const doExportFavCsv = () => {
+    // 收藏的分组与备注存在 rec 上，不在候选条目里：导出时要显式带上，否则这两列会是空的
+    const rows = favView.map((p) => ({ r: p.r, group: p.rec.group, note: p.rec.note }));
+    if (!rows.length) { setNotice('当前视图里没有条目可导出'); return; }
+    downloadText(favoritesCsv(rows), `收藏${favGroup ? `-${favGroup}` : ''}-${new Date().toISOString().slice(0, 10)}.csv`);
+    setNotice(`已导出 CSV：${rows.length} 条${favGroup ? `（分组「${favGroup}」）` : '（全部）'}`);
+  };
   const doExport = () => {
     const st = buildState({ surname: sur, reading, opts, favorites: fav, blocklist: block });
     downloadText(serialize(st), `naming-${new Date().toISOString().slice(0, 10)}.json`);
@@ -137,44 +189,78 @@ export default function App() {
     setNotice(`已导出候选 ${all.length} 条（当前筛选全量，不只这一屏）`);
   };
   const doImportFile = async (file: File) => {
-    const st = parseState(await file.text());
-    if (!st) { setNotice('导入失败：不是本应用的导出文件（缺少 favorites / opts）'); return; }
-    setPendingImport(st);
+    let text: string;
+    try {
+      text = await file.text();
+    } catch {
+      setNotice('导入失败：这个文件读不出来（可能被浏览器拦下，或选完就被移走了）。请重新选一次。');
+      return;
+    }
+    const res = parseState(text);
+    if (!res.ok) {
+      setNotice(res.error === 'json'
+        ? '导入失败：这个文件不是 JSON，读不出内容。'
+        : res.error === 'foreign'
+          ? '导入失败：这个文件里没有本应用的记录，认不出它是哪里导出的。'
+          : '导入失败：这个文件里没有可导入的东西（收藏、拉黑、筛选设置都是空的）。');
+      return;
+    }
+    setPendingImport(res.state);
   };
+  // 确认导入：先在内存里算出最终的两份名单，再一次性写盘与落 state，避免半途失败留下半套状态
   const confirmImport = (mode: 'merge' | 'replace') => {
     if (!pendingImport) return;
     const st = pendingImport;
+    const nextFav = mode === 'merge'
+      ? [...new Map([...store.loadFavorites(), ...st.favorites].map((r) => [r.id, r])).values()]
+      : st.favorites;
+    const nextBlock = mode === 'merge' ? [...new Set([...store.loadBlocklist(), ...st.blocklist])] : st.blocklist;
+    store.saveFavorites(nextFav);
+    store.saveBlocklist(nextBlock);
+    setFav(store.loadFavorites());
+    setBlock(store.loadBlocklist());
     setSurname(st.surname); setReading(st.reading); setOpts(st.opts); setBatch(0);
-    if (mode === 'merge') {
-      const map = new Map(store.loadFavorites().map((r) => [r.id, r]));
-      for (const r of st.favorites) if (!map.has(r.id)) map.set(r.id, r);
-      setFav(store.saveFavorites([...map.values()]));
-      setBlock(store.saveBlocklist([...new Set([...store.loadBlocklist(), ...st.blocklist])]));
-    } else {
-      setFav(store.saveFavorites(st.favorites));
-      setBlock(store.saveBlocklist(st.blocklist));
-    }
     setPendingImport(null);
-    setNotice(`已导入（${mode === 'merge' ? '合并' : '覆盖'}）：收藏 ${st.favorites.length} · 拉黑 ${st.blocklist.length}`);
+    warnStorage();
+    const parts = [`收藏 ${st.favorites.length}`, `拉黑 ${st.blocklist.length}`];
+    if (!st.favorites.length && !st.blocklist.length) parts.push('只有姓氏与筛选设置');
+    setNotice(`已导入（${mode === 'merge' ? '合并' : '覆盖'}）：${parts.join(' · ')}`);
   };
+  // 导入确认框：Escape 取消，打开即把焦点交给第一个按钮，关掉后还回原处
+  const importBoxRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!pendingImport) return;
+    const prev = document.activeElement as HTMLElement | null;
+    importBoxRef.current?.querySelector<HTMLElement>('button')?.focus();
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPendingImport(null); };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      prev?.focus?.();
+    };
+  }, [pendingImport]);
   const doCopyLink = async () => {
     const q = toQuery({ surname: sur, reading, opts });
-    const url = `${location.origin}${location.pathname}${q ? `?${q}` : ''}`;
-    setNotice((await copyText(url)) ? '链接已复制（只含当前筛选，不含收藏）' : '复制失败，请手动复制地址栏');
+    const url = `${location.origin}${location.pathname}${q ? `?${q}` : ''}${hashFor(tab)}`;
+    setNotice((await copyText(url)) ? '链接已复制（只含当前筛选与页签，不含收藏）' : '复制失败，请手动复制地址栏');
   };
   const doShare = async (r: Result | ShareName) => {
-    const blob = await renderShareCard(r, undefined, `${location.origin}${location.pathname}`);
+    const { blob, qr } = await renderShareCard(r, undefined, `${location.origin}${location.pathname}`);
     downloadBlob(blob, `${r.full}-${r.book}.png`);
-    setNotice('分享卡片已生成（含扫码二维码）');
+    setNotice(qr ? '分享卡片已生成（含扫码二维码）' : '分享卡片已生成，但二维码没画出来（链接过长）');
   };
   const doCopy = async (r: Result | ShareName) => {
     setNotice((await copyText(resultSummary(r))) ? '名字信息已复制' : '复制失败');
   };
   const doExportList = async () => {
-    const entries = favView.map(({ rec, r }) => ({ r, note: rec.note }));
-    const blob = await renderListCard(entries, { title: sur ? `${sur} · 备选名单` : '取名 · 备选名单' });
+    const entries = favView.filter((p) => p.r).map((p) => ({ r: p.r!, note: p.rec.note }));
+    if (!entries.length) { setNotice('当前视图里没有可画进名单图的条目。'); return; }
+    const { blob, qr } = await renderListCard(entries, {
+      title: sur ? `${sur} · 备选名单` : '取名 · 备选名单',
+      url: `${location.origin}${location.pathname}`,
+    });
     downloadBlob(blob, `名单-${new Date().toISOString().slice(0, 10)}.png`);
-    setNotice(`名单图已生成（${entries.length} 条）`);
+    setNotice(`名单图已生成（${entries.length} 条）${qr ? '，含扫码二维码' : '，二维码没画出来（链接过长）'}`);
   };
   const doPrint = () => { setTab('fav'); setTimeout(() => window.print?.(), 60); };
 
@@ -189,13 +275,13 @@ export default function App() {
             <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-ctl bg-accent font-serif text-body text-accent-btn-ink">名</span>
             <div className="min-w-0">
               <h1 className="font-serif text-title leading-tight">取名<span className="hidden xs:inline"> · 典籍取词</span></h1>
-              <p className="mt-0.5 hidden truncate text-meta text-ink-3 xl:block">{BOOK_ORDER.map((b) => BOOK_LABEL[b]).join(' / ')} · 起点落音步、同句读内取两字 + 名用字白名单 · 完全离线</p>
+              <p className="mt-0.5 hidden truncate text-meta text-ink-3 xl:block">{BOOK_ORDER.map((b) => BOOK_LABEL[b]).join(' / ')} · 起点落音步、同句读内取两字 + 名用字表 · 完全离线</p>
             </div>
           </div>
           <div className="ml-auto shrink-0 sm:order-3">
             <ThemeControl theme={theme} setTheme={setTheme} />
           </div>
-          <TopNav current={tab} favCount={fav.length} blockCount={block.length} onNavigate={(t) => setTab(t)}
+          <TopNav current={tab} favCount={fav.length} blockCount={block.length} onNavigate={(t) => { goTab(t); setTab(t); }}
             className="order-last w-full sm:order-2 sm:ml-auto sm:w-auto" />
         </div>
       </header>
@@ -203,6 +289,11 @@ export default function App() {
       <main id="main" className="anchor-offset mx-auto max-w-6xl space-y-4 px-4 py-4 sm:py-6">
         {offline && (
           <p className="rounded-card border border-warn-line bg-warn-soft px-3 py-2 text-meta text-warn no-print">离线模式：数据都来自本机缓存，功能正常。</p>
+        )}
+        {storageBroken && (
+          <p className="rounded-card border border-warn-line bg-warn-soft px-3 py-2 text-meta text-warn no-print">
+            本机存储不可用（隐私模式或已写满）。这一页照常能用，但收藏、拉黑与筛选不会保存，关掉页面就没了。
+          </p>
         )}
         {updateReady && (
           <p className="flex flex-wrap items-center gap-2 rounded-card border border-cool-line bg-cool-soft px-3 py-2 text-meta text-cool no-print">
@@ -212,8 +303,12 @@ export default function App() {
         )}
 
         {pendingImport && (
-          <div role="dialog" aria-label="导入方式" className="space-y-3 rounded-card border border-accent-line bg-accent-soft p-4 text-body text-accent-ink no-print">
-            <p>这份文件含收藏 {pendingImport.favorites.length} 条 · 拉黑 {pendingImport.blocklist.length} 条。与现有数据怎么合？</p>
+          <div ref={importBoxRef} role="dialog" aria-modal="true" aria-label="导入方式" className="space-y-3 rounded-card border border-accent-line bg-accent-soft p-4 text-body text-accent-ink no-print">
+            <p>
+              这份文件含收藏 {pendingImport.favorites.length} 条 · 拉黑 {pendingImport.blocklist.length} 条
+              {!pendingImport.favorites.length && !pendingImport.blocklist.length && '（只有姓氏与筛选设置）'}
+              。与现有数据怎么合？按 Esc 取消。
+            </p>
             <div className="flex flex-wrap gap-2">
               <button onClick={() => confirmImport('merge')} className="btn-primary">合并（保留两边）</button>
               <button onClick={() => confirmImport('replace')} className="btn btn-quiet">覆盖</button>
@@ -261,7 +356,7 @@ export default function App() {
               )}
               {sur && results.length === 0 && (
                 <p className="rounded-card border border-dashed border-line-strong bg-surface-2 p-6 text-center text-meta leading-6 text-ink-3">
-                  这个条件下没有剩余候选。{opts.search ? '试试清空搜索；' : ''}{opts.strokeMax || opts.popFloor || opts.noMonotone ? '试试放宽笔画/常见度/结构筛选；' : ''}{opts.redupOnly ? '当前开着「只看典籍叠字」，先取消它；' : ''}其余可能是典籍全选关或都已拉黑。
+                  这个条件下没有剩余候选。{opts.search ? '试试清空搜索；' : ''}{opts.title ? '当前只在看《' + opts.title + '》，点「不限篇」回到全部；' : ''}{opts.strokeMax || opts.popFloor || opts.noMonotone ? '试试放宽笔画/常见度/结构筛选；' : ''}{opts.redupOnly ? '当前开着「只看典籍叠字」，先取消它；' : ''}其余可能是典籍全选关或都已拉黑。
                 </p>
               )}
               <p aria-live="polite" className="sr-only">共 {poolCount} 条候选，第 {paged.pageNo + 1} 页，共 {paged.pages} 页</p>
@@ -274,7 +369,9 @@ export default function App() {
                   <div className="grid gap-3 sm:grid-cols-2">
                     {list.map((r) => (
                       <NameCard key={r.id} r={r} fav={favIds.has(r.id)} blocked={block.includes(r.id)}
-                        onFav={() => toggleFav(r)} onBlock={() => toggleBlock(r)} onShare={() => void doShare(r)} onCopy={() => void doCopy(r)} />
+                        onFav={() => toggleFav(r)} onBlock={() => toggleBlock(r)} onShare={() => void doShare(r)} onCopy={() => void doCopy(r)}
+                        onTitle={() => { setOpts((o) => ({ ...o, title: r.title, search: '' })); setBatch(0); setNotice(`只看《${r.title}》里的候选`); }}
+                        onSameSound={() => { setOpts((o) => ({ ...o, search: namePinyin(r.name), title: '' })); setBatch(0); setNotice(`按拼音「${namePinyin(r.name)}」搜索同音写法`); }} />
                     ))}
                   </div>
                 </section>
@@ -296,7 +393,7 @@ export default function App() {
                 setFav(store.removeFavorite(r.id));
                 setNotice(`已取消收藏 ${r.full}`);
               } else {
-                setFav(store.addFavorite(r.id));
+                setFav(store.addFavorite(r.id, favSnap(r)));
                 setNotice(`已收藏 ${r.full}`);
               }
             }}
@@ -317,6 +414,7 @@ export default function App() {
                 {FAV_SORTS.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}
               </select>
               <button onClick={() => void doExportList()} disabled={favView.length === 0} className="btn btn-outlined">导出名单图</button>
+              <button onClick={doExportFavCsv} disabled={favView.length === 0} className="btn btn-outlined" title="按当前搜索与分组视图导出 CSV，含备注与分组两列">导出 CSV</button>
               <button onClick={doPrint} disabled={favView.length === 0} className="btn btn-outlined">打印名单</button>
             </div>
             {favGroups.length > 0 && (
@@ -330,13 +428,22 @@ export default function App() {
                 ))}
               </div>
             )}
+            {favGroup && (
+              <GroupTools key={favGroup} group={favGroup}
+                onRename={(to) => doRenameGroup(favGroup, to)} onDelete={() => doDeleteGroup(favGroup)} />
+            )}
             {compare.length >= 2 && <Compare pairs={favPairs.filter((p) => compare.includes(p.rec.id))} />}
             {favView.length === 0 ? (
               <p className="rounded-card border border-dashed border-line-strong bg-surface-2 p-6 text-center text-meta text-ink-3">
                 {favPairs.length === 0 ? '还没有条目。' : '没有符合搜索/分组的条目。'}
               </p>
-            ) : favView.map(({ rec, r }) => (
-              <div key={r.id} className="space-y-2">
+            ) : favView.map(({ rec, r, stale }) => (
+              <div key={rec.id} className="space-y-2">
+                {stale && (
+                  <p className="text-meta leading-6 text-warn no-print">
+                    这条收藏记的编号在当前候选池里找不到了，下面这张卡是按名字与出处对上的；分数可能与当初收藏时不同。
+                  </p>
+                )}
                 <NameCard r={r} fav blocked={false} onFav={() => toggleFav(r)} onBlock={() => toggleBlock(r)} onShare={() => void doShare(r)} onCopy={() => void doCopy(r)} />
                 <div className="flex flex-wrap items-center gap-2 px-1 no-print">
                   <label className="flex min-h-11 items-center gap-1.5">
@@ -358,6 +465,27 @@ export default function App() {
                 </div>
               </div>
             ))}
+            {favLost.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-meta leading-6 text-ink-3 no-print">
+                  下面 {favLost.length} 条收藏在当前候选池里已经对不上任何条目（旧版本收录过、或数据换过）。这里只留当时记下的名字与出处，不能重新打分。
+                </p>
+                {favLost.map((rec) => (
+                  <div key={rec.id} className="rounded-card border border-dashed border-line-strong bg-surface-2 p-3 space-y-1.5">
+                    <p className="text-body text-ink-2">
+                      {rec.name ? `${sur}${rec.name}` : '一条旧收藏'}
+                      {rec.book ? ` · 《${BOOK_LABEL[rec.book]}·${rec.title}》` : ''}
+                      {rec.group ? ` · 分组「${rec.group}」` : ''}
+                    </p>
+                    {rec.line && <p className="text-meta leading-6 text-ink-3">{rec.line}</p>}
+                    {rec.note && <p className="text-meta leading-6 text-ink-3">备注：{rec.note}</p>}
+                    <div className="no-print">
+                      <button onClick={() => { setFav(store.removeFavorite(rec.id)); warnStorage(); }} className="btn btn-quiet">删除这条</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -377,17 +505,42 @@ export default function App() {
         )}
 
         <footer className="max-w-4xl space-y-1.5 border-t border-line pt-4 text-meta leading-6 text-ink-3 no-print">
-          <p className="measure">候选池 Pool-B {META.pool_B} 条（L0 名用字 {META.L0_size} 字{META.L0_added > 0 ? `＝cnname 全表种子 ${META.L0_seed}＋人工过字保留 ${META.L0_added}` : '（种子版）'}；相邻音步对 {META.by_gap.gap1} · 跨一字 {META.by_gap.gap2} · 跨两字 {META.by_gap.gap3}）· 单字名有对齐出处 {META.singles} 字 ·
-            数据 {Math.round(META.ship_bytes_total / 1024)} KB（未压缩，全部打进应用包），运行时零网络请求。
+          <p className="measure">候选池 {num(META.pool_B)} 条（名用字表 {num(META.L0_size)} 字{META.L0_added > 0 ? `＝种子表 ${num(META.L0_seed)} 字＋人工过字保留 ${num(META.L0_added)} 字` : '（种子版）'}；取词段：同句读相邻 {num(META.by_gap.gap1)} 对 · 跨一字 {num(META.by_gap.gap2)} 对 · 跨两字 {num(META.by_gap.gap3)} 对）· 单字名有对齐出处 {num(META.singles)} 字 ·
+            数据 {Math.round(META.ship_bytes_total / 1024)} KiB（未压缩，全部打进应用包），运行时零网络请求。
             {sur && surnameReads(sur) > 1 && ' 你的姓首字是多音字，请在上方确认读音。'}</p>
+          <p className="measure">本应用只给可核对的出处与用字事实，不做五行、八字、五格、吉凶判断。</p>
           <details>
             <summary className="flex min-h-11 cursor-pointer select-none items-center text-ink-2 hover:text-ink lg:min-h-8">标注口径与数据来源（点开看）</summary>
-            <p className="measure mt-1.5">卡片上的「部首」只是康熙字典五部（木{META.radical_dist.木}·火{META.radical_dist.火}·水{META.radical_dist.水}·金{META.radical_dist.金}·土{META.radical_dist.土} 共 {META.radical_chars} 字）的事实标注，覆盖 {META.radical_named}/{META.pool_B} 条双名；字义（本义）来自开放词典，用字常见度来自 114 万真实姓名用字频次（估算）。未标不代表该字无五行；本应用不做五行筛选、不做八字五格、不判吉凶。</p>
+            <p className="measure mt-1.5">卡片上的「部首」只是康熙字典五部（木{num(META.radical_dist.木)}·火{num(META.radical_dist.火)}·水{num(META.radical_dist.水)}·金{num(META.radical_dist.金)}·土{num(META.radical_dist.土)} 共 {num(META.radical_chars)} 字）的事实标注，覆盖 {num(META.radical_named)}/{num(META.pool_B)} 条双名；字义（本义）来自开放词典，用字常见度来自 114 万真实姓名用字频次（估算）。没标部首不代表这个字在康熙字典里不属于这五部之外，也不代表它没有五行；本应用不做五行筛选、不做八字五格、不判吉凶。</p>
             <p className="measure mt-1.5">语料 chinese-poetry（MIT）＋ 乐府诗集（公共领域，维基文库整理本）＋ 道法 22 行手工录入 · 字表 general_standard_chinese（Apache-2.0）· 名用字种子 cnname（MIT）· 词频 jieba（MIT）· 字义/笔画/结构 chinese-dictionary（MIT）· 用字频次 Chinese-Names-Corpus（Apache-2.0）·
               部首 Unicode Unihan · 拼音仅构建期使用 pinyin-pro（MIT）。</p>
           </details>
         </footer>
       </main>
+    </div>
+  );
+}
+
+// 分组改名 / 删组：只在选中某个分组时出现
+function GroupTools({ group, onRename, onDelete }: { group: string; onRename: (to: string) => void; onDelete: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(group);
+  if (editing) {
+    return (
+      <form className="flex flex-wrap items-center gap-2 no-print"
+        onSubmit={(e) => { e.preventDefault(); onRename(val.trim()); setEditing(false); }}>
+        <input value={val} onChange={(e) => setVal(e.target.value)} aria-label={`分组「${group}」的新名字`} maxLength={24}
+          placeholder="新组名" className="field w-full min-w-0 sm:w-40" autoFocus />
+        <button type="submit" className="btn btn-outlined">改名</button>
+        <button type="button" onClick={() => { setVal(group); setEditing(false); }} className="btn btn-quiet">取消</button>
+      </form>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2 no-print">
+      <button onClick={() => setEditing(true)} className="btn btn-quiet">改组名</button>
+      <button onClick={onDelete} className="btn btn-quiet" title="解散这个分组；组里的收藏不删，回到未分组">解散组</button>
+      <span className="text-meta text-ink-3">组名最长 24 字；解散组只删组名，不删收藏</span>
     </div>
   );
 }
@@ -399,7 +552,7 @@ function Compare({ pairs }: { pairs: Pair[] }) {
     ['分数', (p) => `${p.r.total}`],
     ['性别风格', (p) => (p.r.gender.side === 'n' ? '中性' : `${p.r.gender.strong ? '' : '疑似'}${p.r.gender.side === 'f' ? '偏女' : '偏男'}`)],
     ['字义', (p) => [...new Set([...p.r.name])].map((ch) => (glossOf(ch) ? `${ch}·${glossOf(ch)}` : '')).filter(Boolean).join('；')],
-    ['字形', (p) => { const s = shapeTags(p.r.name); return `${s.strokes} 画 · ${s.chars.map((c) => c.sx ?? '?').join('')}`; }],
+    ['字形', (p) => { const s = shapeTags(p.r.name); return `${s.strokesTotal != null ? `共 ${s.strokesTotal} 画` : '笔画未收录全'} · ${s.chars.map((c) => `${c.ch}${c.sx ?? '结构未收录'}`).join(' ')}`; }],
     ['用字常见度', (p) => popularity(p.r.name).band],
     ['出处', (p) => `《${BOOK_LABEL[p.r.book]}·${p.r.title}》`],
     ['原句', (p) => p.r.line],

@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import App from './App';
 import { POOL } from './engine/data';
-import { lineGlossOf } from './engine/name';
+import { BOOK_LABEL } from './engine/types';
+import { lineGlossOf, namePinyin } from './engine/name';
 
 const ctxStub = () => ({
   fillStyle: '', strokeStyle: '', lineWidth: 0, font: '', textAlign: '',
@@ -56,7 +57,7 @@ describe('App 集成冒烟', () => {
     expect(screen.getByText(/先填姓氏/)).toBeInTheDocument();
   });
 
-  it('对比表里带出处今译，两列都非空', () => {
+  it('对比表每一列自洽：名字、出处、今译说的是同一个候选条目', () => {
     render(<App />);
     fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
     const favs = screen.getAllByRole('button', { name: '收藏' });
@@ -66,13 +67,19 @@ describe('App 集成冒烟', () => {
     const boxes = screen.getAllByLabelText('对比') as HTMLInputElement[];
     fireEvent.click(boxes[0]);
     fireEvent.click(boxes[1]);
-    const row = screen.getByRole('rowheader', { name: '今译' }).closest('tr')!;
-    const cells = within(row).getAllByRole('cell');
-    expect(cells).toHaveLength(2);
-    for (const c of cells) {
-      expect(c.textContent?.length).toBeGreaterThan(0);
-      expect(lineGlossOf(POOL.find((p) => lineGlossOf(p) === c.textContent)!)).toBe(c.textContent);
-    }
+    const cellsOf = (label: string) => within(screen.getByRole('rowheader', { name: label }).closest('tr')!).getAllByRole('cell');
+    const names = cellsOf('名字').map((c) => c.textContent!);
+    const sources = cellsOf('出处').map((c) => c.textContent!);
+    const glosses = cellsOf('今译').map((c) => c.textContent!);
+    expect(names).toHaveLength(2);
+    expect(new Set(names).size, '两列应该是不同的名字').toBe(2);
+    names.forEach((full, i) => {
+      // 姓固定一个字：去掉首字是候选名；再用同一列的出处把同名条目钉死，
+      // 最后比的是「这一列的今译 ＝ 这个条目的今译」，而不是拿今译反查今译
+      const it = POOL.find((p) => `苏${p.name}` === full && `《${BOOK_LABEL[p.book]}·${p.title}》` === sources[i]);
+      expect(it, `${full}／${sources[i]} 在候选池里对不上条目`).toBeTruthy();
+      expect(glosses[i], full).toBe(lineGlossOf(it!));
+    });
   });
 
   it('导出触发一次下载并给出提示', () => {
@@ -114,7 +121,7 @@ describe('App 集成冒烟', () => {
     render(<App />);
     fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
     const firstName = screen.getAllByRole('heading', { level: 3 })[0].textContent!;
-    fireEvent.click(screen.getAllByRole('button', { name: '不再看它' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: '拉黑' })[0]);
     fireEvent.click(screen.getByRole('link', { name: /拉黑 1/ }));
     expect(within(screen.getByRole('main')).getAllByRole('heading', { level: 3 }).some((h) => h.textContent === firstName)).toBe(true);
   });
@@ -143,5 +150,106 @@ describe('App 集成冒烟', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: /合并/ }));
     expect(await screen.findByText(/已导入（合并）/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /收藏 1/ })).toBeInTheDocument();
+  });
+
+  it('篇名筛选：空态告诉你怎么退出，「不限篇」回到全部', () => {
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
+    expect(screen.getAllByRole('heading', { level: 3 }).length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByLabelText('篇名（只看这一篇）'), { target: { value: '不存在的一篇' } });
+    expect(screen.getByText(/这个条件下没有剩余候选/)).toBeInTheDocument();
+    expect(screen.getByText(/当前只在看《不存在的一篇》，点「不限篇」回到全部/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '不限篇名' }));
+    expect((screen.getByLabelText('篇名（只看这一篇）') as HTMLInputElement).value).toBe('');
+    expect(screen.getAllByRole('heading', { level: 3 }).length).toBeGreaterThan(0);
+  });
+
+  it('卡片上的「同篇还有 N 条」把筛选收到这一篇', () => {
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
+    const jump = screen.getAllByRole('button', { name: /^同篇还有 \d+ 条$/ })[0];
+    // 按钮的 title 里写着本篇名，拿它对照输入框，不去猜卡片文本
+    const want = jump.getAttribute('title')!.match(/《(.+?)》/)![1];
+    fireEvent.click(jump);
+    const title = (screen.getByLabelText('篇名（只看这一篇）') as HTMLInputElement).value;
+    expect(title).toBe(want);
+    expect(screen.getByRole('button', { name: '不限篇名' })).toBeInTheDocument();
+    const cards = screen.getAllByRole('article');
+    expect(cards.length).toBeGreaterThan(0);
+    for (const c of cards) expect(c.textContent, '篇名筛选后不该留下别的篇').toContain(`·${want}》`);
+  });
+
+  it('卡片上的「按拼音看」把这张卡的拼音写进搜索框并清掉篇名', () => {
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
+    fireEvent.change(screen.getByLabelText('篇名（只看这一篇）'), { target: { value: '' } });
+    const btn = screen.getAllByRole('button', { name: '按拼音看' })[0];
+    const card = btn.closest('article')!;
+    const full = within(card).getByRole('heading', { level: 3 }).textContent!;
+    fireEvent.click(btn);
+    const search = screen.getByLabelText('搜索名字、拼音或篇名') as HTMLInputElement;
+    expect(search.value).toBe(namePinyin([...full].slice(1).join('')));
+    expect((screen.getByLabelText('篇名（只看这一篇）') as HTMLInputElement).value).toBe('');
+    expect(screen.getByText(/按拼音「.+」搜索同音写法/)).toBeInTheDocument();
+  });
+
+  it('收藏页导出 CSV：一次下载，提示里带条数与当前分组', () => {
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
+    fireEvent.click(screen.getAllByRole('button', { name: '收藏' })[0]);
+    fireEvent.click(screen.getByRole('link', { name: /收藏 1/ }));
+    fireEvent.click(screen.getByRole('button', { name: '导出 CSV' }));
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('已导出 CSV：1 条（全部）')).toBeInTheDocument();
+  });
+
+  it('分组可改名也可删除，删除时说清连带几条收藏', () => {
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
+    const favs = screen.getAllByRole('button', { name: '收藏' });
+    fireEvent.click(favs[0]);
+    fireEvent.click(favs[1]);
+    fireEvent.click(screen.getByRole('link', { name: /收藏 2/ }));
+    fireEvent.change(screen.getAllByLabelText('分组')[0], { target: { value: '备选' } });
+    expect(screen.getByRole('button', { name: '备选' })).toBeInTheDocument();
+    // 组工具只在「当前看某一个分组」时出现：先点组名 chip
+    fireEvent.click(screen.getByRole('button', { name: '备选' }));
+    fireEvent.click(screen.getByRole('button', { name: '改组名' }));
+    const input = screen.getByLabelText('分组「备选」的新名字') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '终选' } });
+    fireEvent.click(screen.getByRole('button', { name: '改名' }));
+    expect(screen.getByText('分组「备选」已改名为「终选」')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '终选' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '备选' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '解散组' }));
+    expect(screen.getByText('分组「终选」已解散，1 条收藏回到未分组（收藏本身没删）')).toBeInTheDocument();
+    // 解散组只撤组名：两条收藏都还在（当前页签是 <span aria-current>，不是 link），组名 chip 消失
+    expect(screen.getByText('收藏 2')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '终选' })).not.toBeInTheDocument();
+  });
+
+  it('对不上条目的旧收藏单独列出，只留当时的名字与出处，可删除', () => {
+    localStorage.setItem('naming.favorites.v1', JSON.stringify([
+      { id: 'zzz-gone', ts: 1, name: '无此名', book: 'shijing', title: '某篇', line: '某句', note: '旧版本里收的', group: '老组' },
+    ]));
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
+    fireEvent.click(screen.getByRole('link', { name: /收藏 1/ }));
+    expect(screen.getByText(/下面 1 条收藏在当前候选池里已经对不上任何条目/)).toBeInTheDocument();
+    expect(screen.getByText('苏无此名 · 《诗经·某篇》 · 分组「老组」')).toBeInTheDocument();
+    expect(screen.getByText('某句')).toBeInTheDocument();
+    expect(screen.getByText('备注：旧版本里收的')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '删除这条' }));
+    expect(screen.getByText('还没有条目。')).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem('naming.favorites.v1') || '[]')).toEqual([]);
+  });
+  it('本机存储不可用（隐私模式或写满）时页面照常能用，但明说这一页不会保存', () => {
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('QuotaExceededError'); });
+    render(<App />);
+    expect(screen.getByText(/本机存储不可用/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
+    expect(screen.getAllByRole('heading', { level: 3 }).length).toBeGreaterThan(0);
+    expect(screen.getByText(/收藏、拉黑与筛选不会保存/)).toBeInTheDocument();
+    spy.mockRestore();
   });
 });
