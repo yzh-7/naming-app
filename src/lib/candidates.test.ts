@@ -42,6 +42,28 @@ describe('候选全量导出', () => {
     expect(row).toContain('"他说，""清""婉"');
     expect(row).toContain('"篇,名"');
   });
+  it('CSV 防公式注入：= + - @ 打头的文本前置单引号，换行压成空格', () => {
+    const csv = candidatesCsv([fake({ full: '=1+1', title: '-2', author: '@cmd', line: '+3' })]);
+    const row = csv.slice(1).split('\r\n')[1];
+    expect(row).toContain("'=1+1");
+    expect(row).toContain("'-2");
+    expect(row).toContain("'@cmd");
+    expect(row).toContain("'+3");
+    // 不加前导引号就会出现「,=1+1」这种能被表格软件当公式执行的写法
+    expect(row).not.toContain(',=1+1');
+    // 字段里塞换行会凭空多出一行，必须压掉
+    const nl = candidatesCsv([fake({ line: '第一行\n第二行\r\n第三行' })]);
+    expect(nl.slice(1).split('\r\n')).toHaveLength(2);
+    expect(nl).toContain('第一行 第二行 第三行');
+    // 数字列不受影响：分数仍是裸数字（既没被加前导引号，也不是 undefined）
+    expect(row.split(',')[3]).toMatch(/^\d+(\.\d+)?$/);
+  });
+  it('收藏 CSV 的分组与备注（手打的）同样防公式执行', () => {
+    const r = plan('苏', { ...opts, search: '清馨' }, 0).page[0];
+    const csv = favoritesCsv([{ r, group: '=HYPERLINK("x")', note: '-@危险备注' }]);
+    expect(csv).toContain("\"'=HYPERLINK(\"\"x\"\")\"");
+    expect(csv).toContain("'-@危险备注");
+  });
   it('字段完整：出处今译与笔画、常见度都在行里', () => {
     const row = candidateRows(plan('苏', { ...opts, search: '清馨' }, 0).page)[0];
     expect(row.name).toBe('清馨');

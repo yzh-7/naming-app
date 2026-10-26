@@ -1,0 +1,42 @@
+# 依赖更新机器人。为什么开：本项目三年前沿依赖（vite/react/tailwind/playwright）迭代快，
+# 上一轮审计里 vitest 的中危公告是靠人工升级解决的；自动 PR 让「有人知道该升」这件事不再依赖人记得。
+# 门禁（build/check/e2e）在 PR 上跑，机器人提的 PR 过不了门禁就合不进去。
+version: 2
+updates:
+  # npm 依赖：每周一次，开在周末早上，PR 一天一个，避免三连推把 CI 排队挤爆
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: saturday
+      time: "09:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: fix(deps)
+    groups:
+      # 补丁与次版本打包成一个 PR，一次门禁跑就能看完；主版本单独提，方便人工决定
+      minor-and-patch:
+        applies-to: version-updates
+        dependency-type: direct
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # 主版本升级不自动提：Vitest 5、React 20 这类要人工过一遍（本项目的缓存名与数据口径经不起静默换版）。
+      # applies-to 只挡「版本更新」这一类：安全更新（哪怕带主版本）照旧提 PR，
+      # 否则门禁里的 npm audit --audit-level=high 会在「公告有补丁但机器人不许提」之间卡死。
+      - dependency-name: "*"
+        applies-to: version-updates
+        update-types: ["version-update:semver-major"]
+
+  # Actions 也算依赖：checkout/setup-node/upload-pages-artifact 的版号同样需要有人维护
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: saturday
+      time: "09:00"
+      timezone: Asia/Shanghai
+    commit-message:
+      prefix: chore(ci)

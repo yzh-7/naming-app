@@ -20,6 +20,10 @@ const favSnap = (r: Result) => ({ name: r.name, book: r.book, title: r.title, li
 const num = (n: number) => n.toLocaleString('en-US');
 type FavSort = 'recent' | 'score' | 'strokes' | 'popular';
 
+// 导入的体积上限：8 MiB。实测本应用最大的一份导出（全量候选 JSON，1,525 条）是 618,163 B（0.59 MiB），
+// 收藏/拉黑/设置那份更小；上限只用来在 JSON.parse 之前把几十兆的文件挡住，不去解析它。
+const MAX_IMPORT_BYTES = 8 * 1024 * 1024;
+
 const FAV_SORTS: { v: FavSort; label: string }[] = [
   { v: 'recent', label: '最近收藏' },
   { v: 'score', label: '分数高→低' },
@@ -196,11 +200,23 @@ export default function App() {
     setNotice(`已导出候选 ${all.length} 条（当前筛选全量，不只这一屏）`);
   };
   const doImportFile = async (file: File) => {
+    // 先看体积再读内容：不先挡住的话，一个几十兆的文件会先进内存再交给 JSON.parse
+    if (file.size > MAX_IMPORT_BYTES) {
+      setNotice(`导入失败：这个文件 ${(file.size / 1048576).toFixed(1)} MiB，超过 ${MAX_IMPORT_BYTES / 1048576} MiB 的上限。本应用自己导出的一份最大的（全量候选）是 0.6 MiB。`);
+      return;
+    }
     let text: string;
     try {
       text = await file.text();
     } catch {
       setNotice('导入失败：这个文件读不出来（可能被浏览器拦下，或选完就被移走了）。请重新选一次。');
+      return;
+    }
+    // File.size 只是选文件那一刻的报告值（选完被改过、或特殊文件系统报 0 都会漏过上面那道闸），
+    // 读出来之后按实际字节再判一次
+    const bytes = new TextEncoder().encode(text).length;
+    if (bytes > MAX_IMPORT_BYTES) {
+      setNotice(`导入失败：这个文件实际 ${(bytes / 1048576).toFixed(1)} MiB，超过 ${MAX_IMPORT_BYTES / 1048576} MiB 的上限。`);
       return;
     }
     const res = parseState(text);

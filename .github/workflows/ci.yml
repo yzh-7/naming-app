@@ -5,6 +5,20 @@ on:
     branches: [main, master]
   pull_request:
 
+# 同一个分支上只有最后一次有意义：旧的排队作业直接取消，不然一次连推三次就要跑九遍门禁。
+# 但 main 上的每一次推送都会另外触发 Pages 发布，所以 main 上的 CI 不取消：
+# 取消后那个提交就留下「Pages 已发布、CI 没有结论」的状态，看历史的人分不出它过没过门禁
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+# 卡住的作业最多占 20 分钟，超时即失败，不占着 runner 等死
+timeout-minutes: 20
+
+# CI 只需要读代码，不给写权限（最小权限；Pages 发布另有一个 workflow 带 pages 权限）
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -18,6 +32,9 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
+      # 供应链门禁：high/critical 直接红（moderate 只报，不拦——dev 依赖的 moderate 常常只能等上游）
+      - name: 依赖漏洞门禁（npm audit --audit-level=high）
+        run: npm audit --audit-level=high
       - name: 构建数据 + 门禁 + 类型检查 + lint + 测试 + 构建 + 体积门禁
         run: npm run build
       - name: 单文件版构建 + 体积门禁（产物 dist-single/ 不发布，只为让那条体积口径真的是门禁）

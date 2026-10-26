@@ -169,6 +169,20 @@ describe('App 集成冒烟', () => {
     expect(screen.getByRole('link', { name: /收藏 1/ })).toBeInTheDocument();
   });
 
+  it('导入文件超过 8 MiB：直接拒绝并说明上限，不把文件读进内存', async () => {
+    const { container } = render(<App />);
+    const file = new File(['{}'], 'huge.json', { type: 'application/json' });
+    Object.defineProperty(file, 'size', { value: 9 * 1024 * 1024 }); // 内容很小，只把 size 报成 9 MiB
+    let readCalled = false;
+    (file as unknown as { text: () => Promise<string> }).text = () => { readCalled = true; return Promise.resolve('{}'); };
+    const input = container.querySelector('input[type=file]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+    expect(await screen.findByText(/超过 8 MiB 的上限/)).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '导入方式' })).not.toBeInTheDocument();
+    await Promise.resolve();
+    expect(readCalled).toBe(false);
+  });
+
   it('篇名筛选：空态告诉你怎么退出，「不限篇」回到全部', () => {
     render(<App />);
     fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });

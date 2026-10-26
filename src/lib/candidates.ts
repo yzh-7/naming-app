@@ -35,8 +35,12 @@ export const candidatesJson = (results: Result[]) => JSON.stringify({
 
 export const CSV_HEADER = ['全名', '名字', '读音', '分数', '典籍', '篇名', '作者', '原句', '出处今译', '总笔画', '用字常见度', '性别风格'];
 
+// 单元格转义。除了 CSV 本身的引号/逗号规则，还要防 Excel/WPS 的公式执行：
+// 以 = + - @ 打头的文本（备注、分组是手打的，可能这样打头）会被当成公式跑一遍。
+// 前导单引号是 Excel 认的「这一格整段按文本算」标记，公式不执行，显示时也不会带出这个引号。
 const esc = (v: string | number) => {
-  const s = String(v).replace(/[\r\n]+/g, ' ');
+  const raw = String(v).replace(/[\r\n]+/g, ' ');
+  const s = typeof v === 'string' && /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
   return /[",]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 

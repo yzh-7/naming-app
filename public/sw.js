@@ -59,6 +59,10 @@ self.addEventListener('message', (e) => {
   if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
+// 资源离线又没缓存时给一个明确的 504：不让请求挂在那里，也不把这个响应写进缓存（put 只在 fetch 成功分支里调用）
+const offlineAsset = () =>
+  new Response('offline', { status: 504, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
@@ -76,7 +80,9 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(fetch(req).then(put).catch(() => caches.match(req).then((hit) => hit || caches.match('./index.html'))));
     return;
   }
+  // 资源请求在离线且本地没有缓存时，不能退回 index.html：那等于把一段 HTML 当作 .js/.css 交给浏览器，
+  // 换来的是「脚本语法错误」这种看不懂的坏法。这里直接给 504，让资源干净地失败，页面自己的离线提示负责说话。
   e.respondWith(
-    caches.match(req).then((hit) => hit || fetch(req).then(put).catch(() => caches.match('./index.html'))),
+    caches.match(req).then((hit) => hit || fetch(req).then(put).catch(() => offlineAsset())),
   );
 });
