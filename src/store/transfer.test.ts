@@ -6,34 +6,76 @@ import { BOOK_ORDER, type Opts } from '../engine/types';
 const baseOpts = (): Opts => sanitizeOpts({});
 
 describe('导入解析', () => {
-  it('导出→解析 往返一致', () => {
-    const fav: FavRecord[] = [{ id: 'x', note: '喜欢', group: '女', ts: 1 }];
+  it('导出→解析 往返一致（含收藏里的名字快照）', () => {
+    const fav: FavRecord[] = [{ id: 'x', note: '喜欢', group: '女', ts: 1, name: '清婉', book: 'shijing', title: '野有死麕', line: '野有死麕，白茅包之' }];
     const st = buildState({ surname: '苏', reading: 1, opts: baseOpts(), favorites: fav, blocklist: ['y'] });
-    const back = parseState(serialize(st));
-    expect(back).not.toBeNull();
-    expect(back!.surname).toBe('苏');
-    expect(back!.reading).toBe(1);
-    expect(back!.favorites[0].note).toBe('喜欢');
-    expect(back!.blocklist).toEqual(['y']);
+    const res = parseState(serialize(st));
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.state.surname).toBe('苏');
+    expect(res.state.reading).toBe(1);
+    expect(res.state.favorites[0]).toEqual(fav[0]);
+    expect(res.state.blocklist).toEqual(['y']);
   });
-  it('非本应用的文件返回 null，不抛异常', () => {
-    expect(parseState('not json')).toBeNull();
-    expect(parseState('{"foo":1}')).toBeNull();
-    expect(parseState('[1,2,3]')).toBeNull();
+  it('失败分三种：读不出 JSON / 不是本应用的文件 / 没有可导入的东西', () => {
+    expect(parseState('not json')).toEqual({ ok: false, error: 'json' });
+    expect(parseState('[1,2,3]')).toEqual({ ok: false, error: 'json' });
+    expect(parseState('null')).toEqual({ ok: false, error: 'json' });
+    expect(parseState('{"foo":1}')).toEqual({ ok: false, error: 'foreign' });
+    expect(parseState('{"app":"other","favorites":[{"id":"x"}]}')).toEqual({ ok: false, error: 'foreign' });
+    expect(parseState('{"app":"naming-app","favorites":[]}')).toEqual({ ok: false, error: 'empty' });
+    // 只有设置也算有东西可导入
+    expect(parseState('{"surname":"苏"}').ok).toBe(true);
+  });
+  it('收藏逐条消毒：旧格式、超长字段、未知典籍、坏时间戳都被收敛', () => {
+    const raw = {
+      app: 'naming-app',
+      favorites: [
+        'bare',
+        { id: 'x', note: '长'.repeat(300), group: '组'.repeat(60), name: '名'.repeat(40), title: '篇'.repeat(50), line: '句'.repeat(300) },
+        { id: 'x', note: '重复 id 应被丢掉' },
+        { id: 'y', book: 'baidu' as never, ts: 'not-number' as never },
+        { id: '' },
+        { id: 42 },
+        null,
+      ],
+      blocklist: ['a', 'a', '', 7 as never, 'b'.repeat(200)],
+    };
+    const res = parseState(JSON.stringify(raw));
+    if (!res.ok) throw new Error('should be ok');
+    expect(res.state.favorites.map((f) => f.id)).toEqual(['bare', 'x', 'y']);
+    expect(res.state.favorites[0]).toEqual({ id: 'bare', ts: 0 });
+    const x = res.state.favorites[1];
+    expect(x.note).toHaveLength(120);
+    expect(x.group).toHaveLength(24);
+    expect(x.name).toHaveLength(8);
+    expect(x.title).toHaveLength(30);
+    expect(x.line).toHaveLength(120);
+    expect(res.state.favorites[2]).toEqual({ id: 'y', ts: 3 });
+    expect(res.state.favorites[2].book).toBeUndefined();
+    expect(res.state.blocklist).toEqual(['a', 'b'.repeat(64)]);
+  });
+  it('条目上限：超过 5000 条的部分不接', () => {
+    const many = Array.from({ length: 5200 }, (_, i) => ({ id: `id${i}` }));
+    const res = parseState(JSON.stringify({ app: 'naming-app', favorites: many }));
+    if (!res.ok) throw new Error('should be ok');
+    expect(res.state.favorites).toHaveLength(5000);
   });
   it('字段缺失/越界被收敛到默认值', () => {
-    const st = parseState('{"opts":{"gender":"zzz","count":9999,"length":3,"books":{"shijing":false}}}');
-    expect(st).not.toBeNull();
-    expect(st!.opts.gender).toBe('any');
-    expect(st!.opts.count).toBe(12);
-    expect(st!.opts.length).toBe(2);
-    expect(st!.opts.books.shijing).toBe(false);
-    expect(st!.surname).toBe('');
+    const res = parseState('{"opts":{"gender":"zzz","count":9999,"length":3,"books":{"shijing":false}}}');
+    if (!res.ok) throw new Error('should be ok');
+    expect(res.state.opts.gender).toBe('any');
+    expect(res.state.opts.count).toBe(12);
+    expect(res.state.opts.length).toBe(2);
+    expect(res.state.opts.books.shijing).toBe(false);
+    expect(res.state.surname).toBe('');
   });
   it('姓氏只保留汉字', () => {
-    expect(parseState('{"opts":{},"surname":"苏A1"}')!.surname).toBe('苏');
+    const res = parseState('{"opts":{},"surname":"苏A1"}');
+    if (!res.ok) throw new Error('should be ok');
+    expect(res.state.surname).toBe('苏');
   });
-  it('sanitizeOpts：笔画越界归 0，常见度只认档位，布尔项强制转布尔', () => {
+  it('sanitizeOpts：笔画越界归 0，常见度只认档位，布尔项强制转布尔，篇名截到 30 字', () => {
     expect(sanitizeOpts({ strokeMax: -3 }).strokeMax).toBe(0);
     expect(sanitizeOpts({ strokeMax: 999 }).strokeMax).toBe(0);
     expect(sanitizeOpts({ strokeMax: 20 }).strokeMax).toBe(20);
@@ -41,6 +83,8 @@ describe('导入解析', () => {
     expect(sanitizeOpts({ popFloor: 500 }).popFloor).toBe(500);
     expect(sanitizeOpts({ noMonotone: 'yes' }).noMonotone).toBe(true);
     expect(sanitizeOpts({ noMonotone: 0 }).noMonotone).toBe(false);
+    expect(sanitizeOpts({ title: '篇'.repeat(50) }).title).toHaveLength(30);
+    expect(sanitizeOpts({ search: 'x'.repeat(99) }).search).toHaveLength(40);
   });
 });
 
