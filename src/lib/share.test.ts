@@ -7,7 +7,7 @@ import { BOOK_LABEL, BOOK_ORDER, type Opts } from '../engine/types';
 const opts: Opts = {
   gender: 'any', genderWeak: false, length: 2,
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
-  redupOnly: false, exclude: [], count: 12, search: '', sort: 'score',
+  redupOnly: false, exclude: [], count: 12, search: '', title: '', sort: 'score',
   strokeMax: 0, noMonotone: false, popFloor: 0, mustChar: '', mustPos: 'any',
 };
 const item = POOL.find((p) => [...p.name].every((c) => glossOf(c)))!;
@@ -68,9 +68,10 @@ describe('分享卡', () => {
     };
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx as unknown as CanvasRenderingContext2D);
     vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((cb: BlobCallback) => cb(new Blob(['x'], { type: 'image/png' })));
-    const blob = await renderShareCard(r);
+    const { blob, qr } = await renderShareCard(r);
     expect(blob).toBeInstanceOf(Blob);
     expect(blob.type).toBe('image/png');
+    expect(qr).toBe(false);
     expect(ctx.fillText).toHaveBeenCalled();
     // 主名必被画到卡片上
     expect(ctx.fillText.mock.calls.some((c) => c[0] === r.full)).toBe(true);
@@ -94,7 +95,8 @@ describe('分享卡', () => {
   it('给了 url 时卡片加高并在底部画二维码（uqr 本地生成）', async () => {
     const ctx = ctxStub();
     const getCanvas = mockCanvas(ctx);
-    await renderShareCard(r, undefined, 'https://example.com/?s=苏');
+    const res = await renderShareCard(r, undefined, 'https://example.com/?s=苏');
+    expect(res.qr).toBe(true);
     expect(getCanvas().height).toBe(1560);
     expect(ctx.fillText.mock.calls.some((c) => c[0] === '扫码打开')).toBe(true);
     // 二维码模块会被逐格 fillRect
@@ -106,6 +108,17 @@ describe('分享卡', () => {
     const getCanvas = mockCanvas(ctx);
     await renderShareCard(r);
     expect(getCanvas().height).toBe(1440);
+    expect(ctx.fillText.mock.calls.some((c) => c[0] === '扫码打开')).toBe(false);
+  });
+
+  it('链接长到画不出二维码时返回 qr:false 并画出说明', async () => {
+    const ctx = ctxStub();
+    mockCanvas(ctx);
+    const huge = 'https://example.com/?s=' + 'x'.repeat(4000);
+    const { blob, qr } = await renderShareCard(r, undefined, huge);
+    expect(blob).toBeInstanceOf(Blob);
+    expect(qr).toBe(false);
+    expect(ctx.fillText.mock.calls.some((c) => String(c[0]).includes('二维码没画出来'))).toBe(true);
     expect(ctx.fillText.mock.calls.some((c) => c[0] === '扫码打开')).toBe(false);
   });
 
@@ -125,7 +138,7 @@ describe('分享卡', () => {
     expect(s).toContain('苏龙凤');
     expect(s).toContain('未见此搭配');
     expect(s).not.toContain('出处：《');
-    const blob = await renderShareCard(composed, undefined, 'https://example.com/');
+    const { blob } = await renderShareCard(composed, undefined, 'https://example.com/');
     expect(blob).toBeInstanceOf(Blob);
     expect(ctx.fillText.mock.calls.some((c) => String(c[0]).includes('未见这个搭配'))).toBe(true);
     expect(ctx.fillText.mock.calls.some((c) => String(c[0]).startsWith('今译'))).toBe(false);
@@ -139,6 +152,15 @@ describe('分享卡', () => {
     expect(ctx.fillText.mock.calls.filter((c) => c[0] === r.full).length).toBeGreaterThanOrEqual(2);
     expect(ctx.fillText.mock.calls.some((c) => c[0] === '苏 · 备选名单')).toBe(true);
     expect(ctx.fillText.mock.calls.some((c) => String(c[0]).includes('喜欢'))).toBe(true);
+  });
+
+  it('名单图带链接时在底部留二维码区并标注', async () => {
+    const ctx = ctxStub();
+    const getCanvas = mockCanvas(ctx);
+    const res = await renderListCard([{ r }], { title: '苏 · 备选名单', url: 'https://example.com/?s=苏' });
+    expect(res.qr).toBe(true);
+    expect(getCanvas().height).toBe(220 + 1 * 168 + 120 + 300);
+    expect(ctx.fillText.mock.calls.some((c) => String(c[0]).includes('扫码打开本站'))).toBe(true);
   });
 
   it('名单图最多画 40 条，超出时标题注明', async () => {

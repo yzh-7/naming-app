@@ -79,7 +79,9 @@ function drawQr(ctx: CanvasRenderingContext2D, url: string, x0: number, y0: numb
 
 // 分享卡片：羊皮纸竖版，含名字、读音、出处、原句、今译与合注；给了 url 就在底部附二维码（离线生成）。
 // 高度按原句/今译的实际折行数算，长句（九歌整段）不会压到下面的合注与二维码。
-export function renderShareCard(r: ShareName, appName = '取名 · 典籍取词', url?: string): Promise<Blob> {
+// 返回 qr：链接太长等原因导致二维码没画成时为 false，界面据此说明，不再一律声称「含二维码」。
+export type CardResult = { blob: Blob; qr: boolean };
+export function renderShareCard(r: ShareName, appName = '取名 · 典籍取词', url?: string): Promise<CardResult> {
   const W = 1080;
   const c = document.createElement('canvas');
   c.width = W;
@@ -157,28 +159,30 @@ export function renderShareCard(r: ShareName, appName = '取名 · 典籍取词'
   ctx.fillStyle = '#7a8699';
   ctx.fillText(note, cx, H - (url ? 464 : 200));
 
+  let qrDrawn = false;
   if (url) {
     const qs = 200;
-    drawQr(ctx, url, cx - qs / 2, H - 430, qs);
+    qrDrawn = drawQr(ctx, url, cx - qs / 2, H - 430, qs);
     ctx.font = `400 22px ${SANS}`;
     ctx.fillStyle = '#7a8699';
-    ctx.fillText('扫码打开', cx, H - 190);
+    ctx.fillText(qrDrawn ? '扫码打开' : '（链接过长，二维码没画出来）', cx, H - 190);
   }
 
   ctx.font = `400 26px ${SANS}`;
   ctx.fillStyle = '#7a8699';
   ctx.fillText('典籍取词 · 起点落音步、出处可核对 · 完全离线', cx, H - 150);
 
-  return new Promise((resolve) => c.toBlob((b) => resolve(b!), 'image/png'));
+  return new Promise((resolve) => c.toBlob((b) => resolve({ blob: b!, qr: qrDrawn }), 'image/png'));
 }
 
 // 收藏名单图：竖版长图，一次导出多个名字（含读音/分数/出处/备注），方便整屏分享或打印
-export function renderListCard(entries: { r: Result; note?: string }[], opt: { title?: string } = {}): Promise<Blob> {
+export function renderListCard(entries: { r: Result; note?: string }[], opt: { title?: string; url?: string } = {}): Promise<CardResult> {
   const W = 1080;
   const ROW = 168;
   const HEAD = 220;
+  const QR = 300;
   const list = entries.slice(0, 40);
-  const H = HEAD + Math.max(list.length, 1) * ROW + 120;
+  const H = HEAD + Math.max(list.length, 1) * ROW + 120 + (opt.url ? QR : 0);
   const c = document.createElement('canvas');
   c.width = W;
   c.height = H;
@@ -226,7 +230,18 @@ export function renderListCard(entries: { r: Result; note?: string }[], opt: { t
     y += ROW;
   });
 
-  return new Promise((resolve) => c.toBlob((b) => resolve(b!), 'image/png'));
+  // 名单图附本站链接：拿到图的人可以扫开同一个站；链接里不含收藏与拉黑
+  let qrDrawn = false;
+  if (opt.url) {
+    const qs = 200;
+    qrDrawn = drawQr(ctx, opt.url, W / 2 - qs / 2, H - QR + 20, qs);
+    ctx.textAlign = 'center';
+    ctx.font = `400 22px ${SANS}`;
+    ctx.fillStyle = '#7a8699';
+    ctx.fillText(qrDrawn ? '扫码打开本站' : '（链接过长，二维码没画出来）', W / 2, H - 78);
+  }
+
+  return new Promise((resolve) => c.toBlob((b) => resolve({ blob: b!, qr: qrDrawn }), 'image/png'));
 }
 
 function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines: number): string[] {
