@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
   charFacts, cleanSurname, composeName, findCombo, findItem, L0_CHARS, pairCandidates,
   isKnownSurname, readings, scoreItem, shapeTags, surnameReads,
@@ -223,13 +223,16 @@ export default function Compose({ surname, setSurname, reading, setReading, opts
 
         {facts.length > 0 && (
           <dl className="meta-row">
-            {facts.map((f) => (
-              <><dt key={f.ch} className="font-serif text-body text-ink">{f.ch}</dt>
+            {facts.map((f, i) => (
+              // 同一个字可以填在两格（多多），键要带格位才不会撞
+              <Fragment key={`${f.ch}-${i}`}>
+                <dt className="font-serif text-body text-ink">{f.ch}</dt>
                 <dd>
                   {f.gloss ?? '字义留白'}
                   {f.st ? ` · ${f.st}画` : ''}{f.sx ? ` · ${f.sx}` : ''} · <span className="tabular-nums">{f.band}</span>
                   {!f.l0 && <span className="ml-1 text-warn">不在名用字表</span>}
-                </dd></>
+                </dd>
+              </Fragment>
             ))}
           </dl>
         )}
