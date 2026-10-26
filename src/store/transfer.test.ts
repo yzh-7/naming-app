@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildState, fromQuery, parseState, sanitizeOpts, serialize, toQuery } from './transfer';
-import type { FavRecord } from './local';
+import { buildState, fromQuery, parseState, serialize, toQuery } from './transfer';
+import { sanitizeOpts, type FavRecord } from './local';
 import { BOOK_ORDER, type Opts } from '../engine/types';
 
 const baseOpts = (): Opts => sanitizeOpts({});
@@ -75,16 +75,16 @@ describe('导入解析', () => {
     if (!res.ok) throw new Error('should be ok');
     expect(res.state.surname).toBe('苏');
   });
-  it('sanitizeOpts：笔画越界归 0，常见度只认档位，布尔项强制转布尔，篇名截到 30 字', () => {
-    expect(sanitizeOpts({ strokeMax: -3 }).strokeMax).toBe(0);
-    expect(sanitizeOpts({ strokeMax: 999 }).strokeMax).toBe(0);
-    expect(sanitizeOpts({ strokeMax: 20 }).strokeMax).toBe(20);
-    expect(sanitizeOpts({ popFloor: 123 }).popFloor).toBe(0);
-    expect(sanitizeOpts({ popFloor: 500 }).popFloor).toBe(500);
-    expect(sanitizeOpts({ noMonotone: 'yes' }).noMonotone).toBe(true);
-    expect(sanitizeOpts({ noMonotone: 0 }).noMonotone).toBe(false);
-    expect(sanitizeOpts({ title: '篇'.repeat(50) }).title).toHaveLength(30);
-    expect(sanitizeOpts({ search: 'x'.repeat(99) }).search).toHaveLength(40);
+  it('读音只认 0–9 的整数，其余回 0', () => {
+    const readingOf = (json: string) => {
+      const res = parseState(json);
+      if (!res.ok) throw new Error('should be ok');
+      return res.state.reading;
+    };
+    expect(readingOf('{"reading":2}')).toBe(2);
+    expect(readingOf('{"reading":"3"}')).toBe(3);
+    expect(readingOf('{"reading":99}')).toBe(0);
+    expect(readingOf('{"reading":"曾"}')).toBe(0);
   });
 });
 
@@ -118,12 +118,15 @@ describe('可分享链接', () => {
     expect(back.opts.noMonotone).toBe(true);
     expect(back.opts.popFloor).toBe(500);
   });
-  it('默认值不写进 URL；越界的 sm/pf 被忽略', () => {
+  it('默认值不写进 URL；链接里出现过的越界项回默认（不是忽略）', () => {
     expect(toQuery({ surname: '', reading: 0, opts: baseOpts() })).not.toContain('sm=');
-    const back = fromQuery('sm=0&pf=999&nm=0');
-    expect(back!.opts.strokeMax).toBeUndefined();
-    expect(back!.opts.popFloor).toBeUndefined();
-    expect(back!.opts.noMonotone).toBeUndefined();
+    const back = fromQuery('sm=0&pf=999&nm=0')!;
+    expect(back.opts.strokeMax).toBe(0);
+    expect(back.opts.popFloor).toBe(0);
+    expect(back.opts.noMonotone).toBe(false);
+    // 没出现的参数不进入返回值，界面因此保留本机值
+    expect('count' in back.opts).toBe(false);
+    expect('gender' in back.opts).toBe(false);
   });
   it('空查询串返回 null', () => {
     expect(fromQuery('')).toBeNull();
@@ -139,8 +142,55 @@ describe('可分享链接', () => {
     expect(sanitizeOpts({ mustChar: '清清' }).mustChar).toBe('');
     expect(sanitizeOpts({ mustChar: 'a清' }).mustChar).toBe('');
     expect(sanitizeOpts({ mustPos: 'middle' }).mustPos).toBe('any');
-    expect(fromQuery('mc=%E6%B8%85%E6%98%8E')!.opts.mustChar).toBeUndefined();
-    expect(fromQuery('mc=abc')!.opts.mustChar).toBeUndefined();
+    expect(fromQuery('mc=%E6%B8%85%E6%98%8E')!.opts.mustChar).toBe('');
+    expect(fromQuery('mc=abc')!.opts.mustChar).toBe('');
+  });
+  it('genderWeak（gw）进链接并可还原；性别不限时不写 gw', () => {
+    const o = { ...baseOpts(), gender: 'f' as const, genderWeak: true };
+    const q = toQuery({ surname: '苏', reading: 0, opts: o });
+    expect(q).toContain('gw=1');
+    const back = fromQuery(q)!;
+    expect(back.opts.genderWeak).toBe(true);
+    expect(back.opts.gender).toBe('f');
+    expect(toQuery({ surname: '', reading: 0, opts: { ...baseOpts(), genderWeak: true } })).not.toContain('gw=');
+    // 关掉 weak 的链接显式写 gw=0，不会把本机的开着的值留着
+    expect(fromQuery('g=f&gw=0')!.opts.genderWeak).toBe(false);
+  });
+  it('三条输入路径口径一致：同一份脏取值，本机存储 / 导入文件 / 链接给出同一个结果', () => {
+    const dirty = { gender: 'other', count: 601, length: 9, popFloor: 123, strokeMax: 999, noMonotone: 1, redupOnly: 1, search: 'x'.repeat(99), title: '篇'.repeat(50), mustChar: '清清', mustPos: 'middle', sort: 'name' };
+    const viaOpts = sanitizeOpts(dirty);
+    const viaFile = parseState(JSON.stringify({ opts: dirty }));
+    if (!viaFile.ok) throw new Error('should be ok');
+    expect(viaFile.state.opts).toEqual(viaOpts);
+    // 同一批取值写成链接参数：每一项消毒后的结果必须与上面相同
+    const viaUrl = fromQuery('g=other&n=601&len=9&pf=123&sm=999&o=name&mc=%E6%B8%85%E6%98%8E&mp=middle&t=' + encodeURIComponent('篇'.repeat(50)) + '&q=' + 'x'.repeat(99))!;
+    expect(viaUrl.opts.gender).toBe(viaOpts.gender);
+    expect(viaUrl.opts.count).toBe(viaOpts.count);
+    expect(viaUrl.opts.length).toBe(viaOpts.length);
+    expect(viaUrl.opts.popFloor).toBe(viaOpts.popFloor);
+    expect(viaUrl.opts.strokeMax).toBe(viaOpts.strokeMax);
+    expect(viaUrl.opts.sort).toBe(viaOpts.sort);
+    expect(viaUrl.opts.mustChar).toBe(viaOpts.mustChar);
+    expect(viaUrl.opts.mustPos).toBe(viaOpts.mustPos);
+    expect(viaUrl.opts.title).toBe(viaOpts.title);
+    expect(viaUrl.opts.search).toBe(viaOpts.search);
+    // 合法值经「写入 → 链接 → 读回」保持原样（链接只带非默认项，所以按项比对）
+    const clean = sanitizeOpts({ gender: 'm', count: 600, length: 1, popFloor: 2000, strokeMax: 64, noMonotone: true, sort: 'book', mustChar: '清', mustPos: 'first', title: '篇'.repeat(30), search: '云' });
+    const back = fromQuery(toQuery({ surname: '', reading: 0, opts: clean }))!;
+    const merged = { ...baseOpts(), ...back.opts };
+    expect(merged).toEqual(clean);
+    expect(viaOpts.count).toBe(12);
+    expect(viaOpts.length).toBe(2);
+    expect(viaOpts.popFloor).toBe(0);
+    expect(viaOpts.strokeMax).toBe(0);
+    expect(viaOpts.noMonotone).toBe(true);
+    expect(viaOpts.redupOnly).toBe(true);
+    expect(viaOpts.search).toHaveLength(40);
+    expect(viaOpts.title).toHaveLength(30);
+    expect(viaOpts.mustChar).toBe('');
+    expect(viaOpts.mustPos).toBe('any');
+    expect(viaOpts.sort).toBe('score');
+    expect(viaOpts.gender).toBe('any');
   });
   it('旧链接兼容：6 位典籍位解析不变，之后新增的书默认开', () => {
     const back = fromQuery('b=101011')!;

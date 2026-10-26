@@ -46,6 +46,10 @@ export type GenderTag = { side: GenderSide; strong: boolean; why: string };
 
 export type SortKey = 'score' | 'strokes' | 'popular' | 'book';
 
+// 姓氏只保留汉字、最多两字。界面输入、本机存储、导入文件、分享链接四条路径共用这一条规则；
+// 实时裁剪输入框的值会打断拼音输入法（yuan 还没上屏就被截成 yu），所以归一化只在这些边界上做。
+export const cleanSurname = (s: string) => s.replace(/[^一-鿿]/g, '').slice(0, 2);
+
 export type Opts = {
   gender: Gender;
   genderWeak: boolean;

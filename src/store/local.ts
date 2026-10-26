@@ -1,5 +1,5 @@
 import type { Book, Gender, Opts, SortKey } from '../engine/types';
-import { BOOK_ORDER } from '../engine/types';
+import { BOOK_ORDER, POP_FLOORS, cleanSurname } from '../engine/types';
 
 const SORTS: SortKey[] = ['score', 'strokes', 'popular', 'book'];
 
@@ -132,10 +132,18 @@ export const saveBlocklist = (list: string[]) => { writeList(K.block, list); ret
 export const addBlock = (id: string) => { const l = readList(K.block); if (!l.includes(id)) l.unshift(id); writeList(K.block, l); return l; };
 export const removeBlock = (id: string) => { writeList(K.block, readList(K.block).filter((x) => x !== id)); return readList(K.block); };
 
-export const loadSurname = () => readItem(K.surname) ?? '';
-export const saveSurname = (s: string) => writeItem(K.surname, s);
-export const loadReading = () => Number(readItem(K.reading) ?? '0');
-export const saveReading = (n: number) => writeItem(K.reading, String(n));
+export const READING_MAX = 9;
+// 读音序号只认 0–9 的整数：引擎只用第 0 个姓字的读音表，更大的序号没有意义。
+// 存储、导入、链接三条路径共用这一个判定（transfer.ts 从这里导入）。
+export function sanitizeReading(v: unknown): number | null {
+  const num = typeof v === 'number' ? v : typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : NaN;
+  return Number.isInteger(num) && num >= 0 && num <= READING_MAX ? num : null;
+}
+
+export const loadSurname = () => cleanSurname(readItem(K.surname) ?? '');
+export const saveSurname = (s: string) => writeItem(K.surname, cleanSurname(s));
+export const loadReading = () => sanitizeReading(readItem(K.reading)) ?? 0;
+export const saveReading = (n: number) => writeItem(K.reading, String(sanitizeReading(n) ?? 0));
 
 export function loadTheme(): Theme {
   const t = readItem(K.theme);
@@ -148,7 +156,8 @@ export const resolveDark = (t: Theme) => t === 'dark' || (t === 'system' && pref
 export const THEME_ORDER: Theme[] = ['light', 'dark', 'system'];
 export const THEME_LABEL: Record<Theme, string> = { light: '浅色', dark: '深色', system: '跟随系统' };
 
-const POP_FLOORS = [0, 100, 500, 2000];
+// 常见度门槛只认界面那几个档（档位表在 engine/types.ts）
+const POP_VALUES = POP_FLOORS.map((p) => p.v);
 
 const DEFAULT: Opts = {
   gender: 'any', genderWeak: false, length: 2,
@@ -159,37 +168,43 @@ const DEFAULT: Opts = {
 };
 export { DEFAULT as DEFAULT_OPTS };
 
-// 越界＝不可信，整项回默认（不是夹到边界）；枚举值只认白名单
+// 越界＝不可信，整项回默认（不是夹到边界）；枚举值只认白名单。
+// 本机存储、导入文件、分享链接三条输入路径共用这一个函数（transfer.ts 从这里导入）。
+const GENDERS: Gender[] = ['any', 'f', 'm'];
+const MUST_POS = ['any', 'first', 'last'] as const;
 const intIn = (n: unknown, min: number, max: number) => typeof n === 'number' && Number.isInteger(n) && n >= min && n <= max ? n : undefined;
 const pickOne = <T extends string>(v: unknown, candidates: readonly T[]): T | undefined =>
   typeof v === 'string' && (candidates as readonly string[]).includes(v) ? (v as T) : undefined;
 
+export function sanitizeOpts(raw: unknown): Opts {
+  const o = (raw && typeof raw === 'object' ? raw : {}) as Partial<Opts> & { books?: Partial<Opts['books']> };
+  const books: Record<Book, boolean> = {} as Record<Book, boolean>;
+  for (const b of BOOK_ORDER) books[b] = typeof o.books?.[b] === 'boolean' ? o.books[b] as boolean : DEFAULT.books[b];
+  // 长度只认 1（其余取值一律回 2）；叠词开关只在双名模式下有效
+  const length = o.length === 1 ? 1 : 2;
+  const pop = intIn(o.popFloor, 0, 2000);
+  return {
+    ...DEFAULT,
+    gender: pickOne<Gender>(o.gender, GENDERS) ?? DEFAULT.gender,
+    genderWeak: !!o.genderWeak,
+    length,
+    redupOnly: length === 2 && !!o.redupOnly,
+    books,
+    count: intIn(o.count, 0, 600) ?? DEFAULT.count,
+    search: typeof o.search === 'string' ? o.search.slice(0, SEARCH_MAX) : DEFAULT.search,
+    title: typeof o.title === 'string' ? o.title.slice(0, TITLE_MAX) : DEFAULT.title,
+    sort: pickOne(o.sort, SORTS) ?? DEFAULT.sort,
+    strokeMax: intIn(o.strokeMax, 0, 64) ?? DEFAULT.strokeMax,
+    noMonotone: !!o.noMonotone,
+    popFloor: pop !== undefined && POP_VALUES.includes(pop) ? pop : DEFAULT.popFloor,
+    mustChar: typeof o.mustChar === 'string' && /^[一-鿿]$/.test(o.mustChar) ? o.mustChar : DEFAULT.mustChar,
+    mustPos: pickOne(o.mustPos, MUST_POS) ?? DEFAULT.mustPos,
+    exclude: [],
+  };
+}
+
 export function loadOpts(): Opts {
-  try {
-    const raw = readRaw(K.opts) as Partial<Opts> & { books?: Partial<Opts['books']> };
-    // 书籍开关：只接受 boolean
-    const books: Record<Book, boolean> = {} as Record<Book, boolean>;
-    for (const b of BOOK_ORDER) books[b] = typeof raw.books?.[b] === 'boolean' ? raw.books[b] as boolean : DEFAULT.books[b];
-    // 长度：只接受 1 或 2
-    const length = raw.length === 1 ? 1 : 2;
-    return {
-      ...DEFAULT,
-      gender: pickOne<Gender>(raw.gender, ['any', 'f', 'm']) ?? DEFAULT.gender,
-      genderWeak: !!raw.genderWeak,
-      length,
-      redupOnly: length === 2 && !!raw.redupOnly,
-      books,
-      count: intIn(raw.count, 0, 600) ?? DEFAULT.count,
-      search: typeof raw.search === 'string' ? raw.search.slice(0, SEARCH_MAX) : DEFAULT.search,
-      title: typeof raw.title === 'string' ? raw.title.slice(0, TITLE_MAX) : DEFAULT.title,
-      sort: pickOne(raw.sort, SORTS) ?? DEFAULT.sort,
-      strokeMax: intIn(raw.strokeMax, 0, 64) ?? DEFAULT.strokeMax,
-      noMonotone: !!raw.noMonotone,
-      popFloor: POP_FLOORS.includes(Number(raw.popFloor)) ? Number(raw.popFloor) : DEFAULT.popFloor,
-      mustChar: typeof raw.mustChar === 'string' && /^[一-鿿]$/.test(raw.mustChar) ? raw.mustChar : DEFAULT.mustChar,
-      mustPos: pickOne(raw.mustPos, ['any', 'first', 'last'] as const) ?? DEFAULT.mustPos,
-    };
-  } catch { return DEFAULT; }
+  try { return sanitizeOpts(readRaw(K.opts)); } catch { return DEFAULT; }
 }
 export const saveOpts = (o: Opts) => writeItem(K.opts, JSON.stringify({ gender: o.gender, genderWeak: o.genderWeak, length: o.length, redupOnly: o.redupOnly, books: o.books, count: o.count, search: o.search.slice(0, SEARCH_MAX), sort: o.sort, strokeMax: o.strokeMax, noMonotone: o.noMonotone, popFloor: o.popFloor, mustChar: o.mustChar, mustPos: o.mustPos, title: (o.title ?? '').slice(0, TITLE_MAX) }));
 

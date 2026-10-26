@@ -1,11 +1,11 @@
 import { CHARS, GENDER_FEMALE, GENDER_MALE, GLOSS, HOMO_FULL, HOMO_INIT, LINE_GLOSS, POOL, RADICAL, RISK_HIGH, SINGLES } from './data';
 import type { Book, Delta, GenderSide, GenderTag, Named, Opts, PoolItem, Result, SortKey } from './types';
-import { BOOK_ORDER } from './types';
+import { BOOK_ORDER, cleanSurname } from './types';
 
 const BILABIAL = new Set(['b', 'p', 'm']);
 
-// 实时裁剪输入框的值会打断拼音输入法（yuan 还没上屏就被截成 yu），归一化只在引擎侧做
-export const cleanSurname = (s: string) => s.replace(/[^一-鿿]/g, '').slice(0, 2);
+// 姓氏清洗规则住在 types.ts（界面、存储、导入、链接四条路径共用），这里转出供界面沿用
+export { cleanSurname };
 
 export function readings(ch: string) {
   const info = CHARS[ch];
