@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { glossOf, lineGlossOf, nicknames, polyphoneTags, popularity, radicalTags, sameSoundPeers, shapeTags, sameTitleCount } from '../engine/name';
+import { glossOf, lineGlossOf, nicknames, polyphoneTags, popularity, radicalTags, sameSoundPeers, shapeTags } from '../engine/name';
 import { BOOK_LABEL, type Book, type Result } from '../engine/types';
 
 const WINDOW_MAX = 28;
@@ -88,11 +88,14 @@ export function Source({ r }: { r: SourceRef }) {
   );
 }
 
-export default function NameCard({ r, fav, blocked, onFav, onBlock, onShare, onCopy, onTitle, onSameSound }: {
+export default function NameCard({ r, fav, blocked, onFav, onBlock, onShare, onCopy, onTitle, onSameSound, sameTitle }: {
   r: Result; fav: boolean; blocked: boolean; onFav: () => void; onBlock: () => void;
   onShare?: () => void; onCopy?: () => void;
   // 按篇看：把筛选收窄到这一篇；按音看：把搜索换成这个名字的拼音（去声调）
   onTitle?: () => void; onSameSound?: () => void;
+  // 这一篇在当前筛选后还剩多少条（含自己）。由调用方按候选池算好传进来：
+  // 按全语料算的话，设了禁用字、性别或典籍之后按钮写 5 条、点进去只有 2 条
+  sameTitle?: number;
 }) {
   const marked = r.flags.filter((f) => !f.startsWith('同形'));
   const shadow = r.flags.filter((f) => f.startsWith('同形'));
@@ -104,7 +107,6 @@ export default function NameCard({ r, fav, blocked, onFav, onBlock, onShare, onC
   const pop = useMemo(() => popularity(r.name), [r.name]);
   const nns = nicknames(r.name);
   const peers = useMemo(() => sameSoundPeers(r.name, 4), [r.name]);
-  const sameTitle = sameTitleCount(r);
 
   // 性别标签：偏女=暖色、偏男=冷色（浅色/深色各有一套对比度达标的取值）
   const gBadge = useMemo(() => {
@@ -235,7 +237,7 @@ export default function NameCard({ r, fav, blocked, onFav, onBlock, onShare, onC
         <button onClick={onBlock} aria-pressed={blocked} title="拉黑后这个名字不再出现在候选与「搭配」里" className={`btn ${blocked ? 'btn-danger' : ''}`}>
           {blocked ? '已拉黑' : '拉黑'}
         </button>
-        {onTitle && sameTitle > 1 && (
+        {onTitle && sameTitle !== undefined && sameTitle > 1 && (
           <button onClick={onTitle} className="btn btn-quiet" title={`《${r.title}》里还有 ${sameTitle - 1} 条候选`}>同篇还有 {sameTitle - 1} 条</button>
         )}
         {onCopy && <button onClick={onCopy} className="btn btn-quiet">复制信息</button>}

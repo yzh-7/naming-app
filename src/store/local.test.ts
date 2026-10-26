@@ -129,6 +129,16 @@ describe('loadOpts：默认值与越界收敛', () => {
     localStorage.setItem(K.opts, JSON.stringify({ search: 7 }));
     expect(loadOpts().search).toBe('');
   });
+  it('禁用字：saveOpts → loadOpts 往返保持；脏值去重、剔非汉字、裁到 8 个字', () => {
+    saveOpts({ ...DEFAULT_OPTS, avoidChars: '月风' });
+    expect(loadOpts().avoidChars).toBe('月风');
+    localStorage.setItem(K.opts, JSON.stringify({ avoidChars: '月a月风、；' }));
+    expect(loadOpts().avoidChars).toBe('月风');
+    localStorage.setItem(K.opts, JSON.stringify({ avoidChars: '一二三四五六七八九十' }));
+    expect(loadOpts().avoidChars).toBe('一二三四五六七八');
+    localStorage.setItem(K.opts, JSON.stringify({ avoidChars: 7 }));
+    expect(loadOpts().avoidChars).toBe('');
+  });
   it('单名层强制关掉叠字（否则开关藏起来却清空池子）', () => {
     localStorage.setItem(K.opts, JSON.stringify({ length: 1, redupOnly: true }));
     expect(loadOpts().redupOnly).toBe(false);

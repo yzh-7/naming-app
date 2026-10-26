@@ -145,6 +145,21 @@ describe('可分享链接', () => {
     expect(fromQuery('mc=%E6%B8%85%E6%98%8E')!.opts.mustChar).toBe('');
     expect(fromQuery('mc=abc')!.opts.mustChar).toBe('');
   });
+  it('禁用字 ac 往返一致；不限时不写进链接', () => {
+    const o = { ...baseOpts(), avoidChars: '月风' };
+    const q = toQuery({ surname: '苏', reading: 0, opts: o });
+    expect(q).toContain('ac=' + encodeURIComponent('月风'));
+    const back = fromQuery(q)!;
+    expect(back.opts.avoidChars).toBe('月风');
+    expect(toQuery({ surname: '', reading: 0, opts: baseOpts() })).not.toContain('ac=');
+  });
+  it('非法禁用字按规则裁剪：非汉字剔除、重复去重、超过 8 个字截到 8 个', () => {
+    expect(sanitizeOpts({ avoidChars: '月a月' }).avoidChars).toBe('月');
+    expect(sanitizeOpts({ avoidChars: '一二三四五六七八九十' }).avoidChars).toBe('一二三四五六七八');
+    expect(sanitizeOpts({ avoidChars: 42 }).avoidChars).toBe('');
+    expect(fromQuery('ac=' + encodeURIComponent('月a月'))!.opts.avoidChars).toBe('月');
+    expect(fromQuery('ac=')!.opts.avoidChars).toBe('');
+  });
   it('genderWeak（gw）进链接并可还原；性别不限时不写 gw', () => {
     const o = { ...baseOpts(), gender: 'f' as const, genderWeak: true };
     const q = toQuery({ surname: '苏', reading: 0, opts: o });
@@ -157,13 +172,13 @@ describe('可分享链接', () => {
     expect(fromQuery('g=f&gw=0')!.opts.genderWeak).toBe(false);
   });
   it('三条输入路径口径一致：同一份脏取值，本机存储 / 导入文件 / 链接给出同一个结果', () => {
-    const dirty = { gender: 'other', count: 601, length: 9, popFloor: 123, strokeMax: 999, noMonotone: 1, redupOnly: 1, search: 'x'.repeat(99), title: '篇'.repeat(50), mustChar: '清清', mustPos: 'middle', sort: 'name' };
+    const dirty = { gender: 'other', count: 601, length: 9, popFloor: 123, strokeMax: 999, noMonotone: 1, redupOnly: 1, search: 'x'.repeat(99), title: '篇'.repeat(50), mustChar: '清清', mustPos: 'middle', avoidChars: '月a月', sort: 'name' };
     const viaOpts = sanitizeOpts(dirty);
     const viaFile = parseState(JSON.stringify({ opts: dirty }));
     if (!viaFile.ok) throw new Error('should be ok');
     expect(viaFile.state.opts).toEqual(viaOpts);
     // 同一批取值写成链接参数：每一项消毒后的结果必须与上面相同
-    const viaUrl = fromQuery('g=other&n=601&len=9&pf=123&sm=999&o=name&mc=%E6%B8%85%E6%98%8E&mp=middle&t=' + encodeURIComponent('篇'.repeat(50)) + '&q=' + 'x'.repeat(99))!;
+    const viaUrl = fromQuery('g=other&n=601&len=9&pf=123&sm=999&o=name&mc=%E6%B8%85%E6%98%8E&mp=middle&ac=' + encodeURIComponent('月a月') + '&t=' + encodeURIComponent('篇'.repeat(50)) + '&q=' + 'x'.repeat(99))!;
     expect(viaUrl.opts.gender).toBe(viaOpts.gender);
     expect(viaUrl.opts.count).toBe(viaOpts.count);
     expect(viaUrl.opts.length).toBe(viaOpts.length);
@@ -172,10 +187,11 @@ describe('可分享链接', () => {
     expect(viaUrl.opts.sort).toBe(viaOpts.sort);
     expect(viaUrl.opts.mustChar).toBe(viaOpts.mustChar);
     expect(viaUrl.opts.mustPos).toBe(viaOpts.mustPos);
+    expect(viaUrl.opts.avoidChars).toBe(viaOpts.avoidChars);
     expect(viaUrl.opts.title).toBe(viaOpts.title);
     expect(viaUrl.opts.search).toBe(viaOpts.search);
     // 合法值经「写入 → 链接 → 读回」保持原样（链接只带非默认项，所以按项比对）
-    const clean = sanitizeOpts({ gender: 'm', count: 600, length: 1, popFloor: 2000, strokeMax: 64, noMonotone: true, sort: 'book', mustChar: '清', mustPos: 'first', title: '篇'.repeat(30), search: '云' });
+    const clean = sanitizeOpts({ gender: 'm', count: 600, length: 1, popFloor: 2000, strokeMax: 64, noMonotone: true, sort: 'book', mustChar: '清', mustPos: 'first', avoidChars: '月风', title: '篇'.repeat(30), search: '云' });
     const back = fromQuery(toQuery({ surname: '', reading: 0, opts: clean }))!;
     const merged = { ...baseOpts(), ...back.opts };
     expect(merged).toEqual(clean);
@@ -189,6 +205,7 @@ describe('可分享链接', () => {
     expect(viaOpts.title).toHaveLength(30);
     expect(viaOpts.mustChar).toBe('');
     expect(viaOpts.mustPos).toBe('any');
+    expect(viaOpts.avoidChars).toBe('月');
     expect(viaOpts.sort).toBe('score');
     expect(viaOpts.gender).toBe('any');
   });

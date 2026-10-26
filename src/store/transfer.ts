@@ -105,6 +105,7 @@ export function toQuery(s: Pick<SavedState, 'surname' | 'reading' | 'opts'>): st
     q.set('mc', o.mustChar);
     if (o.mustPos !== 'any') q.set('mp', o.mustPos);
   }
+  if (o.avoidChars) q.set('ac', o.avoidChars);
   return q.toString();
 }
 
@@ -139,6 +140,7 @@ export function fromQuery(qs: string): { surname?: string; reading?: number; opt
   if (q.has('d')) take('redupOnly', q.get('d') === '1');
   if (q.has('mc')) take('mustChar', q.get('mc'));
   if (q.has('mp')) take('mustPos', q.get('mp'));
+  if (q.has('ac')) take('avoidChars', q.get('ac'));
 
   const full = sanitizeOpts(raw);
   const opts: Partial<Opts> = {};

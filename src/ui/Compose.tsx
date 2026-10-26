@@ -8,7 +8,7 @@ import { BOOK_COUNT, BOOK_LABEL, type Opts, type Result, type ShareName } from '
 import * as store from '../store/local';
 import { Source } from './NameCard';
 
-const CJK = /^[一-鿿]$/;
+const CJK = /^\p{Script=Han}$/u;
 const RANDOM_COUNT = 8;
 
 type Props = {
@@ -199,7 +199,7 @@ export default function Compose({ surname, setSurname, reading, setReading, opts
                 使用「{q}」{charFacts(q).l0 ? '' : '（不在名用字表）'}
               </button>
             )}
-            {/^[一-鿿]{2}$/.test(q) && (
+            {/^\p{Script=Han}{2}$/u.test(q) && (
               <button onClick={() => { setDraft((d) => ({ ...d, chars: [...q] })); setPicker(null); setQ(''); }}
                 className="btn btn-accent max-w-full whitespace-normal font-serif text-title">
                 直接使用「{q}」
@@ -257,6 +257,11 @@ export default function Compose({ surname, setSurname, reading, setReading, opts
             <span className="text-meta tabular-nums text-ink-3">{composed.readings.join(' ') || '读音留白'}</span>
           </div>
           {shape?.note && <p className="text-meta text-warn">{shape.note}</p>}
+          {opts.avoidChars && chars.some((c) => opts.avoidChars.includes(c)) && (
+            <p className="text-meta text-warn">
+              「{chars.filter((c) => opts.avoidChars.includes(c)).join('、')}」在生成页的禁用字里：这里是你自己挑的字，照旧能组合，但生成页不会出现含它的名字。
+            </p>
+          )}
           {composed.flags.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {composed.flags.map((f) => (

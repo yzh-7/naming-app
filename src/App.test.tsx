@@ -135,6 +135,23 @@ describe('App 集成冒烟', () => {
     expect(screen.getByText(/没有符合搜索/)).toBeInTheDocument();
   });
 
+  it('禁用字不筛收藏，但收藏页明说有几条含它', () => {
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
+    const card = screen.getAllByRole('article')[0];
+    const full = within(card).getByRole('heading', { level: 3 }).textContent!;
+    const ch = [...full].slice(1)[0]; // 名的第一个字：禁用字只查名不查姓
+    fireEvent.click(within(card).getByRole('button', { name: '收藏' }));
+    fireEvent.click(screen.getByRole('button', { name: '高级筛选' }));
+    fireEvent.change(screen.getByLabelText('禁用字（名里出现这些字的候选不出现）'), { target: { value: ch } });
+    // 换到收藏页：这条收藏照旧在，页上写明它含禁用字
+    fireEvent.click(screen.getByRole('link', { name: /收藏 1/ }));
+    expect(screen.getAllByRole('article'), '收藏不被禁用字筛掉，也不悄悄藏起来').toHaveLength(1);
+    expect(
+      screen.getByText(`禁用字「${ch}」只筛生成页；收藏里含这些字的 1 条照旧留在下面，要清掉就逐条取消收藏。`),
+    ).toBeInTheDocument();
+  });
+
   it('导入时弹出合并/覆盖选择，选合并后提示并更新计数', async () => {
     const { container } = render(<App />);
     const st = {

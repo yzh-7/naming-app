@@ -193,3 +193,76 @@ test('service worker：缓存名按当前产物算出来（不再写死），且
   expect(info.keys, JSON.stringify(info.keys)).toEqual([expect.stringMatching(/^naming-app-[0-9a-z]+$/)]);
   expect(info.hasShell, 'install 阶段应把 shell 写进解析出来的那个缓存').toBe(true);
 });
+
+test('生成页的禁用字（避讳字）：输入后卡片名字都不含它，「不限」回到原池', async ({ page }) => {
+  await page.goto('/?s=苏');
+  const arts = page.locator('article');
+  await expect(arts.first()).toBeVisible();
+  const summary = page.getByTitle('「换一批」往后翻，翻满页数看遍全部');
+  const poolOf = async () => Number((await summary.textContent())!.match(/候选池 ([\d,]+) 条/)![1].replace(/,/g, ''));
+  const before = await poolOf();
+  await page.getByLabel('禁用字（名里出现这些字的候选不出现）').fill('月');
+  await expect(arts.first()).toBeVisible();
+  const after = await poolOf();
+  expect(after, '名里带「月」的搭配要整条出去').toBeLessThan(before);
+  const n = await arts.count();
+  expect(n).toBeGreaterThan(0);
+  for (let i = 0; i < n; i++) {
+    const full = (await arts.nth(i).getByRole('heading', { level: 3 }).textContent())!;
+    expect(full, `第 ${i + 1} 张卡的名字含禁用字：${full}`).not.toContain('月');
+  }
+  await page.getByRole('button', { name: '清除禁用字' }).click();
+  await expect(page.getByLabel('禁用字（名里出现这些字的候选不出现）')).toHaveValue('');
+  expect(await poolOf()).toBe(before);
+});
+
+test('分享链接里的禁用字（ac）会带过来：打开时输入框已填好，结果里不含它', async ({ page }) => {
+  await page.goto('/?s=苏&ac=' + encodeURIComponent('月'));
+  await expect(page.getByLabel('禁用字（名里出现这些字的候选不出现）')).toHaveValue('月');
+  const arts = page.locator('article');
+  const n = await arts.count();
+  expect(n).toBeGreaterThan(0);
+  for (let i = 0; i < n; i++) {
+    const full = (await arts.nth(i).getByRole('heading', { level: 3 }).textContent())!;
+    expect(full, `链接带 ac=月 却出现了含月的名字：${full}`).not.toContain('月');
+  }
+});
+
+test('禁用字只查名不查姓：姓自己带这个字，候选不受影响', async ({ page }) => {
+  await page.goto('/?s=柳&ac=' + encodeURIComponent('柳'));
+  await expect(page.getByLabel('禁用字（名里出现这些字的候选不出现）')).toHaveValue('柳');
+  const arts = page.locator('article');
+  const n = await arts.count();
+  expect(n).toBeGreaterThan(0);
+  for (let i = 0; i < n; i++) {
+    const full = (await arts.nth(i).getByRole('heading', { level: 3 }).textContent())!;
+    expect(full.startsWith('柳'), `第 ${i + 1} 张卡的姓丢了：${full}`).toBe(true);
+    expect(full.slice(1), `名里还留着禁用字：${full}`).not.toContain('柳');
+  }
+});
+
+test('禁用字是一个字一个字打出来的：后打的字不把先打的字顶掉', async ({ page }) => {
+  // fill() 是一次性灌进去的，测不出「打字过程中输入框被重建」这类问题，所以这里逐字符输入
+  await page.goto('/?s=苏');
+  const box = page.getByLabel('禁用字（名里出现这些字的候选不出现）');
+  const summary = page.getByTitle('「换一批」往后翻，翻满页数看遍全部');
+  const poolOf = async () => Number((await summary.textContent())!.match(/候选池 ([\d,]+) 条/)![1].replace(/,/g, ''));
+  const before = await poolOf();
+  await box.click();
+  await box.pressSequentially('月');
+  await expect(box).toHaveValue('月');
+  await box.pressSequentially('风');
+  await expect(box, '打「风」的瞬间框里只剩「月」').toHaveValue('月风');
+  await expect(page.getByText('已填 2/8 个字')).toBeVisible();
+  const two = await poolOf();
+  await box.fill('月');
+  const one = await poolOf();
+  expect(before, '填了「月」就该比不设时窄').toBeGreaterThan(one);
+  expect(one, '第二个字没生效的话，两个字的池和一个是同一个数').toBeGreaterThan(two);
+  const arts = page.locator('article');
+  const n = await arts.count();
+  for (let i = 0; i < n; i++) {
+    const full = (await arts.nth(i).getByRole('heading', { level: 3 }).textContent())!;
+    expect(full, `第 ${i + 1} 张卡带回了禁用字：${full}`).not.toContain('月');
+  }
+});

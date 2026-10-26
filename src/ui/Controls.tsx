@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cleanSurname, POOL_TITLES, readings, surnameReads } from '../engine/name';
-import { BOOK_LABEL, BOOK_ORDER, MUST_POS_LABEL, POP_FLOORS, STROKE_MAXES, type Book, type Gender, type MustPos, type Opts, type SortKey } from '../engine/types';
+import { AVOID_MAX, BOOK_LABEL, BOOK_ORDER, MUST_POS_LABEL, POP_FLOORS, STROKE_MAXES, cleanAvoid, isHan, type Book, type Gender, type MustPos, type Opts, type SortKey } from '../engine/types';
 
 const GENDERS: { v: Gender; label: string; on: string }[] = [
   { v: 'any', label: '不限', on: 'seg-on' },
@@ -25,6 +25,27 @@ function poolSummary(poolCount: number, perPage: number, pages: number, pageNo: 
     else if (pages === 1 && perPage > 0) parts.push('一屏全展');
   }
   return parts.join(' · ');
+}
+
+/**
+ * 汉字输入框。值不由 React 回填：中文输入法组字时框里先出现拉丁字母，回填会把组字打断。
+ * 也不能用 key={value} 逼它重建——实测第一个字上屏后焦点掉到 <body>、第二个字直接落空。
+ * 这里只在「外部改值」（点「不限」、导入文件、带参数的链接）且框不是当前焦点时把 DOM 拉回状态值，
+ * 打字途中 DOM 与状态可以短暂不一致（拉丁字母、超出上限的字），失焦时对齐。
+ */
+function CharField({ value, onInput, maxLength, ariaLabel, placeholder, className }: {
+  value: string; onInput: (raw: string) => void; maxLength: number; ariaLabel: string; placeholder: string; className: string;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (el && el !== document.activeElement && el.value !== value) el.value = value;
+  }, [value]);
+  return (
+    <input ref={ref} defaultValue={value} onChange={(e) => onInput(e.target.value)}
+      onBlur={(e) => { e.target.value = value; }}
+      maxLength={maxLength} aria-label={ariaLabel} placeholder={placeholder} className={className} />
+  );
 }
 
 export default function Controls({ surname, setSurname, reading, setReading, opts, setOpts, poolCount, pageNo, pages, onBatch }: {
@@ -125,11 +146,9 @@ export default function Controls({ surname, setSurname, reading, setReading, opt
         </label>
         <label className="flex flex-wrap items-center gap-2">
           <span className="lab shrink-0" title="结果里每条名字都必须含这个字；双名还能限定它当首字或末字">指定字</span>
-          {/* 不回填输入框：中文输入法组字时框里会先出现拉丁字母，回填会把组字打断；失焦时再对齐真实值 */}
-          <input key={opts.mustChar} defaultValue={opts.mustChar}
-            onChange={(e) => patch({ mustChar: [...e.target.value].find((c) => /[一-鿿]/.test(c)) ?? '' })}
-            onBlur={(e) => { e.target.value = opts.mustChar; }}
-            maxLength={2} aria-label="指定用字（结果必须包含）" placeholder="如 清"
+          {/* 指定字：一个字。maxLength 2 是给拼音组字留位置（1 会让输入法打不出拼音） */}
+          <CharField value={opts.mustChar} onInput={(raw) => patch({ mustChar: [...raw].find(isHan) ?? '' })}
+            maxLength={2} ariaLabel="指定用字（结果必须包含）" placeholder="如 清"
             className="field w-16 text-center font-serif text-title sm:w-20" />
           {opts.mustChar && opts.length === 2 && (
             <select value={opts.mustPos} onChange={(e) => patch({ mustPos: e.target.value as MustPos })} aria-label="指定字的位置"
@@ -139,6 +158,17 @@ export default function Controls({ surname, setSurname, reading, setReading, opt
           )}
           {opts.mustChar && (
             <button onClick={() => patch({ mustChar: '' })} aria-label="清除指定字" className="btn">不限制</button>
+          )}
+        </label>
+        <label className="flex flex-wrap items-center gap-2">
+          <span className="lab shrink-0" title="名里出现其中任何一个字，这条候选就不出现（只查名，不查姓）。用于避长辈名讳、家里忌讳的字">禁用字</span>
+          <CharField value={opts.avoidChars} onInput={(raw) => patch({ avoidChars: cleanAvoid(raw) })}
+            maxLength={AVOID_MAX + 4} ariaLabel="禁用字（名里出现这些字的候选不出现）" placeholder="如 艳涛"
+            className="field w-24 text-center font-serif text-title sm:w-28" />
+          {/* 上限写在这里而不是只写在 title 里：触屏没有 hover，框里能多打几个字（给拼音组字留的位置）也要说明白 */}
+          <span className="text-meta text-ink-3 tabular-nums" role="status">已填 {[...opts.avoidChars].length}/{AVOID_MAX} 个字</span>
+          {opts.avoidChars && (
+            <button onClick={() => patch({ avoidChars: '' })} aria-label="清除禁用字" className="btn">不限</button>
           )}
         </label>
         <label className="flex items-center gap-2">
@@ -158,9 +188,14 @@ export default function Controls({ surname, setSurname, reading, setReading, opt
         {poolSummary(poolCount, perPage, pages, pageNo)}
       </p>
       {opts.mustChar && poolCount === 0 && (
-        <p className="measure rounded-card border border-warn-line bg-warn-soft p-3 text-meta text-warn">
+        <p role="status" className="measure rounded-card border border-warn-line bg-warn-soft p-3 text-meta text-warn">
           典籍里没有含「{opts.mustChar}」的可用搭配（这个字多半不在名用字表，或所在句读配不出符合其它条件的名字）。
           可换个字，或到 <a className="text-accent-ink underline" href="#/compose">自选页</a> 自由搭配这个字并逐字核对事实。
+        </p>
+      )}
+      {opts.avoidChars && poolCount === 0 && (
+        <p role="status" className="measure rounded-card border border-warn-line bg-warn-soft p-3 text-meta text-warn">
+          禁用字「{opts.avoidChars}」也在收窄结果：先点「不限」，看是不是这几个字把这一池滤空了。
         </p>
       )}
     </section>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { plan, scoreItem, findItem, poolSize, cleanSurname, isKnownSurname, surnameReads, shapeTags, popularity, glossOf, lineGlossOf, namePinyin, popScore, resolveSaved } from './engine/name';
+import { plan, scoreItem, findItem, poolSize, cleanSurname, isKnownSurname, surnameReads, shapeTags, popularity, glossOf, lineGlossOf, namePinyin, popScore, resolveSaved, titleKey } from './engine/name';
 import { APP_VERSION, META } from './engine/data';
 import { BOOK_LABEL, BOOK_ORDER, type Opts, type Result, type ShareName } from './engine/types';
 import Controls from './ui/Controls';
@@ -96,7 +96,7 @@ export default function App() {
 
   const effective: Opts = useMemo(() => ({ ...opts, exclude: [...block] }), [opts, block]);
   const paged = useMemo(
-    () => (sur ? plan(sur, effective, batch, reading) : { page: [], pageNo: 0, pages: 0, pool: 0 }),
+    () => (sur ? plan(sur, effective, batch, reading) : { page: [], pageNo: 0, pages: 0, pool: 0, titleCounts: new Map<string, number>() }),
     [sur, effective, batch, reading],
   );
   const results = paged.page;
@@ -114,6 +114,13 @@ export default function App() {
     }
     return out;
   }, [fav, sur, effective, reading]);
+  // 禁用字只筛生成页，收藏不跟着筛：那是用户自己存下来的名字，悄悄藏起来比说明更糟。
+  // 这里只数出「含禁用字的收藏有几条」并在收藏页写明白。
+  const favAvoidHits = useMemo(() => {
+    const ac = opts.avoidChars;
+    if (!ac) return 0;
+    return favPairs.filter((p) => [...p.r.name].some((c) => ac.includes(c))).length;
+  }, [favPairs, opts.avoidChars]);
   const favLost = useMemo(() => {
     const ids = new Set(favPairs.map((p) => p.rec.id));
     return fav.filter((rec) => !ids.has(rec.id));
@@ -356,7 +363,7 @@ export default function App() {
               )}
               {sur && results.length === 0 && (
                 <p className="rounded-card border border-dashed border-line-strong bg-surface-2 p-6 text-center text-meta leading-6 text-ink-3">
-                  这个条件下没有剩余候选。{opts.search ? '试试清空搜索；' : ''}{opts.title ? '当前只在看《' + opts.title + '》，点「不限篇」回到全部；' : ''}{opts.strokeMax || opts.popFloor || opts.noMonotone ? '试试放宽笔画/常见度/结构筛选；' : ''}{opts.redupOnly ? '当前开着「只看典籍叠字」，先取消它；' : ''}其余可能是典籍全选关或都已拉黑。
+                  这个条件下没有剩余候选。{opts.search ? '试试清空搜索；' : ''}{opts.title ? '当前只在看《' + opts.title + '》，点「不限篇」回到全部；' : ''}{opts.avoidChars ? '禁用字「' + opts.avoidChars + '」也在滤，先点「不限」；' : ''}{opts.strokeMax || opts.popFloor || opts.noMonotone ? '试试放宽笔画/常见度/结构筛选；' : ''}{opts.redupOnly ? '当前开着「只看典籍叠字」，先取消它；' : ''}其余可能是典籍全选关或都已拉黑。
                 </p>
               )}
               <p aria-live="polite" className="sr-only">共 {poolCount} 条候选，第 {paged.pageNo + 1} 页，共 {paged.pages} 页</p>
@@ -371,7 +378,8 @@ export default function App() {
                       <NameCard key={r.id} r={r} fav={favIds.has(r.id)} blocked={block.includes(r.id)}
                         onFav={() => toggleFav(r)} onBlock={() => toggleBlock(r)} onShare={() => void doShare(r)} onCopy={() => void doCopy(r)}
                         onTitle={() => { setOpts((o) => ({ ...o, title: r.title, search: '' })); setBatch(0); setNotice(`只看《${r.title}》里的候选`); }}
-                        onSameSound={() => { setOpts((o) => ({ ...o, search: namePinyin(r.name), title: '' })); setBatch(0); setNotice(`按拼音「${namePinyin(r.name)}」搜索同音写法`); }} />
+                        onSameSound={() => { setOpts((o) => ({ ...o, search: namePinyin(r.name), title: '' })); setBatch(0); setNotice(`按拼音「${namePinyin(r.name)}」搜索同音写法`); }}
+                        sameTitle={paged.titleCounts.get(titleKey(r))} />
                     ))}
                   </div>
                 </section>
@@ -431,6 +439,11 @@ export default function App() {
             {favGroup && (
               <GroupTools key={favGroup} group={favGroup}
                 onRename={(to) => doRenameGroup(favGroup, to)} onDelete={() => doDeleteGroup(favGroup)} />
+            )}
+            {favAvoidHits > 0 && (
+              <p className="text-meta leading-6 text-ink-3 no-print" role="status">
+                禁用字「{opts.avoidChars}」只筛生成页；收藏里含这些字的 {favAvoidHits} 条照旧留在下面，要清掉就逐条取消收藏。
+              </p>
             )}
             {compare.length >= 2 && <Compare pairs={favPairs.filter((p) => compare.includes(p.rec.id))} />}
             {favView.length === 0 ? (

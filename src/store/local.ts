@@ -1,5 +1,5 @@
 import type { Book, Gender, Opts, SortKey } from '../engine/types';
-import { BOOK_ORDER, POP_FLOORS, cleanSurname } from '../engine/types';
+import { BOOK_ORDER, POP_FLOORS, cleanAvoid, cleanSurname, isHan } from '../engine/types';
 
 const SORTS: SortKey[] = ['score', 'strokes', 'popular', 'book'];
 
@@ -164,7 +164,7 @@ const DEFAULT: Opts = {
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
   redupOnly: false, exclude: [], count: 12, search: '', title: '', sort: 'score',
   strokeMax: 0, noMonotone: false, popFloor: 0,
-  mustChar: '', mustPos: 'any',
+  mustChar: '', mustPos: 'any', avoidChars: '',
 };
 export { DEFAULT as DEFAULT_OPTS };
 
@@ -175,6 +175,9 @@ const MUST_POS = ['any', 'first', 'last'] as const;
 const intIn = (n: unknown, min: number, max: number) => typeof n === 'number' && Number.isInteger(n) && n >= min && n <= max ? n : undefined;
 const pickOne = <T extends string>(v: unknown, candidates: readonly T[]): T | undefined =>
   typeof v === 'string' && (candidates as readonly string[]).includes(v) ? (v as T) : undefined;
+
+// 单个汉字（指定字、自选页挑的字都只允许一个字）。读写两侧都过这一条，别只在一侧收。
+const isHanChar = (v: unknown): v is string => typeof v === 'string' && [...v].length === 1 && isHan(v);
 
 export function sanitizeOpts(raw: unknown): Opts {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Partial<Opts> & { books?: Partial<Opts['books']> };
@@ -197,8 +200,9 @@ export function sanitizeOpts(raw: unknown): Opts {
     strokeMax: intIn(o.strokeMax, 0, 64) ?? DEFAULT.strokeMax,
     noMonotone: !!o.noMonotone,
     popFloor: pop !== undefined && POP_VALUES.includes(pop) ? pop : DEFAULT.popFloor,
-    mustChar: typeof o.mustChar === 'string' && /^[一-鿿]$/.test(o.mustChar) ? o.mustChar : DEFAULT.mustChar,
+    mustChar: isHanChar(o.mustChar) ? o.mustChar : DEFAULT.mustChar,
     mustPos: pickOne(o.mustPos, MUST_POS) ?? DEFAULT.mustPos,
+    avoidChars: typeof o.avoidChars === 'string' ? cleanAvoid(o.avoidChars) : DEFAULT.avoidChars,
     exclude: [],
   };
 }
@@ -206,14 +210,16 @@ export function sanitizeOpts(raw: unknown): Opts {
 export function loadOpts(): Opts {
   try { return sanitizeOpts(readRaw(K.opts)); } catch { return DEFAULT; }
 }
-export const saveOpts = (o: Opts) => writeItem(K.opts, JSON.stringify({ gender: o.gender, genderWeak: o.genderWeak, length: o.length, redupOnly: o.redupOnly, books: o.books, count: o.count, search: o.search.slice(0, SEARCH_MAX), sort: o.sort, strokeMax: o.strokeMax, noMonotone: o.noMonotone, popFloor: o.popFloor, mustChar: o.mustChar, mustPos: o.mustPos, title: (o.title ?? '').slice(0, TITLE_MAX) }));
+// 写出去之前先过一遍与读回来同样的收敛规则：只这样读写两侧才不会分叉（今天 opts 只能来自已清洗的值，
+// 但任何新的写入口一旦漏清洗就会把超限的禁用字或非汉字写进存储，读回来才发现，等于把脏数据先落盘）。
+export const saveOpts = (o: Opts) => writeItem(K.opts, JSON.stringify({ gender: o.gender, genderWeak: o.genderWeak, length: o.length, redupOnly: o.redupOnly, books: o.books, count: o.count, search: o.search.slice(0, SEARCH_MAX), sort: o.sort, strokeMax: o.strokeMax, noMonotone: o.noMonotone, popFloor: o.popFloor, mustChar: isHanChar(o.mustChar) ? o.mustChar : DEFAULT.mustChar, mustPos: o.mustPos, avoidChars: cleanAvoid(o.avoidChars), title: (o.title ?? '').slice(0, TITLE_MAX) }));
 
 export type ComposeDraft = { length: 1 | 2; chars: string[]; free: boolean };
 export function loadCompose(): ComposeDraft {
   const raw = readRaw(K.compose);
   if (!raw || typeof raw !== 'object') return { length: 2, chars: [], free: false };
   const r = raw as Record<string, unknown>;
-  const chars = Array.isArray(r.chars) ? r.chars.filter((c): c is string => typeof c === 'string' && /^[一-鿿]$/.test(c)).slice(0, 2) : [];
+  const chars = Array.isArray(r.chars) ? r.chars.filter(isHanChar).slice(0, 2) : [];
   return { length: r.length === 1 ? 1 : 2, chars, free: !!r.free };
 }
 export const saveCompose = (d: ComposeDraft) => writeItem(K.compose, JSON.stringify(d));

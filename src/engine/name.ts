@@ -368,6 +368,15 @@ export function mustPass(name: string, opts: Opts): boolean {
   return name.includes(mc);
 }
 
+// 禁用字（避讳字）：名里出现其中任何一个字，整条候选就排除。只查名、不查姓——
+// 姓是用户自己的姓，要避的是给孩子取名时不想用的字（长辈名讳、家里忌讳的字）。
+export function avoidPass(name: string, opts: Opts): boolean {
+  const ac = opts.avoidChars;
+  if (!ac) return true;
+  for (const c of name) if (ac.includes(c)) return false;
+  return true;
+}
+
 function universe(opts: Opts): (Named & { famous?: boolean; tier?: string })[] {
   const q = (opts.search ?? '').trim().toLowerCase();
   const t = (opts.title ?? '').trim();
@@ -375,6 +384,7 @@ function universe(opts: Opts): (Named & { famous?: boolean; tier?: string })[] {
     .filter((it) => genderPass(it.name, opts))
     .filter((it) => passesShape(it.name, opts))
     .filter((it) => mustPass(it.name, opts))
+    .filter((it) => avoidPass(it.name, opts))
     .filter((it) => !t || it.title === t)
     .filter((it) => !q || searchText(it).includes(q));
 }
@@ -388,14 +398,10 @@ export const POOL_TITLES: string[] = (() => {
     .map((x) => x.split('\u0000')[1]);
 })();
 
-// 同篇还有多少条候选：卡片上的「同篇候选」按钮用（含自己，1 就是这一篇里只有它）
-const titleCountIndex = new Map<string, number>();
-for (const it of ALL_ITEMS) {
-  const k = `${it.book}\u0000${it.title}`;
-  titleCountIndex.set(k, (titleCountIndex.get(k) ?? 0) + 1);
-}
-// 同篇还有多少条候选（含自己）：卡片上的「同篇候选」按钮用，1 就是这一篇里只有它
-export const sameTitleCount = (it: Named) => titleCountIndex.get(`${it.book}\u0000${it.title}`) ?? 1;
+// 同篇还有多少条候选（含自己）：卡片上的「同篇候选」按钮用，1 就是这一篇里只有它。
+// 只按「当前筛选后的候选池」算（见 plan 返回的 titleCounts），不按全语料算：按全语料算的话，
+// 设了禁用字、性别或典籍之后点这个按钮，实际条数会比按钮上写的少。
+export const titleKey = (it: { book: Book; title: string }) => `${it.book}\u0000${it.title}`;
 
 // 同音异形：读音（去声调）相同、写法不同的池内名字。多音字取常用读音，所以这一行标「按常用读音」
 export type Peer = { id: string; name: string; book: Book; title: string };
@@ -492,21 +498,27 @@ const SORTERS: Record<SortKey, (a: Result, b: Result) => number> = {
   book: (a, b) => (BOOK_ORDER.indexOf(a.book) - BOOK_ORDER.indexOf(b.book)) || (b.total - a.total) || idCmp(a, b),
 };
 
-export type Plan = { page: Result[]; pageNo: number; pages: number; pool: number };
+export type Plan = { page: Result[]; pageNo: number; pages: number; pool: number; titleCounts: Map<string, number> };
 
 export function plan(surname: string, opts: Opts, batch: number, surReading = 0): Plan {
   const excluded = new Set(opts.exclude);
   const items = universe(opts).filter((it) => !excluded.has(it.id));
+  // 卡片上的「同篇还有 N 条」按这一份算：与候选池同一个集合，点了按钮不会比这少
+  const titleCounts = new Map<string, number>();
+  for (const it of items) {
+    const k = titleKey(it);
+    titleCounts.set(k, (titleCounts.get(k) ?? 0) + 1);
+  }
   const scored = items.map((it) => scoreItem(surname, it, opts, surReading));
   const byScore = [...scored].sort(SORTERS[opts.sort ?? 'score'] ?? SORTERS.score);
   const perPage = opts.count > 0 ? opts.count : byScore.length || 1;
   const pages = paginate(byScore, perPage);
-  if (!pages.length) return { page: [], pageNo: 0, pages: 0, pool: 0 };
+  if (!pages.length) return { page: [], pageNo: 0, pages: 0, pool: 0, titleCounts };
   const pageNo = ((batch % pages.length) + pages.length) % pages.length;
   const raw = pages[pageNo];
   // 默认（按分数/按出处）按书分组展示，一屏内不至于被单一本书占满；选了笔画/常见度就尊重所选顺序
   const page = opts.sort === 'strokes' || opts.sort === 'popular' ? raw : [...raw].sort(byBookThenScore);
-  return { page, pageNo, pages: pages.length, pool: byScore.length };
+  return { page, pageNo, pages: pages.length, pool: byScore.length, titleCounts };
 }
 
 export const poolSize = (opts: Opts) => universe(opts).filter((it) => !opts.exclude.includes(it.id)).length;

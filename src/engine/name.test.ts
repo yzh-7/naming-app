@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  charFacts, cleanSurname, composeName, findCombo, genderOf, genderPass, genderStats, glossOf, isKnownSurname, L0_CHARS,
+  avoidPass, charFacts, cleanSurname, composeName, findCombo, genderOf, genderPass, genderStats, glossOf, isKnownSurname, L0_CHARS,
   lineGlossOf, minGnOf, namePinyin, pairCandidates,
   nicknames, plan, polyphoneTags, poolSize, popBand, popScore, popularity, radicalTags,
   readings, scoreItem, searchText, shapeTags, surnameReads,
@@ -14,7 +14,7 @@ const ALL_BOOKS = Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Record
 const opts = (p: Partial<Opts> = {}): Opts => ({
   gender: 'any', genderWeak: false, length: 2, books: { ...ALL_BOOKS },
   redupOnly: false, exclude: [], count: 12, search: '', title: '', sort: 'score',
-  strokeMax: 0, noMonotone: false, popFloor: 0, mustChar: '', mustPos: 'any', ...p,
+  strokeMax: 0, noMonotone: false, popFloor: 0, mustChar: '', mustPos: 'any', avoidChars: '', ...p,
 });
 
 describe('姓氏输入归一化', () => {
@@ -219,7 +219,21 @@ describe('批次可达性：换一批必须真能翻遍全池', () => {
   it('典籍全关＝空池，plan 不炸且页数 0', () => {
     const none = opts({ books: Object.fromEntries(BOOK_ORDER.map((b) => [b, false])) as Record<Book, boolean> });
     const p = plan('苏', none, 3);
-    expect(p).toEqual({ page: [], pageNo: 0, pages: 0, pool: 0 });
+    expect(p).toEqual({ page: [], pageNo: 0, pages: 0, pool: 0, titleCounts: new Map() });
+  });
+  it('「同篇还有 N 条」按当前筛选算：禁用字把某篇削掉之后，篇名按钮上的数跟着变小', () => {
+    const plain = plan('苏', opts({}), 0);
+    const avoid = plan('苏', opts({ avoidChars: '月' }), 0);
+    let narrowed = 0;
+    for (const [k, n] of plain.titleCounts) {
+      const now = avoid.titleCounts.get(k) ?? 0;
+      expect(now, '当前口径下的篇内条数不该比不设筛选时多').toBeLessThanOrEqual(n);
+      if (now < n) narrowed++;
+    }
+    expect(narrowed, '禁用「月」之后至少有一篇的条数变小').toBeGreaterThan(0);
+    // 篇内计数与候选池用的是同一份集合：各篇加起来就是池子的大小
+    const sum = [...avoid.titleCounts.values()].reduce((a, b) => a + b, 0);
+    expect(sum).toBe(avoid.pool);
   });
 });
 
@@ -458,5 +472,57 @@ describe('指定用字（mustChar / mustPos）', () => {
       expect(r.name).toContain(mc);
       expect(searchText(r).toLowerCase()).toContain('qing');
     }
+  });
+});
+
+describe('禁用字（避讳字）', () => {
+  const av = '月';
+  it('avoidPass：空串放行，名里命中任意一个禁用字就整条排除', () => {
+    expect(avoidPass('清风', opts({ avoidChars: '' }))).toBe(true);
+    expect(avoidPass('清风', opts({ avoidChars: '风' }))).toBe(false);
+    expect(avoidPass('明月', opts({ avoidChars: '风光' }))).toBe(true);
+    expect(avoidPass('月风', opts({ avoidChars: '风光' }))).toBe(false);
+  });
+  it('池子精确扣掉名里含禁用字的搭配；重复字不重复扣', () => {
+    const n = poolSize(opts({ avoidChars: av }));
+    expect(n).toBe(POOL.filter((p) => !p.name.includes(av)).length);
+    expect(n).toBeLessThan(poolSize(opts()));
+    expect(n).toBeGreaterThan(0);
+    expect(poolSize(opts({ avoidChars: av + av }))).toBe(n);
+  });
+  it('结果页里没有一条名含禁用字，翻满全页也不漏', () => {
+    const p = plan('苏', opts({ avoidChars: av, count: 24 }), 0);
+    const seen = new Set<string>();
+    for (let b = 0; b < p.pages; b++) {
+      for (const r of plan('苏', opts({ avoidChars: av, count: 24 }), b).page) {
+        expect(r.name).not.toContain(av);
+        seen.add(r.id);
+      }
+    }
+    expect(seen.size).toBe(poolSize(opts({ avoidChars: av })));
+  });
+  it('只查名不查姓：姓自己带禁用字，池子和结果都不受影响', () => {
+    expect(poolSize(opts({ avoidChars: '柳' }))).toBe(POOL.filter((p) => !p.name.includes('柳')).length);
+    const page = plan('柳', opts({ avoidChars: '柳', count: 24 }), 0).page;
+    expect(page.length).toBeGreaterThan(0);
+    for (const r of page) {
+      expect(r.name).not.toContain('柳');
+      expect(r.full.startsWith('柳')).toBe(true);
+    }
+  });
+  it('单名模式：单名就是那一个字，禁用即排除', () => {
+    expect(poolSize(opts({ length: 1, avoidChars: av }))).toBe(SINGLES.filter((s) => s.char !== av).length);
+    expect(poolSize(opts({ length: 1, avoidChars: av }))).toBeLessThan(poolSize(opts({ length: 1 })));
+  });
+  it('指定字与禁用字矛盾时结果为 0——那是事实，不硬凑', () => {
+    expect(poolSize(opts({ mustChar: av, avoidChars: av }))).toBe(0);
+    expect(plan('苏', opts({ mustChar: av, avoidChars: av }), 0).page).toHaveLength(0);
+  });
+  it('与性别、笔画是交集：禁用字只收窄，不放宽', () => {
+    const base = poolSize(opts({ gender: 'f' }));
+    const both = poolSize(opts({ gender: 'f', avoidChars: av }));
+    expect(both).toBeLessThanOrEqual(base);
+    expect(both).toBeGreaterThan(0);
+    expect(poolSize(opts({ strokeMax: 40, avoidChars: av }))).toBeLessThanOrEqual(poolSize(opts({ strokeMax: 40 })));
   });
 });

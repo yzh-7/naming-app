@@ -46,9 +46,26 @@ export type GenderTag = { side: GenderSide; strong: boolean; why: string };
 
 export type SortKey = 'score' | 'strokes' | 'popular' | 'book';
 
+// 汉字判定：用 Unicode 的 Script=Han，不只 U+4E00–9FFF 那一段。
+// 只写 [一-鿿] 的话，扩展 A 区（U+3400–4DBF）、兼容表意区（U+F900–FAFF）与扩展 B 以上的字
+// 会被静默丢掉——用户打进输入框看不见、筛选也不生效，看着像「设了但没用」。
+// 语料侧 1,525 条双名与 217 个单名的用字全在 U+4E00–9FFF 内，所以这一步只影响用户输入侧。
+export const isHan = (c: string) => /\p{Script=Han}/u.test(c);
+
 // 姓氏只保留汉字、最多两字。界面输入、本机存储、导入文件、分享链接四条路径共用这一条规则；
 // 实时裁剪输入框的值会打断拼音输入法（yuan 还没上屏就被截成 yu），所以归一化只在这些边界上做。
-export const cleanSurname = (s: string) => s.replace(/[^一-鿿]/g, '').slice(0, 2);
+export const cleanSurname = (s: string) => [...s].filter(isHan).slice(0, 2).join('');
+
+// 禁用字（避讳字）：只保留汉字、去重、最多 8 个。与姓氏同一条思路——归一化只在边界上做
+// （输入框、本机存储、导入文件、分享链接），实时裁剪会打断拼音输入法。
+export const AVOID_MAX = 8;
+export const cleanAvoid = (s: string) => {
+  const out: string[] = [];
+  for (const c of [...s]) {
+    if (isHan(c) && !out.includes(c) && out.length < AVOID_MAX) out.push(c);
+  }
+  return out.join('');
+};
 
 export type Opts = {
   gender: Gender;
@@ -69,6 +86,8 @@ export type Opts = {
   // 指定用字：结果必须含这个字（双名可按位置限定）；''＝不限
   mustChar: string;
   mustPos: MustPos;
+  // 禁用字（避讳字）：名里出现其中任何一个字就被排除，只查名不查姓；''＝不限。上限 AVOID_MAX 个字
+  avoidChars: string;
 };
 
 export type MustPos = 'any' | 'first' | 'last';

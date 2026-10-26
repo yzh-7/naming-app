@@ -8,7 +8,7 @@ const base: Opts = {
   gender: 'any', genderWeak: false, length: 2,
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
   redupOnly: false, exclude: [], count: 12, search: '', title: '', sort: 'score',
-  strokeMax: 0, noMonotone: false, popFloor: 0, mustChar: '', mustPos: 'any',
+  strokeMax: 0, noMonotone: false, popFloor: 0, mustChar: '', mustPos: 'any', avoidChars: '',
 };
 
 function Harness({ initialSurname = '苏', pages = 1, onBatch = () => {}, poolCount = 1505 }: { initialSurname?: string; pages?: number; onBatch?: () => void; poolCount?: number }) {
@@ -157,5 +157,53 @@ describe('指定字', () => {
     fireEvent.change(mcInput(), { target: { value: '清' } });
     expect(screen.getByText(/典籍里没有含「清」的可用搭配/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '自选页' })).toHaveAttribute('href', '#/compose');
+  });
+});
+
+describe('禁用字（避讳字）', () => {
+  const acInput = () => screen.getByLabelText('禁用字（名里出现这些字的候选不出现）') as HTMLInputElement;
+  it('输入汉字后出现「不限」清除按钮，清除后输入框回空', () => {
+    render(<Harness />);
+    fireEvent.change(acInput(), { target: { value: '月风' } });
+    expect(acInput().value).toBe('月风');
+    fireEvent.click(screen.getByRole('button', { name: '清除禁用字' }));
+    expect(acInput().value).toBe('');
+    expect(screen.queryByRole('button', { name: '清除禁用字' })).not.toBeInTheDocument();
+  });
+  it('重复字不进状态：输入「月月」等于输入「月」', () => {
+    render(<Harness />);
+    fireEvent.change(acInput(), { target: { value: '月月' } });
+    expect(acInput().value).toBe('月');
+  });
+  it('拉丁字母不回填输入框（输入法组字不被打断），失焦后对齐归一化的值', () => {
+    render(<Harness />);
+    fireEvent.change(acInput(), { target: { value: '月' } });
+    const input = acInput(); // 输入框不被重建，节点与状态各管各的：打字期间 DOM 保持用户输入的样子
+    fireEvent.change(input, { target: { value: '月yue' } });
+    expect(input.value).toBe('月yue');
+    fireEvent.blur(input);
+    expect(input.value).toBe('月');
+  });
+  it('最多 8 个字：第 9 个字起不进状态', () => {
+    render(<Harness />);
+    fireEvent.change(acInput(), { target: { value: '一二三四五六七八九十' } });
+    expect(acInput().value).toBe('一二三四五六七八');
+  });
+  it('连打两个字：后打的字不把先打的字顶掉，字数计数器跟着走', () => {
+    // 曾经的写法是「状态一变就用 key 重建输入框」，打第二个字的瞬间框被换成旧值，
+    // 第一个字留着、第二个字没了——单靠状态断言看不出来，所以这里断言的是同一个节点的 value
+    render(<Harness />);
+    const box = acInput();
+    fireEvent.change(box, { target: { value: '月' } });
+    fireEvent.change(box, { target: { value: '月风' } });
+    const same = acInput();
+    expect(same, '输入框不该被重建').toBe(box);
+    expect(box.value).toBe('月风');
+    expect(screen.getByText('已填 2/8 个字')).toBeInTheDocument();
+  });
+  it('禁用字命中 0 条时给出「先点不限」的出口', () => {
+    render(<Harness poolCount={0} />);
+    fireEvent.change(acInput(), { target: { value: '月' } });
+    expect(screen.getByText(/禁用字「月」也在收窄结果/)).toBeInTheDocument();
   });
 });
