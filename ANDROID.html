@@ -135,20 +135,6 @@
     white-space: nowrap;
   }
   .recommend { color: var(--good); font-weight: 700; }
-  .checklist { list-style: none; padding-left: 0; }
-  .checklist li {
-    padding-left: 30px;
-    position: relative;
-    margin: 10px 0;
-  }
-  .checklist li::before {
-    content: "";
-    position: absolute;
-    left: 0; top: 8px;
-    width: 15px; height: 15px;
-    border: 1.5px solid var(--accent);
-    border-radius: 4px;
-  }
   footer.doc {
     margin-top: 56px;
     padding-top: 18px;
@@ -156,7 +142,7 @@
     color: var(--muted);
     font-size: 13px;
   }
-  /* 夜里读：版面不动，令牌翻成深底（与应用内深浅两档同一取向） */
+  /* 深色配色：令牌翻成深底，版面不变 */
   @media (prefers-color-scheme: dark) {
     :root {
       --parchment: #121211;
@@ -299,7 +285,7 @@ npx @capacitor/assets generate   # 由 public/icon-512.png 生成整套图标与
   </ul>
 
   <h2>6. 待确认事项</h2>
-  <ul class="checklist">
+  <ol>
     <li>是否上架 Google Play。上架需要开发者账号、签名 keystore 与隐私政策。</li>
     <li>迭代优先级是即时更新（倾向 PWA / TWA）还是完全离线与原生体验（倾向 Capacitor）。</li>
     <li>是否已有稳定的 HTTPS 托管域名。PWA 与 TWA 需要，Capacitor 不需要。</li>
