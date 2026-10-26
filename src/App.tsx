@@ -236,15 +236,15 @@ export default function App() {
                 poolCount={poolCount} pageNo={paged.pageNo} pages={paged.pages}
                 onBatch={() => setBatch(batch + 1)} />
               <div className="flex flex-wrap gap-2">
-                <button onClick={doExport} className="btn btn-quiet">导出</button>
+                <button onClick={doExport} className="btn btn-outlined">导出</button>
                 <button onClick={() => doExportCandidates('csv')} disabled={poolCount === 0} title="把当前筛选命中的全部候选（不只这一屏）存成表格，Excel/WPS 可直接打开"
-                  className="btn btn-quiet">候选CSV</button>
+                  className="btn btn-outlined">候选CSV</button>
                 <button onClick={() => doExportCandidates('json')} disabled={poolCount === 0} title="同一份候选全量清单的 JSON 版，适合程序处理"
-                  className="btn btn-quiet">候选JSON</button>
-                <button onClick={() => fileRef.current?.click()} className="btn btn-quiet">导入</button>
+                  className="btn btn-outlined">候选JSON</button>
+                <button onClick={() => fileRef.current?.click()} className="btn btn-outlined">导入</button>
                 <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" aria-hidden="true"
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) void doImportFile(f); e.target.value = ''; }} />
-                <button onClick={doCopyLink} className="btn btn-quiet">复制链接</button>
+                <button onClick={doCopyLink} className="btn btn-outlined">复制链接</button>
               </div>
             </div>
 
@@ -316,8 +316,8 @@ export default function App() {
               <select value={favSort} onChange={(e) => setFavSort(e.target.value as FavSort)} aria-label="收藏排序" className="field">
                 {FAV_SORTS.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}
               </select>
-              <button onClick={() => void doExportList()} disabled={favView.length === 0} className="btn btn-quiet">导出名单图</button>
-              <button onClick={doPrint} disabled={favView.length === 0} className="btn btn-quiet">打印名单</button>
+              <button onClick={() => void doExportList()} disabled={favView.length === 0} className="btn btn-outlined">导出名单图</button>
+              <button onClick={doPrint} disabled={favView.length === 0} className="btn btn-outlined">打印名单</button>
             </div>
             {favGroups.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5 no-print">

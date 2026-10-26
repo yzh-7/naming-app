@@ -60,7 +60,7 @@ Tailwind 4 的 CSS-first 写法：`@theme` 定义刻度，`@utility` 定义可�
 
 - 颜色：`--canvas / --surface / --surface-2 / --line / --line-strong / --ink / --ink-2 / --ink-3` 一套中性面；一个 `--accent` 只给主操作；偏男 = `--cool-*`、偏女 = `--warm-*`（卡片与筛选按钮共用同一组色，见 `seg-cool` / `seg-warm`，定义在 `seg-btn` 之后以免 hover 把选中态洗掉）；提醒 `--warn`、错误 `--danger`、通过 `--ok`；`mark` 用 `--mark / --mark-ink` 成对给出，深浅两套都过对比度。
 - 字号（6 档，各有独立 line-height）：`meta` 13（<1024px 时 14）、`body` 15、`title` 17、`glyph` 19（字格单字）、`name` 24、`name-lg` 30。方块字用衬线（`font-serif`），界面文案用无衬线；数字 `tabular-nums`。
-- 组件工具类：`card` `field` `lab` `seg/seg-btn/seg-on` `btn/btn-primary/btn-quiet/btn-accent/btn-danger/btn-on` `chip/chip-cool|warm|accent|ok|warn|danger` `meta-row`（两列 label/value 的 `dl`）`measure`（正文上限 40em ≈ 一行 40 字）`rounded-card` `rounded-ctl` `pb-safe` `anchor-offset` `no-print`。次要动作一律 `btn-quiet`（幽灵按钮）以压低边框噪声。
+- 组件工具类：`card` `field` `lab` `seg/seg-btn/seg-on` `btn/btn-primary/btn-quiet/btn-outlined/btn-accent/btn-danger/btn-on` `chip/chip-cool|warm|accent|ok|warn|danger` `meta-row`（两列 label/value 的 `dl`）`measure`（正文上限 40em ≈ 一行 40 字）`rounded-card` `rounded-ctl` `pb-safe` `anchor-offset` `no-print`。卡片里的次要动作（复制信息、分享卡、弹窗里的覆盖/取消）用 `btn-quiet` 幽灵按钮以压低边框噪声；数据进出那一行（导出 / 候选CSV / 候选JSON / 导入 / 复制链接 / 导出名单图 / 打印名单）用 `btn-outlined`——实线边框 + 正文字色，显眼但不抢主色，主色只给「换一批」。
 - 断点：`xs` 384（自定义）→ 表单两列；`sm` 640 → 侧栏 / 一行布局、页头收成一行；触控尺寸（44px）一直保持到 1023px，紧凑档（36px）只在 `lg` ≥1024 生效——768 宽的平板仍按手指尺寸给。`@media print` 隐藏 `.no-print`、卡片不跨页断开。
 - 可访问性硬约定：可见文字必须是可访问名的一部分（所以 `aria-label` 只用于图标按钮与分组——页头的三档主题在手机上就是图标 + `aria-label`）；状态按钮靠 `aria-pressed` 而不是改文案；折叠用 `details/summary` 并带 `aria-expanded` 语义；装饰字符 `aria-hidden`。
 - 页头是 sticky 的，所以换 tab 一律 `window.scrollTo(0, 0)`：否则沿上一页的滚动位置落下，第一张卡片会被页头压住（体检里这条是硬违规）。

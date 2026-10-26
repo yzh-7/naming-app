@@ -293,6 +293,13 @@
   &:hover { background: var(--neutral-soft); border-color: var(--line); color: var(--ink); }
 }
 
+/* 数据进出那一行（导出 / 候选CSV / 候选JSON / 导入 / 复制链接 / 导出名单图 / 打印名单）：
+   实线边框 + 正文字色，显眼但不抢主操作——主色仍只给「换一批」 */
+@utility btn-outlined {
+  border-color: var(--line-strong); background: var(--surface); color: var(--ink);
+  &:hover { border-color: var(--ink-3); background: var(--surface-2); color: var(--ink); }
+}
+
 /* 粘性头部在锚点跳转时别盖住正文：手机端页头两行更高，留更多余量 */
 @utility anchor-offset {
   scroll-margin-top: 8.5rem;
