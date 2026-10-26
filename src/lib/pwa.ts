@@ -1,5 +1,6 @@
 // PWA 运行时状态：离线提示 + 新版本就绪提示。SW 只在 http(s) 下注册，file:// 或单文件版静默跳过。
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { APP_VERSION } from '../engine/data';
 
 export function usePwa() {
   const [offline, setOffline] = useState(() => typeof navigator !== 'undefined' && 'onLine' in navigator && !navigator.onLine);
@@ -18,7 +19,9 @@ export function usePwa() {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator) || !location.protocol.startsWith('http')) return;
     let cancelled = false;
     const sw = navigator.serviceWorker;
-    sw.register(`${import.meta.env.BASE_URL}sw.js`).then((reg) => {
+    // 版本随注册参数一起给出去，版本变化时浏览器更及时去取新的 sw.js；
+    // 版本号与界面页脚、sw.js 的回退链同源（engine/data.ts 的 APP_VERSION）
+    sw.register(`${import.meta.env.BASE_URL}sw.js?v=${encodeURIComponent(APP_VERSION)}`).then((reg) => {
       if (cancelled) return;
       regRef.current = reg;
       if (reg.waiting && sw.controller) setUpdateReady(true);

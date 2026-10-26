@@ -101,13 +101,22 @@ type Meta = {
   gloss_chars: number;
   line_gloss: number;
   given_freq_chars: number;
+  corpus_sha: string;
+  id_prefix_stats: { groups: number; collisions: number; max_group: number };
 };
 function asMeta(v: unknown): Meta {
   if (!isObj(v)) fail('meta 不是对象');
   for (const k of META_KEYS) if (!isNum(v[k])) fail(`meta.${k} 不是数字`);
   if (!isObj(v.by_gap) || !isNum(v.by_gap.gap1)) fail('meta.by_gap 结构不符');
+  if (!isStr(v.corpus_sha) || !/^[0-9a-f]{12}$/.test(v.corpus_sha)) fail('meta.corpus_sha 不是 12 位十六进制');
+  const s = v.id_prefix_stats;
+  if (!isObj(s) || !isNum(s.groups) || !isNum(s.collisions) || !isNum(s.max_group)) fail('meta.id_prefix_stats 结构不符');
   return v as unknown as Meta;
 }
+
+// 构建注入的应用版本（vite.config 的 __APP_VERSION__，取自 package.json）。
+declare const __APP_VERSION__: string;
+export const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev';
 
 export const POOL = asPool(candidatesJson, 'candidates');
 export const SINGLES = asSingles(singlesJson);

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { plan, scoreItem, findItem, poolSize, cleanSurname, isKnownSurname, surnameReads, shapeTags, popularity, glossOf, lineGlossOf, namePinyin, popScore, resolveSaved } from './engine/name';
-import { META } from './engine/data';
+import { APP_VERSION, META } from './engine/data';
 import { BOOK_LABEL, BOOK_ORDER, type Opts, type Result, type ShareName } from './engine/types';
 import Controls from './ui/Controls';
 import NameCard from './ui/NameCard';
@@ -509,6 +509,7 @@ export default function App() {
             数据 {Math.round(META.ship_bytes_total / 1024)} KiB（未压缩，全部打进应用包），运行时零网络请求。
             {sur && surnameReads(sur) > 1 && ' 你的姓首字是多音字，请在上方确认读音。'}</p>
           <p className="measure">本应用只给可核对的出处与用字事实，不做五行、八字、五格、吉凶判断。</p>
+          <p className="measure">应用版本 {APP_VERSION} · 语料指纹 {META.corpus_sha}（语料清单变化即变）。</p>
           <details>
             <summary className="flex min-h-11 cursor-pointer select-none items-center text-ink-2 hover:text-ink lg:min-h-8">标注口径与数据来源（点开看）</summary>
             <p className="measure mt-1.5">卡片上的「部首」只是康熙字典五部（木{num(META.radical_dist.木)}·火{num(META.radical_dist.火)}·水{num(META.radical_dist.水)}·金{num(META.radical_dist.金)}·土{num(META.radical_dist.土)} 共 {num(META.radical_chars)} 字）的事实标注，覆盖 {num(META.radical_named)}/{num(META.pool_B)} 条双名；字义（本义）来自开放词典，用字常见度来自 114 万真实姓名用字频次（估算）。没标部首不代表这个字在康熙字典里不属于这五部之外，也不代表它没有五行；本应用不做五行筛选、不做八字五格、不判吉凶。</p>

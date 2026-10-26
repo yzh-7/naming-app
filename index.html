@@ -20,6 +20,8 @@
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <link rel="icon" href="./icon-192.png" type="image/png" sizes="192x192" />
     <link rel="apple-touch-icon" href="./icon-192.png" />
+    <!-- 构建时由 vite 的 transformIndexHtml 替换成 package.json 里的版本；没有分包产物时（单文件版）sw.js 读它决定缓存名，口径见 DESIGN.md「版本与缓存」 -->
+    <meta name="app-version" content="__APP_VERSION__" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="取名" />
