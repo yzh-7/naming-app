@@ -44,8 +44,8 @@
 | 门禁 | 变更 |
 |---|---|
 | `verify.mjs` 第 4c 节 | 新增候选编号前缀碰撞对账：独立重算分组数、碰撞组数、最大组条数并与 `meta.id_prefix_stats` 比对。当前 1,524 个前缀中 1 组 2 条（《诗经·采薇》「依依」与「翼翼」拼音同为 `yiyi`），完整编号仍唯一 |
-| `size-check.mjs` | 两条判定都按 gzip 且都进退出码：非 HTML 资源合计 ≤400 KiB，HTML 自身 ≤400 KiB。原先「单文件 ≤1.5 MB」只是打印，不判定，且没说清是原文件还是 gzip；现改为对 `dist-single/` 实测。当前单文件产物 gzip 407,880 B，距预算 1,720 B |
-| 单文件构建 | 新增 `npm run single`（`SINGLE=1` 构建到 `dist-single/` 并跑体积检查）；CI 两个构建分支在 `npm run build` 之后追加执行。产物不发布，只为让那条体积口径真的是门禁 |
+| `size-check.mjs` | 两条判定都按 gzip 且都进退出码：非 HTML 资源合计 ≤400 KiB，HTML 按产物形态取预算（页面壳 ≤400 KiB、单文件产物 ≤450 KiB）。原先「单文件 ≤1.5 MB」只是打印，不判定，且没说清是原文件还是 gzip；现改为对 `dist-single/` 实测，并打印压缩实现版本。单文件产物实测：CI 口径（官方 Node 自带 zlib-ng）413,537 B，本机系统 zlib 407,880 B，相差 1.4% |
+| 单文件构建 | 新增 `npm run single`（`SINGLE=1` 构建到 `dist-single/` 并跑体积检查）；CI 两个构建分支在 `npm run build` 之后追加执行。产物不发布，只为让那条体积口径真的是门禁。第一次接进 CI 就被撞挂：同一份产物在 CI 的 zlib-ng 下压出 413,537 B，超过当时统一的 400 KiB（超 3,937 B），在本机系统 zlib 下却是 407,880 B，刚好通过——本机绿、CI 红。据此把单文件产物的预算单列为 450 KiB，并把产物形态改由 `--single` 参数明说，不再用「HTML 比其余资源大」去猜 |
 | Service Worker 缓存名 | 不再写死。按当前部署的产物文件名哈希得出 `naming-app-<hash>`，取不到产物时退回页面 meta 里的版本号，再退回注册参数；`activate` 只删除带 `naming-app-` 前缀且与当前名字不同的缓存 |
 | 版本号注入 | `vite.config.ts` 校验形态后注入 JS 常量与 `index.html` 的 meta（`define` 不改 HTML，故用 `transformIndexHtml`） |
 | `eslint .` 的覆盖面 | `public/sw.js` 不再整份忽略，改配 Service Worker 全局。本版据此修掉该文件里一处多余转义与一个未用的 catch 变量。产物目录与测试产物目录列入忽略（原先漏了 `dist-single/`，那份产物被当作源码送去 lint，两个问题直到那时才暴露） |

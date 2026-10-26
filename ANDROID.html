@@ -194,7 +194,7 @@
       <tr><td>静态站点，运行时不发起网络请求</td><td><code>README.md</code>、<code>scripts/size-check.mjs</code></td><td>产物可直接内嵌安装包，不需要后端</td></tr>
       <tr><td>数据随包发布，<code>data</code> chunk 原文件 1,236,511 B，gzip 254,325 B（248.4 KiB）</td><td><code>src/engine/data.ts</code>、<code>vite.config.ts</code></td><td>数据以静态资源形式打进安装包</td></tr>
       <tr><td>产物使用相对路径（<code>base: './'</code>）</td><td><code>vite.config.ts</code></td><td>可在 <code>file://</code>、WebView 与子路径下运行</td></tr>
-      <tr><td>支持产出单个 HTML 文件：原文件 1,675,319 B（1.60 MiB），gzip 407,880 B（398.3 KiB）；这条判定受 400 KiB 门禁约束</td><td><code>npm run build:single</code></td><td>可作为极简分发形态；语料扩充会先撞这条线</td></tr>
+      <tr><td>支持产出单个 HTML 文件：原文件 1,675,319 B（1.60 MiB），gzip 413,537 B（403.8 KiB，CI 口径；本机系统 zlib 407,880 B）；这条判定受 450 KiB 门禁约束</td><td><code>npm run build:single</code></td><td>可作为极简分发形态；语料扩充会先撞这条线</td></tr>
       <tr><td>已有 manifest、Service Worker 与图标</td><td><code>public/manifest.webmanifest</code>、<code>public/sw.js</code>、<code>public/icon-*.png</code></td><td>Chrome 支持「添加到主屏幕」直接安装</td></tr>
       <tr><td>分享与文件下载基于 Web API</td><td><code>src/lib/share.ts</code>、<code>src/App.tsx</code></td><td>这是唯一需要按平台分流的区域</td></tr>
     </tbody>
