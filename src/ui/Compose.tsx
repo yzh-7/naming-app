@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   charFacts, cleanSurname, composeName, findCombo, findItem, L0_CHARS, pairCandidates,
-  readings, scoreItem, shapeTags, surnameReads,
+  isKnownSurname, readings, scoreItem, shapeTags, surnameReads,
 } from '../engine/name';
 import { CHARS, POOL, SINGLES } from '../engine/data';
 import { BOOK_COUNT, BOOK_LABEL, type Opts, type Result, type ShareName } from '../engine/types';
@@ -46,7 +46,7 @@ export default function Compose({ surname, setSurname, reading, setReading, opts
   const [randoms, setRandoms] = useState<string[]>([]);
   const [freeRandom, setFreeRandom] = useState(false);
 
-  useEffect(() => store.saveCompose(draft), [draft]);
+  useEffect(() => { store.saveCompose(draft); }, [draft]);
 
   const sur = cleanSurname(surname);
   const want = draft.length;
@@ -111,6 +111,16 @@ export default function Compose({ surname, setSurname, reading, setReading, opts
   const surReadCount = surnameReads(sur);
   const surReads = sur.length > 0 && surReadCount > 1 ? readings(sur[0]) : [];
   const pick = Math.min(reading, Math.max(surReads.length - 1, 0));
+  const surUnknown = sur.length > 0 && !isKnownSurname(sur);
+
+  // 选字面板：Escape 关掉，焦点回到原来那个字位；不靠鼠标也能收起来
+  const slotRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const closePicker = () => {
+    const i = picker;
+    setPicker(null);
+    setQ('');
+    slotRefs.current[i ?? 0]?.focus();
+  };
 
   return (
     <div className="space-y-4">
@@ -142,12 +152,19 @@ export default function Compose({ surname, setSurname, reading, setReading, opts
           </div>
         </div>
 
+        {surUnknown && (
+          <p className="rounded-card border border-warn-line bg-warn-soft px-3 py-2 text-meta leading-6 text-warn">
+            「{sur}」有字不在读音表（通用规范汉字表 8105 字）内，这次算不出读音与分数；先核对字义，或换一个姓。
+          </p>
+        )}
+
         <div className="flex flex-wrap items-end gap-3">
           {Array.from({ length: want }, (_, i) => {
             const ch = chars[i];
             return (
               <div key={i} className="flex items-end gap-1.5">
-                <button onClick={() => { setPicker(i as 0 | 1); setQ(''); }} aria-label={ch ? `选择第 ${i + 1} 字：${ch}` : `选择第 ${i + 1} 字`} aria-expanded={picker === i}
+                <button ref={(el) => { slotRefs.current[i] = el; }} onClick={() => { setPicker(i as 0 | 1); setQ(''); }}
+                  aria-label={ch ? `选择第 ${i + 1} 字：${ch}` : `选择第 ${i + 1} 字`} aria-expanded={picker === i}
                   className="flex h-16 w-16 flex-col items-center justify-center gap-0.5 rounded-card border border-dashed border-line-strong bg-surface-2 font-serif text-name text-ink hover:border-accent hover:bg-accent-soft sm:h-20 sm:w-20 sm:text-name-lg">
                   {ch || <span className="text-meta text-ink-3">第 {i + 1} 字</span>}
                 </button>
@@ -166,7 +183,7 @@ export default function Compose({ surname, setSurname, reading, setReading, opts
         </div>
 
         {picker !== null && (
-          <div className="space-y-3 rounded-card border border-line bg-surface-2 p-3 sm:p-4">
+          <div onKeyDown={(e) => { if (e.key === 'Escape') closePicker(); }} className="space-y-3 rounded-card border border-line bg-surface-2 p-3 sm:p-4">
             <div className="flex flex-wrap items-center gap-2">
               <input value={q} onChange={(e) => setQ(e.target.value)} autoFocus aria-label={`第 ${picker + 1} 字搜索`}
                 placeholder="输入汉字或拼音，如 子 / zi" className="field w-full font-serif text-title sm:w-48" />
@@ -174,7 +191,7 @@ export default function Compose({ surname, setSurname, reading, setReading, opts
                 className={`chip ${onlyL0 ? 'chip-ok' : 'text-ink-3'}`}>
                 仅名用字表
               </button>
-              <button onClick={() => { setPicker(null); setQ(''); }} className="btn ml-auto">关闭</button>
+              <button onClick={closePicker} className="btn ml-auto">关闭</button>
             </div>
             <p className="text-meta text-ink-3">点字填入第 {picker + 1} 字；也可直接输入任意汉字（汉字按字找，拼音按音找）。</p>
             {CJK.test(q) && (
@@ -187,6 +204,11 @@ export default function Compose({ surname, setSurname, reading, setReading, opts
                 className="btn btn-accent max-w-full whitespace-normal font-serif text-title">
                 直接使用「{q}」
               </button>
+            )}
+            {charList(q, onlyL0).length === 0 && (
+              <p className="text-meta text-ink-3">
+                没有匹配的字{q ? `：「${q}」` : ''}。汉字按字找、拼音按音找；{onlyL0 ? '当前只列名用字表内的字，关掉「仅名用字表」可看全部。' : '这个字表里没有这样的字。'}
+              </p>
             )}
             <div data-char-grid role="group" aria-label="候选字" className="flex max-h-56 flex-wrap gap-1.5 overflow-y-auto pb-1">
               {charList(q, onlyL0).map((ch) => (
@@ -253,7 +275,7 @@ export default function Compose({ surname, setSurname, reading, setReading, opts
 
           <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
             {scored && (
-              <button onClick={() => onFav(scored)} className={fav.has(scored.id) ? 'btn btn-on' : 'btn'}>
+              <button onClick={() => onFav(scored)} aria-pressed={fav.has(scored.id)} className={fav.has(scored.id) ? 'btn btn-on' : 'btn'}>
                 {fav.has(scored.id) ? '已收藏' : '收藏'}
               </button>
             )}

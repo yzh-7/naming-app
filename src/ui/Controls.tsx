@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { cleanSurname, readings, surnameReads } from '../engine/name';
+import { cleanSurname, POOL_TITLES, readings, surnameReads } from '../engine/name';
 import { BOOK_LABEL, BOOK_ORDER, MUST_POS_LABEL, POP_FLOORS, STROKE_MAXES, type Book, type Gender, type MustPos, type Opts, type SortKey } from '../engine/types';
 
 const GENDERS: { v: Gender; label: string; on: string }[] = [
@@ -15,10 +15,12 @@ const SORTS: { v: SortKey; label: string }[] = [
   { v: 'book', label: '按出处' },
 ];
 
+const fmt = (n: number) => n.toLocaleString('en-US');
+
 function poolSummary(poolCount: number, perPage: number, pages: number, pageNo: number): string {
   const parts: string[] = [];
   if (poolCount > 0) {
-    parts.push(`池内 ${poolCount} 条`);
+    parts.push(`候选池 ${fmt(poolCount)} 条`);
     if (pages > 1 && perPage > 0) parts.push(`${perPage}×${pages}页·第${pageNo + 1}页`);
     else if (pages === 1 && perPage > 0) parts.push('一屏全展');
   }
@@ -67,7 +69,7 @@ export default function Controls({ surname, setSurname, reading, setReading, opt
             {opts.count > 0 && opts.count < poolCount && !PRESETS.includes(opts.count) && (
               <option value={String(opts.count)}>{opts.count} 条</option>
             )}
-            <option value="all">全部 {poolCount} 条</option>
+            <option value="all">全部 {fmt(poolCount)} 条</option>
           </select>
         </label>
         <label className="col-span-full sm:block">
@@ -110,8 +112,16 @@ export default function Controls({ surname, setSurname, reading, setReading, opt
         <label className="flex items-center gap-2">
           <span className="lab shrink-0">搜索</span>
           <input value={opts.search} onChange={(e) => patch({ search: e.target.value })} aria-label="搜索名字、拼音或篇名"
-            placeholder="名字 / 拼音 / 篇名" className="field w-full sm:w-44" />
+            placeholder="名字 / 拼音 / 篇名" maxLength={40} className="field w-full sm:w-44" />
           {opts.search && <button onClick={() => patch({ search: '' })} aria-label="清除搜索" className="btn">清除</button>}
+        </label>
+        <label className="flex items-center gap-2">
+          <span className="lab shrink-0" title="只保留这一篇里的候选。篇名可以从卡片上的「同篇候选」进来，也可以在这里直接写">篇名</span>
+          <input value={opts.title} onChange={(e) => patch({ title: e.target.value })} list="pool-titles"
+            aria-label="篇名（只看这一篇）" placeholder={opts.title ? '' : '如 离骚'} maxLength={14}
+            className="field w-full sm:w-44" />
+          <datalist id="pool-titles">{POOL_TITLES.map((t) => <option key={t} value={t} />)}</datalist>
+          {opts.title && <button onClick={() => patch({ title: '' })} aria-label="不限篇名" className="btn">不限篇</button>}
         </label>
         <label className="flex flex-wrap items-center gap-2">
           <span className="lab shrink-0" title="结果里每条名字都必须含这个字；双名还能限定它当首字或末字">指定字</span>
@@ -128,7 +138,7 @@ export default function Controls({ surname, setSurname, reading, setReading, opt
             </select>
           )}
           {opts.mustChar && (
-            <button onClick={() => patch({ mustChar: '' })} aria-label="清除指定字" className="btn">清除</button>
+            <button onClick={() => patch({ mustChar: '' })} aria-label="清除指定字" className="btn">不限制</button>
           )}
         </label>
         <label className="flex items-center gap-2">

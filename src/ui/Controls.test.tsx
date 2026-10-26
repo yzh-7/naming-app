@@ -7,7 +7,7 @@ import { BOOK_ORDER, type Opts } from '../engine/types';
 const base: Opts = {
   gender: 'any', genderWeak: false, length: 2,
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
-  redupOnly: false, exclude: [], count: 12, search: '', sort: 'score',
+  redupOnly: false, exclude: [], count: 12, search: '', title: '', sort: 'score',
   strokeMax: 0, noMonotone: false, popFloor: 0, mustChar: '', mustPos: 'any',
 };
 
@@ -32,20 +32,21 @@ describe('Controls：输入与条件渲染', () => {
     expect(input.value).toBe('苏');
     fireEvent.change(input, { target: { value: '欧阳' } });
     expect(input.value).toBe('欧阳');
-    expect(screen.getByText(/池内 1505 条/)).toBeInTheDocument();
+    expect(screen.getByText(/候选池 1,505 条/)).toBeInTheDocument();
   });
 
   it('多音姓才显示读音选择，单音姓不显示', () => {
-    // 展开高级筛选后常驻 4 个 combobox（每批条数、排序、整名笔画、用字常见度）；多音姓（曾 céng/zēng）再多一个读音下拉
+    // 展开高级筛选后常驻 5 个 combobox（每批条数、排序、篇名、整名笔画、用字常见度；带 list 的输入框也是 combobox）；
+    // 多音姓（曾 céng/zēng）再多一个读音下拉
     const { unmount } = render(<Harness initialSurname="曾" />);
     openAdvanced();
-    expect(screen.getAllByRole('combobox')).toHaveLength(5);
+    expect(screen.getAllByRole('combobox')).toHaveLength(6);
     expect(screen.getByText('姓的读音（多音姓请选）')).toBeInTheDocument();
     unmount();
     // 单音姓（欧 ōu）不显示
     render(<Harness initialSurname="欧" />);
     openAdvanced();
-    expect(screen.getAllByRole('combobox')).toHaveLength(4);
+    expect(screen.getAllByRole('combobox')).toHaveLength(5);
     expect(screen.queryByText('姓的读音（多音姓请选）')).not.toBeInTheDocument();
   });
 

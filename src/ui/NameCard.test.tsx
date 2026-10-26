@@ -8,7 +8,7 @@ import { BOOK_LABEL, BOOK_ORDER, type Opts } from '../engine/types';
 const opts: Opts = {
   gender: 'any', genderWeak: false, length: 2,
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
-  redupOnly: false, exclude: [], count: 12, search: '', sort: 'score',
+  redupOnly: false, exclude: [], count: 12, search: '', title: '', sort: 'score',
   strokeMax: 0, noMonotone: false, popFloor: 0, mustChar: '', mustPos: 'any',
 };
 
@@ -34,7 +34,7 @@ describe('NameCard 组件', () => {
     const onFav = vi.fn(); const onBlock = vi.fn(); const onShare = vi.fn(); const onCopy = vi.fn();
     render(<NameCard r={r} fav={false} blocked={false} onFav={onFav} onBlock={onBlock} onShare={onShare} onCopy={onCopy} />);
     fireEvent.click(screen.getByRole('button', { name: '收藏' }));
-    fireEvent.click(screen.getByRole('button', { name: '不再看它' }));
+    fireEvent.click(screen.getByRole('button', { name: '拉黑' }));
     fireEvent.click(screen.getByRole('button', { name: '分享卡' }));
     fireEvent.click(screen.getByRole('button', { name: '复制信息' }));
     expect(onFav).toHaveBeenCalledOnce();
@@ -47,7 +47,7 @@ describe('NameCard 组件', () => {
     expect(screen.getByRole('button', { name: '已收藏' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '已拉黑' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '收藏' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '不再看它' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '拉黑' })).not.toBeInTheDocument();
   });
   it('findItem 能按 id 取回同一节点（收藏持久化的前提）', () => {
     expect(findItem(r.id)?.name).toBe(item.name);

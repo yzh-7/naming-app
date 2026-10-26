@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { glossOf, lineGlossOf, nicknames, polyphoneTags, popularity, radicalTags, shapeTags } from '../engine/name';
+import { glossOf, lineGlossOf, nicknames, polyphoneTags, popularity, radicalTags, sameSoundPeers, shapeTags, sameTitleCount } from '../engine/name';
 import { BOOK_LABEL, type Book, type Result } from '../engine/types';
 
 const WINDOW_MAX = 28;
@@ -88,9 +88,11 @@ export function Source({ r }: { r: SourceRef }) {
   );
 }
 
-export default function NameCard({ r, fav, blocked, onFav, onBlock, onShare, onCopy }: {
+export default function NameCard({ r, fav, blocked, onFav, onBlock, onShare, onCopy, onTitle, onSameSound }: {
   r: Result; fav: boolean; blocked: boolean; onFav: () => void; onBlock: () => void;
   onShare?: () => void; onCopy?: () => void;
+  // 按篇看：把筛选收窄到这一篇；按音看：把搜索换成这个名字的拼音（去声调）
+  onTitle?: () => void; onSameSound?: () => void;
 }) {
   const marked = r.flags.filter((f) => !f.startsWith('同形'));
   const shadow = r.flags.filter((f) => f.startsWith('同形'));
@@ -101,6 +103,8 @@ export default function NameCard({ r, fav, blocked, onFav, onBlock, onShare, onC
   const poly = useMemo(() => polyphoneTags(r.name), [r.name]);
   const pop = useMemo(() => popularity(r.name), [r.name]);
   const nns = nicknames(r.name);
+  const peers = useMemo(() => sameSoundPeers(r.name, 4), [r.name]);
+  const sameTitle = sameTitleCount(r);
 
   // 性别标签：偏女=暖色、偏男=冷色（浅色/深色各有一套对比度达标的取值）
   const gBadge = useMemo(() => {
@@ -110,7 +114,7 @@ export default function NameCard({ r, fav, blocked, onFav, onBlock, onShare, onC
     return { text: `${weak}${side}`, cls: g.side === 'f' ? 'chip-warm' : 'chip-cool' };
   }, [g]);
 
-  const shapeShown = shape.chars.some((c) => c.sx) || shape.strokes > 0 || !!shape.note;
+  const shapeShown = shape.chars.length > 0 || !!shape.note;
 
   return (
     <article className="card">
@@ -149,10 +153,12 @@ export default function NameCard({ r, fav, blocked, onFav, onBlock, onShare, onC
           {shapeShown && (
             <><dt className="text-ink-3">字形</dt>
               <dd className="flex flex-wrap items-center gap-x-3 gap-y-1 tabular-nums">
-                {shape.chars.filter((c) => c.sx).map((c) => (
-                  <span key={c.ch}>{c.ch}·{c.sx}{c.st ? ` ${c.st}画` : ''}</span>
+                {shape.chars.map((c) => (
+                  <span key={c.ch}>{c.ch}·{c.sx ?? '结构未收录'}·{c.st != null ? `${c.st}画` : '笔画未收录'}</span>
                 ))}
-                {shape.strokes > 0 && <span className="tabular-nums">共 {shape.strokes} 画</span>}
+                {shape.strokesTotal != null
+                  ? <span className="tabular-nums">共 {shape.strokesTotal} 画</span>
+                  : <span className="text-ink-3">笔画合计不全</span>}
                 {shape.note && <span className="chip chip-warn">{shape.note}</span>}
               </dd></>
           )}
@@ -181,6 +187,16 @@ export default function NameCard({ r, fav, blocked, onFav, onBlock, onShare, onC
               <dd className="flex flex-wrap gap-x-3 gap-y-0.5"
                 title="部首提示＝该字在康熙字典里所属的部首，只标落在 木/火/水/金/土 五部的字，其余留白（留白不代表该字无五行）。本应用不做五行筛选、不判吉凶。">
                 {rad.map((x) => <span key={x.ch}>{x.ch} · {x.el}部</span>)}
+              </dd>
+            </>
+          )}
+          {peers.length > 0 && (
+            <>
+              <dt className="text-ink-3">同音</dt>
+              <dd className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span>{peers.map((p) => p.name).join('、')}</span>
+                <span className="text-meta text-ink-3" title={`同音写法出自《${BOOK_LABEL[r.book]}》等条目：${peers.map((p) => `${p.name}《${BOOK_LABEL[p.book]}·${p.title}》`).join('、')}`}>去声调同音，按常用读音</span>
+                {onSameSound && <button onClick={onSameSound} className="btn btn-quiet text-meta">按拼音看</button>}
               </dd>
             </>
           )}
@@ -216,9 +232,12 @@ export default function NameCard({ r, fav, blocked, onFav, onBlock, onShare, onC
         <button onClick={onFav} aria-pressed={fav} className={`btn ${fav ? 'btn-on' : ''}`}>
           {fav ? '已收藏' : '收藏'}
         </button>
-        <button onClick={onBlock} aria-pressed={blocked} className={`btn ${blocked ? 'btn-danger' : ''}`}>
-          {blocked ? '已拉黑' : '不再看它'}
+        <button onClick={onBlock} aria-pressed={blocked} title="拉黑后这个名字不再出现在候选与「搭配」里" className={`btn ${blocked ? 'btn-danger' : ''}`}>
+          {blocked ? '已拉黑' : '拉黑'}
         </button>
+        {onTitle && sameTitle > 1 && (
+          <button onClick={onTitle} className="btn btn-quiet" title={`《${r.title}》里还有 ${sameTitle - 1} 条候选`}>同篇还有 {sameTitle - 1} 条</button>
+        )}
         {onCopy && <button onClick={onCopy} className="btn btn-quiet">复制信息</button>}
         {onShare && <button onClick={onShare} className="btn btn-quiet">分享卡</button>}
       </div>
