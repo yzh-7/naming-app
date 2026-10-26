@@ -20,6 +20,8 @@ jobs:
       - run: npm ci
       - name: 构建数据 + 门禁 + 类型检查 + lint + 测试 + 构建 + 体积门禁
         run: npm run build
+      - name: 单文件版构建 + 体积门禁（产物 dist-single/ 不发布，只为让那条体积口径真的是门禁）
+        run: npm run single
 
   e2e:
     runs-on: ubuntu-latest

@@ -1,0 +1,23 @@
+# 两类文件绝对不参与格式化。
+# 1. 文档：表格写成紧凑形式（`|---|---:|`）。prettier 会把列宽补齐并重新排表，
+#    改一个单元格就会得到整张表的 diff，评审时看不出真正改了什么。
+# 2. 输入与生成物：`data/raw/` 是第三方语料与字表（带许可，不该被我们的工具改动形态），
+#    `data/measured/` 是测量结果，`src/data/*.json` 由 `build-data.mjs` 写出，
+#    `design-audit.json` 由体检脚本写出。
+#
+# 代码文件目前不是 prettier 形态：`npm run format` 会重排仓库里 50 多个文件。
+# 要统一代码风格请单独开一个 chore 提交跑 `npm run format`，不要混进功能改动。
+*.md
+index.html
+ANDROID.html
+
+data/raw/
+data/measured/
+dist/
+dist-single/
+src/data/*.json
+design-audit.json
+
+coverage/
+playwright-report/
+test-results/
