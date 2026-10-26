@@ -1,119 +1,194 @@
-# 取名 · 典籍取词
+# 取名（典籍取词）
 
-从七本中文典籍（诗经 / 楚辞 / 论语 / 水墨唐诗 / 宋词三百首 / 道法 / 乐府诗集）里，按「起点落音步、同句读内取两字、且两字都在名用字白名单内」的口径，生成有出处的双字名与单字名。
+一个离线运行的取名辅助工具。它从七部中文典籍中按固定口径取出词语，组合成单字名与双字名，并为每个结果附上出处原句、读音、字义、笔画与用字频次等信息。
 
-**完全离线**：一个静态站点，运行时零网络请求；数据全部随包发布。所有筛选与打分都在浏览器里跑。
+在线版本：<https://yzh-7.github.io/naming-app/>
 
-## 定位：这是取名的**素材工具**，不是命理工具
+语料在构建期固化为 JSON 随包发布，页面运行时不发起任何网络请求，筛选与计算全部在浏览器内完成。站点可安装为 PWA，断网可用。
 
-本应用刻意**不做**五行筛选、八字五格、生肖宜忌、"补缺"建议、吉凶判定。它给的是**可核对的事实**：
+## 概述
 
-- 名字出自哪句、哪个字、第几字；
-- 字的本义（来自开放词典）；
-- 笔画、结构（独体/上下/左右…）；
-- 声调、谐音、是否多音字；
-- 名用字的真实使用频次（分档：很常见 / 常见 / 一般 / 少见 / 冷僻）。
+取词口径（Pool-B）：
 
-卡片上标的「部首」只取康熙字典**木火水金土**五部这一可核对的事实，且只覆盖白名单里查得到的那部分字。**未标不代表该字无五行**——留白是留白，不是结论。要不要参考五行，交给你和你的依据。
+1. 典籍原文按 `。！？；` 分句、按 `，、：` 分句读，去标点。
+2. 第一个字落在音步起点（起点位置依诗体确定），第二个字在同一句读内、与首字间隔不超过 3 字。
+3. 两个字都必须在名用字白名单内；虚词、忌讳字、现代高频成词与噪声词被剔除。
+
+七部典籍及其规模：
+
+| 典籍 | 篇数 | 取词段数 | 取词段字符数 |
+|---|---:|---:|---:|
+| 诗经 | 305 | 7,260 | 29,250 |
+| 楚辞 | 65 | 5,495 | 24,588 |
+| 论语 | 20 | 3,682 | 15,720 |
+| 水墨唐诗 | 176 | 991 | 5,832 |
+| 宋词三百首 | 280 | 5,208 | 23,960 |
+| 道法 | 22 行 | 68 | 321 |
+| 乐府诗集 | 20 篇 | 429 | 2,134 |
+| 合计 | — | 23,133 | 101,805 |
+
+经上述口径得到的候选池：双名 1,525 条（间隔 1 / 2 / 3 字分别为 727 / 474 / 324）、单字名 217 个、名用字白名单 293 字、出处今译 1,140 句。
+
+## 环境要求
+
+- Node.js 22.19 或更高版本。版本约束见 `package.json` 的 `engines` 与 `.nvmrc`，CI 覆盖 22 与 24。
+- 端到端测试与设计体检需要 Chromium，首次执行 `npx playwright install chromium`。
+- 浏览器：支持现代 ES 模块与 CSS 自定义属性的版本。
 
 ## 快速开始
 
 ```bash
-npm install
-npm run dev        # 构建数据 + 起开发服务器
-npm run build      # 构建数据 → 门禁 → 类型检查 → lint → 测试 → vite build → 体积门禁
-npm run build:single   # 同上，但打成单个 HTML 文件（SINGLE=1）
-npm run serve      # 用 python3 静态伺服 dist（端口 5178）
-npm run lint       # ESLint（flat config）
-npm run format     # Prettier 写回
-npm run test:e2e   # Playwright + axe（需先 npm run build；首次 npx playwright install chromium）
-npm run audit:design   # 设计体检：320/390/768/1024/1440 × 深浅 × 四个页共 40 组，量溢出、触控目标、对比度、行长（自动起预览服务）
-npm run check      # build + test:e2e + audit:design 一条龙
+$ npm install
+$ npm run dev
 ```
 
-Node 需要 **22.19+**（vitest 4 的 fetch 依赖 undici 8，要求 ≥22.19；Node 20 已 EOL。见 `.nvmrc` / `package.json` 的 `engines`，CI 跑 22 与 24）。
+`dev` 会先生成数据再启动开发服务器。构建产物位于 `dist/`，本地预览用 `vite preview` 或 `npm run serve`。
 
-## 部署（GitHub Pages）
+## 命令
 
-推送到 `main` 分支即自动构建并发布到 GitHub Pages（见 `.github/workflows/deploy-pages.yml`）。
-
-**首次配置**：
-1. 在 GitHub 建一个公开仓库（如 `naming-app`），把代码推上去。
-2. 仓库 Settings → Pages → Build and deployment → Source 选 **GitHub Actions**。
-3. 推送后 Actions 自动跑 `npm run build` 并发布，几分钟后访问 `https://<用户名>.github.io/naming-app/`。
-
-> 免费账户只能从公开仓库发布 Pages。本项目无密钥无隐私数据，公开没问题。
+| 命令 | 说明 |
+|---|---|
+| `npm run build:data` | 将 `data/raw/` 固化为 `src/data/*.json` |
+| `npm run verify` | 数据门禁：输入指纹、白名单账目、出处自洽、今译覆盖率 |
+| `npm run dev` | 生成数据后启动 Vite 开发服务器 |
+| `npm test` | Vitest 单元测试 |
+| `npm run test:e2e` | Playwright 端到端测试与 axe 可访问性扫描，需先执行 `npm run build` |
+| `npm run audit:design` | 设计体检，5 视口 × 深浅主题 × 4 页面共 40 组，需先执行 `npm run build` |
+| `npm run build` | 依次执行 `build:data`、`verify`、`tsc --noEmit`、`eslint .`、`vitest`、`vite build`、体积检查 |
+| `npm run build:single` | 同上，产出单个 HTML 文件（`SINGLE=1`） |
+| `npm run serve` | 以 `python3 -m http.server` 静态伺服 `dist/`，端口 5178 |
+| `npm run typecheck` / `npm run lint` / `npm run format` | 类型检查、ESLint、Prettier |
+| `npm run check` | `build`、`test:e2e`、`audit:design` 三项连跑 |
 
 ## 功能
 
-- **生成**：按姓氏（含复姓、多音姓读音选择）过滤出一页候选，出处可核对；每张卡片给出**出处今译**（本项目自撰，只解释句意）；换一批分页不重不漏。
-- **自选**：自己选姓与第 1、2 个字（支持任意汉字，非名用字会标注），实时核对读音/谐音/字义/字形；**有典籍出处就显示原句与今译，没有就明说没有**，不拿别的句子凑。另有「换一批随机」（默认只随机有出处的）、「同句读搭配字」顺藤摸瓜；无出处的组合不进收藏。
-- **筛选**：性别风格、字数（单/双）、典籍开关、只看叠字、搜索、排序；**指定用字**（限首字/末字，从有出处的搭配里挑定字）；以及可核对事实类筛选——**整名笔画上限**、**避开两字同结构**、**逐字用字常见度下限**。
-- **收藏**：备注 / 分组 / 搜索 / 排序（最近·分数·笔画·常见度）/ 按分组过滤；勾选 2–3 个进入**对比表**。
-- **导出/导入**：JSON 备份（导入时可选**合并**或**覆盖**）；当前筛选下的**候选全量导出**（JSON / CSV，含出处原句与今译）；**复制链接**只带轻量筛选，收藏与拉黑留在本机。
-- **分享**：单名羊皮纸卡片（含原句与今译，附离线生成的**二维码**）、收藏页**导出名单长图**、**打印名单**（打印样式只保留卡片正文）；「复制信息」同样带今译；自选组合若无出处，卡片与摘要会明确写「未见此搭配」。
-- **主题**：浅色 / 深色 / **跟随系统**三态，随系统偏好实时切换；深浅两档在四个页面（含分享卡、对比表、导入弹窗）都成套，不是只翻背景色。
-- **界面**：手机端 320px 起不横向溢出；触控目标在 1023px 以下一律按手指尺寸（≥44px）给，平板（768）也算手指；名字用衬线大字、界面文案用无衬线，正文行长控制在约 40 字以内；页头常驻（sticky），换页时滚回顶部，不让页头压住第一张卡片。具体由 `scripts/design-audit.mjs` 实测把关（见「测试」）。
-- **PWA**：可安装，离线可用；有新版本或离线时顶部给出提示。
+### 生成
 
-## 截图
+输入姓氏（支持复姓，多音姓可选择读音），输出一页候选。每页可换一批，分页不重复、不漏项。每张卡片包含：读音与声调、出处原句与今译、字义、笔画与字形结构、每个字的用字常见度、多音字提示、小名建议，以及收藏、拉黑、分享、复制四个动作。
 
-对构建产物实拍（`scripts/screenshots.mjs`，Chromium 2x 渲染）：
+### 自选
+
+自行选择姓氏与一到两个字，可选任意汉字；不在名用字白名单内的字会标注出来。自选页只做读音、谐音与字形核对，不套用候选池的分数。有典籍出处的组合显示原句与今译，没有出处的组合显示「未见此搭配」，且不提供收藏入口。支持随机组合（默认只在有出处的搭配中随机）与「同句读搭配字」查询。草稿保存在本机。
+
+### 筛选
+
+性别风格、字数（单名／双名）、典籍开关、只看叠字、关键词搜索、排序（分数／笔画／常见度／典籍）、指定用字及其位置、整名笔画上限、避开两字同结构、逐字用字常见度下限。
+
+### 收藏与拉黑
+
+收藏支持备注、分组、分组过滤、搜索与排序。勾选 2–3 个收藏可进入对比表。拉黑名单记录需要排除的名字，并参与生成结果过滤。收藏与拉黑存在本机 `localStorage`。
+
+### 导入、导出与链接
+
+- 导出收藏、拉黑与筛选配置为 JSON；导入时可选择合并或覆盖，导入文件会先校验。
+- 导出当前筛选命中的全部候选为 JSON 或 CSV（含出处原句与今译），不限于当前页。
+- 复制当前页面的链接。URL 只编码筛选条件（姓氏、读音、性别、字数、搜索词、排序、笔画上限、常见度下限、典籍开关等），不包含收藏与拉黑。
+
+### 分享与打印
+
+单个名字的分享卡片图片（含原句、今译与本地生成的二维码）、收藏名单长图、打印名单。打印样式只保留卡片正文，动作区与折叠详情不打印。
+
+### 主题
+
+跟随系统、浅色、深色三档，保存在本机键 `naming.theme.v1`，标记加在 `<html>` 上。选择「跟随系统」时随系统偏好实时切换。四个页面以及分享卡、对比表、导入弹窗均有对应的深色配色。
+
+### 响应式与可访问性
+
+- 320px 宽度起无横向溢出。
+- 视口宽度小于 1024px 时交互目标高度不小于 44px，平板宽度（768px）同样按触摸尺寸计算。
+- 断点：`xs` 384、`sm` 640、`lg` 1024、`xl` 1280。
+- 页头固定（sticky），切换页面时滚动位置回到顶部。
+- 状态按钮使用 `aria-pressed`，折叠区使用 `details/summary`，装饰字符标记 `aria-hidden`。
+- 界面文案无衬线，名字用衬线大字，数字使用 `tabular-nums`，正文行长上限约 40 字。
+
+### PWA
+
+`public/manifest.webmanifest` 与 Service Worker 支持安装与离线访问。有新版本或处于离线状态时，页面顶部给出提示。
+
+## 界面
+
+对构建产物实拍（`scripts/screenshots.mjs`，Chromium，2 倍缩放）：
 
 | 生成页（浅色） | 生成页（深色） |
 |---|---|
 | ![生成页浅色](docs/screenshots/generate-light.png) | ![生成页深色](docs/screenshots/generate-dark.png) |
 
-| 自选页（苏子归，楚辞·江有汜） | 生成页（手机 390px） |
+| 自选页（组合「苏子归」，出处《诗经·江有汜》） | 生成页（390 × 844） |
 |---|---|
 | ![自选页](docs/screenshots/compose.png) | ![手机视图](docs/screenshots/generate-mobile.png) |
 
-## 目录
-
-```
-data/raw/         上游原始数据 + 许可全文（licenses/）+ SHA256SUMS
-scripts/          构建管线与设计期诊断
-  build-data.mjs    把 raw 固化成 src/data/*.json（唯一的正式数据来源）
-  verify.mjs        P0 门禁：指纹、账目、出处、结构…
-  size-check.mjs    体积门禁（gzip 预算 400 KB）
-  derive-dict.mjs   一次性派生：从上游词典/语料裁出 dict_shape / dict_gloss / name_given_freq
-  l0-keep.mjs       诊断脚本读取 l0-verdicts.txt「保留」字的共享工具
-  l0-unlock.mjs     候选字边际增量排行 + 人工过字待审表
-  measure-*.mjs     设计期实测（漏斗 / L0 曲线 / 取词阶梯 / 道法产率）
-src/
-  engine/           纯函数引擎：数据装配（含运行时 schema 自检）、取词、打分、音韵、字形、常见度
-  store/            localStorage 持久化 + 导入导出 + URL 状态编解码
-  ui/               Controls / NameCard / ErrorBoundary
-  lib/share.ts      分享卡片 / 名单长图（Canvas，二维码用 uqr 本地生成）+ 下载/复制
-  lib/pwa.ts        Service Worker 注册、离线与「有新版本」状态
-  data/             构建产物（勿手改）
-  test-setup.ts     单测公共初始化（jest-dom 断言 + cleanup）
-public/             PWA：manifest / icon.svg + icon-192/512.png / service worker
-tests/e2e/          Playwright 端到端 + axe 可访问性扫描
-```
-
-## 常见问答
-
-- **为什么不做五行 / 八字 / 五格 / 吉凶？** 这些规则没有可核对的共识口径，做出来的是「看起来有依据」而非依据。本应用只给能逐条核对的事实（出处、字义、笔画、结构、读音、真实用名频次），判断权留给你。
-- **语料是哪七本、为什么没有我想读的书？** 诗经 305 首 / 楚辞 65 篇 / 论语 20 篇 / 水墨唐诗 176 首 / 宋词三百首 / 道法 22 行（手工录入并逐行核对归属）/ 乐府诗集 20 篇（维基文库整理本抄录、四库本交叉校）。每本的规模与许可在 `data/raw/LICENSES.md`，加书有门禁纪律（只许新增、出处改判必须间隔变小且逐条断言）。
-- **为什么名用字只有 293 个？** 这是「真有人在名字里用」的种子字表 ∩ 通用规范汉字表，外加人工过字的保留判定；想扩表跑 `scripts/l0-unlock.mjs` 出待审表，判定文本有指纹，扩表后全部门禁换下界模式、老名字一条不许丢。
-- **出处今译是谁写的？** 本项目自撰（1,140 行，逐句对应），只解释句意，不引用任何现代整理本的注释与译文。
-
 ## 数据来源与许可
 
-原始数据放在 `data/raw/`，每份的上游、许可、说明见 [`data/raw/LICENSES.md`](data/raw/LICENSES.md)，许可全文在 `data/raw/licenses/`。`verify.mjs` 会核对 `data/raw/SHA256SUMS`，改动原始数据必须同步更新指纹。
+原始语料、字表与派生输入位于 `data/raw/`，逐项上游、许可与用途见 [data/raw/LICENSES.md](data/raw/LICENSES.md)，许可全文副本位于 `data/raw/licenses/`。`data/raw/SHA256SUMS` 记录输入指纹，`npm run verify` 在构建期校验；改动原始数据必须同步更新指纹。
+
+构建产物位于 `src/data/`，由 `scripts/build-data.mjs` 生成，不要手工编辑。出处今译（`data/raw/line_gloss.tsv`）由本项目撰写，只解释句意。
+
+## 项目结构
+
+```text
+data/raw/          上游原始数据、派生输入、SHA256SUMS、许可全文
+scripts/           构建管线、门禁与设计期诊断脚本
+  build-data.mjs     data/raw → src/data/*.json
+  verify.mjs         数据门禁
+  size-check.mjs     体积门禁
+  design-audit.mjs   设计体检
+  screenshots.mjs    文档截图
+  derive-dict.mjs    一次性派生三份精简输入
+  measure-*.mjs      设计期实测
+src/
+  engine/          纯函数引擎：数据装配与运行时结构校验、取词、打分、音韵、字形、常见度
+  store/           localStorage 持久化、导入导出、URL 状态编解码
+  ui/              Controls、NameCard、Compose、TopNav、ThemeControl、ErrorBoundary（对比表 Compare 定义在 App.tsx 内）
+  lib/             share.ts（分享卡片与名单长图）、pwa.ts（Service Worker）
+  data/            构建产物，勿手改
+public/            manifest、图标、service worker
+tests/e2e/         Playwright 端到端与 axe 扫描
+docs/screenshots/  文档截图
+```
 
 ## 测试
 
-```bash
-npm run typecheck   # tsc --noEmit
-npm run lint        # ESLint
-npm test            # Vitest（9 个文件，148 用例）
-npm run test:e2e    # Playwright + axe（先 npm run build）
-npm run audit:design # 设计体检（自己起 vite preview）
-npm run check        # 上面三条一条龙
-```
+| 层 | 命令 | 覆盖内容 |
+|---|---|---|
+| 单元测试 | `npm test` | 9 个文件、148 个用例：取词口径、打分、音韵、字形与常见度筛选、检索排序、持久化与导入导出往返、URL 编解码、分享卡片与名单图、组件渲染 |
+| 端到端 | `npm run test:e2e` | 16 个用例，在 Chromium 上跑关键路径，含 axe（WCAG 2 A/AA）扫描与 target-size 规则，深浅主题均覆盖 |
+| 设计体检 | `npm run audit:design` | 40 个组合：320×640、390×844、768×900、1024×900、1440×1000 五个视口 × 浅色与深色 × 四个页面，检查横向溢出、触控目标尺寸、文字对比度、方块字行长、页头是否遮挡首屏卡片 |
 
-单测覆盖引擎（取词口径、打分、音韵、字形、常见度、检索排序、**笔画/结构/常见度筛选**）、store（持久化、导入导出往返、URL 编解码、导入写回）、分享（卡片/二维码/名单图）、以及 Controls / NameCard / App 的组件与集成渲染。端到端在真实 Chromium 上跑关键路径，并做 axe（WCAG 2 A/AA）扫描，含手机端的 target-size 规则与深色模式对比度。
+设计体检在硬违规出现时以退出码 1 结束。硬违规判定：横向溢出超过 1px、触控目标小于 24px、宽度小于 1024px 时目标小于 44px（软指标）、文字对比度低于 WCAG 要求（大字 3:1、正文 4.5:1）、单行方块字超过 42 字、页头压住首屏第一张卡片。`--verbose` 列出逐条结果，`--json` 输出 `design-audit.json`。
 
-设计不是靠眼睛看，靠量：`scripts/design-audit.mjs` 在 320×640 / 390×844 / 768×900 / 1024×900 / 1440×1000 五个视口 × 浅色/深色 × 四个页共 40 个组合上实测横向溢出、触控目标尺寸、文字对比度、方块字行长、粘性页头是否压住首屏，硬违规非零就退出码 1（`--verbose` 逐条列出，`--json` 出 `design-audit.json`）。CI 的 e2e job 会跑它。
+## 构建与体积预算
+
+`vite.config.ts` 用 `manualChunks` 把产物分成三块：`vendor`（React 等依赖）、`data`（固化的词典与候选 JSON）、`index`（业务代码）。数据块只打包、不发起请求，单独分块便于长期缓存。
+
+体积门禁由 `scripts/size-check.mjs` 执行，两处判定都按 gzip 体积计算。当前实测：站点资源 gzip 合计约 379 KB（预算 400 KB）；`npm run build:single` 产出的 `index.html` 为 1.57 MB，gzip 约 368 KB（预算 1.5 MB）。
+
+## 部署
+
+推送到 `main` 分支后由 GitHub Actions 构建并发布到 GitHub Pages。
+
+| 工作流 | 文件 | 步骤 |
+|---|---|---|
+| CI | `.github/workflows/ci.yml` | 构建；端到端与 axe 扫描；设计体检 |
+| 发布 | `.github/workflows/deploy-pages.yml` | 构建并上传 Pages 产物 |
+
+首次配置：
+
+1. 创建公开仓库并推送代码。
+2. 在仓库 Settings → Pages → Build and deployment 中，将 Source 设为 GitHub Actions。
+3. 推送后访问 `https://<用户名>.github.io/naming-app/`。
+
+免费账户只能从公开仓库发布 Pages。本项目不含密钥与个人数据。
+
+## 适用范围与已知限制
+
+- 应用提供的是可核对的信息：典籍出处、原句位置、字义、笔画与结构、读音与谐音、多音字、真实用名频次。不包含五行、八字、五格、生肖宜忌、吉凶或「补缺」建议。
+- 卡片上的「部首」是《康熙字典》部首归属，只覆盖木、火、水、金、土五部中查得到的字（63 字；1,525 条双名中有 553 条至少一个字可标注）。未标注不代表该字没有五行属性。
+- 卡片分数由本项目自定义规则计算（音韵、谐音、字频、字形、性别风格），只用于候选池内排序，不构成对名字优劣的评价。
+- 名用字白名单为 293 字。扩充方式：执行 `node scripts/l0-unlock.mjs` 生成待审表，人工判定后写回 `data/raw/l0-verdicts.txt`，再执行 `npm run build`；门禁会在扩表后切换为下界断言，已有候选不允许消失。
+- 典籍范围固定为上述七部。增加典籍需要同时更新指纹与门禁断言，规则见 `DESIGN.md`。
+- 出处今译为自撰内容，无第三方校订。
+
+## 进一步阅读
+
+- `DESIGN.md`：数据管线、引擎接口、状态与迁移、样式令牌、门禁与诊断脚本。
+- `ANDROID.md`：将同一份构建产物打包为 Android 应用的方案对比与实施步骤。

@@ -1,107 +1,105 @@
-# 网页版 + 安卓版：打包与迭代方案
+# Android 分发方案
 
-面向决策。结论先行，再给依据、改动点与落地步骤。
+本文档记录把同一份构建产物分发到 Android 的可选方案与实施步骤。仓库当前不包含 Android 工程代码，以下内容为方案说明。
 
-## TL;DR
+## 现状
 
-- 现有代码是**纯静态、完全离线、已带 PWA**（manifest + SW + 图标）——安卓版**不需要重写**。
-- 三条路：**PWA 直接安装**（0 改动）、**TWA 套壳**（低改动）、**Capacitor**（中等改动，能力最全）。
-- **推荐 Capacitor**：把 `dist` 打进 APK，不依赖服务器，天生离线，可用系统分享面板——最贴合本项目「运行时零网络」的定位。
-- 网页版与安卓版**共用同一份 `dist`**：同一仓库、同一套引擎/UI，只在最底层用平台层分流少数几个网页专属调用。
-
-## 1. 现状盘点（决定了"为什么能快"）
-
-| 事实 | 出处 | 对安卓的意义 |
+| 事实 | 位置 | 对 Android 分发的影响 |
 |---|---|---|
-| 静态站点，运行时零网络请求 | `README.md` / `size-check.mjs` | 可直接内嵌 APK，无需后端 |
-| 数据随包发布（`data` chunk ≈ 225 KB gz） | `src/engine/data.ts` | 离线数据的天然形态就是"内置资源" |
-| `base: './'` 相对路径产物 | `vite.config.ts` | `file://` / WebView / 子路径都能跑 |
-| 已能出单文件 HTML（1.39 MB） | `npm run build:single` | 备选的极简分发形态 |
-| PWA 三件套齐全 | `public/manifest.webmanifest`、`public/sw.js`、`public/icon-*.png` | Chrome 可直接"添加到主屏幕"当 App 用 |
-| 分享/下载走 Web API | `src/lib/share.ts`、`src/App.tsx` | 这是唯一需要按平台分流的区域 |
+| 静态站点，运行时不发起网络请求 | `README.md`、`scripts/size-check.mjs` | 产物可直接内嵌安装包，不需要后端 |
+| 数据随包发布，`data` chunk 约 248 KB gzip | `src/engine/data.ts`、`vite.config.ts` | 数据以静态资源形式打进安装包 |
+| 产物使用相对路径（`base: './'`） | `vite.config.ts` | 可在 `file://`、WebView 与子路径下运行 |
+| 支持产出单个 HTML 文件（约 1.57 MB，gzip 约 368 KB） | `npm run build:single` | 可作为极简分发形态 |
+| 已有 manifest、Service Worker 与图标 | `public/manifest.webmanifest`、`public/sw.js`、`public/icon-*.png` | Chrome 支持「添加到主屏幕」直接安装 |
+| 分享与文件下载基于 Web API | `src/lib/share.ts`、`src/App.tsx` | 这是唯一需要按平台分流的区域 |
 
-## 2. 三条路对比
+## 方案对比
 
-| 方案 | 工作量 | 更新方式 | 离线 | 原生能力 | 前置条件 |
+| 方案 | 改动量 | 更新方式 | 离线 | 原生能力 | 前置条件 |
 |---|---|---|---|---|---|
-| **PWA 直接安装** | 0 | 部署即更新 | ✅（首次联网后） | 弱（Web Share） | 一个 HTTPS 托管 |
-| **TWA / Bubblewrap** | 低 | 网页一部署，App 自动更新，**不重发版** | 首次需联网 | 弱 | HTTPS 托管 + Digital Asset Links + 打包签名 |
-| **Capacitor** | 中 | 改 JS 后 `cap sync` 重打包发版 | ✅ 装完即离线 | 强（系统分享/存文件） | Android 工具链（JDK/Gradle/Studio）+ 签名 |
+| PWA 直接安装 | 无 | 部署即更新 | 首次联网后可离线 | 弱（Web Share API） | HTTPS 托管 |
+| TWA（Bubblewrap） | 低 | 网页部署后应用自动更新，无需重新发版 | 首次需要联网 | 弱 | HTTPS 托管、Digital Asset Links、打包与签名 |
+| Capacitor | 中 | 修改代码后 `cap sync` 重新打包发版 | 安装后即可离线 | 强（系统分享、文件系统） | Android 工具链（JDK、Gradle、Android Studio）与签名 |
 
-**排除项**：React Native / Compose 全重写——canvas 分享、二维码、词典装配都要重做，且破坏"一套代码"，不划算。
+跨平台原生重写（React Native、Jetpack Compose）不在本方案范围内：canvas 分享卡片、二维码生成与词典装配都需要重新实现，并且需要长期维护两套代码。
 
-### 选择建议
-- 只要"能在安卓上用、像个 App" → **先发 PWA**，零成本，Chrome 装桌面即可。
-- 最看重"改网页即时生效、不重发版" → **TWA**（代价：首次联网 + 托管依赖，与离线调性略冲突）。
-- 最看重"真离线 + 商店上架 + 原生分享" → **Capacitor**（推荐）。
+选择依据：
 
-> 最优组合：**同一份 `dist` 既当 PWA（免安装、即时更新）又打进 Capacitor（商店 + 真离线 + 原生分享）**，两条渠道互补。
+- 只需要在 Android 上以应用形式使用：先发布 PWA，无额外改动。
+- 需要网页改动即时生效、不重新发版：TWA，代价是首次联网与对托管站点的依赖。
+- 需要完全离线、商店分发与原生分享：Capacitor，本文推荐的实施路径。
 
-## 3. Capacitor 方案：需要改的代码（很少）
+两条渠道可以并行：同一份 `dist` 既作为 PWA 提供免安装与即时更新，也打进 Capacitor 用于商店分发与原生能力。
 
-架构：加一层 `src/platform/`，网页与安卓共用 UI，只在底层分流。
+## 推荐方案：Capacitor
 
-| 位置 | 网页行为 | 安卓行为 | 需要的适配 |
+架构上增加一层 `src/platform/`，网页与 Android 共用界面与引擎，只在底层分流平台相关调用。
+
+### 需要适配的调用点
+
+| 位置 | 网页行为 | Android 行为 | 需要的适配 |
 |---|---|---|---|
-| `src/lib/pwa.ts`（`usePwa`） | 注册 SW | 跳过（WebView 不需要/不支持 SW） | `isNative()` 分支 |
-| `src/App.tsx` `doShare` | 二维码指向 `location.origin` | 用系统分享面板发图；二维码指向**正式托管网址** | `shareImage()` + `canonicalUrl()` |
-| `src/App.tsx` `doCopyLink` | 复制地址栏 URL | 复制 `canonicalUrl()`（本地地址无意义） | `canonicalUrl()` |
-| `src/lib/share.ts` `downloadBlob` | `<a download>` | `@capacitor/filesystem` 存到文档目录 + `@capacitor/share` 分享 | `saveFile()` |
-| `src/App.tsx` `doPrint` | `window.print()` | WebView 打印受限 → 改为分享名单长图 | 复用 `shareImage()` |
+| `src/lib/pwa.ts` 的 `usePwa` | 注册 Service Worker | 跳过注册 | `isNative()` 分支 |
+| `src/App.tsx` 的 `doShare` | 二维码指向 `location.origin` | 用系统分享面板发送图片，二维码指向线上正式地址 | `shareImage()`、`canonicalUrl()` |
+| `src/App.tsx` 的 `doCopyLink` | 复制当前地址 | 复制线上正式地址 | `canonicalUrl()` |
+| `src/lib/share.ts` 的 `downloadBlob` | `<a download>` | `@capacitor/filesystem` 写入文档目录，再用 `@capacitor/share` 分享 | `saveFile()` |
+| `src/App.tsx` 的 `doPrint` | `window.print()` | WebView 打印能力受限，改为导出名单长图并分享 | 复用 `shareImage()` |
 
-新增平台层建议接口（`src/platform/index.ts`）：
+### 平台层接口（`src/platform/index.ts`）
+
 - `isNative(): boolean`
-- `canonicalUrl(): string` — 正式网页地址（native 下二维码/复制链接用它）
-- `saveFile(blob, filename): Promise<void>`
-- `shareImage(blob, title): Promise<void>` — native 走系统面板，web 退回下载
-- `registerSW(): void` — web 才注册
+- `canonicalUrl(): string`：线上正式地址，Android 下的二维码与复制链接使用它
+- `saveFile(blob: Blob, filename: string): Promise<void>`
+- `shareImage(blob: Blob, title: string): Promise<void>`：Android 走系统分享面板，网页回退为下载
+- `registerSW(): void`：仅在网页环境注册 Service Worker
 
-**不动**：`engine/`（纯函数引擎）、`store/`（持久化/导入导出/URL 编解码）、`Design/tailwind`、大部分 `ui/`。
+`src/engine/`、`src/store/`、`src/styles.css` 与大部分 `src/ui/` 不需要改动。
 
-## 4. 落地步骤（Capacitor）
+## 构建步骤
 
 ```bash
-# 依赖
-npm i -D @capacitor/cli
-npm i @capacitor/core @capacitor/android @capacitor/share @capacitor/filesystem
+$ npm i -D @capacitor/cli
+$ npm i @capacitor/core @capacitor/android @capacitor/share @capacitor/filesystem
 
-# 初始化（appId 定了难改，一次到位；webDir 指向 vite 产物）
-npx cap init "取名" com.<你的域名反写>.naming --web-dir=dist
-npx cap add android
+$ npx cap init "取名" com.example.naming --web-dir=dist
+$ npx cap add android
 
-# 图标/启动页：用现有 public/icon-512.png 生成整套 mipmap
-npx @capacitor/assets generate
+$ npx @capacitor/assets generate   # 由 public/icon-512.png 生成整套图标与启动页
 ```
 
-`capacitor.config.ts` 关键项：
-- `appId`（如 `com.example.naming`）
-- `appName`：取名
-- `webDir: 'dist'`
-- `backgroundColor` / `android.allowMixedContent: false`
+`appId` 上架后不可更改，需要在初始化时确定。`capacitor.config.ts` 关键项：
 
-`package.json` 脚本建议：
+| 配置 | 值 |
+|---|---|
+| `appId` | 例如 `com.example.naming` |
+| `appName` | 取名 |
+| `webDir` | `dist` |
+| `backgroundColor`、`android.allowMixedContent` | 按需设置，混合内容保持关闭 |
+
+`package.json` 脚本：
+
 ```json
-"android:sync": "npm run build && npx cap sync android",
-"android:apk": "cd android && ./gradlew assembleDebug",
-"android:aab": "cd android && ./gradlew bundleRelease"
+{
+  "android:sync": "npm run build && npx cap sync android",
+  "android:apk": "cd android && ./gradlew assembleDebug",
+  "android:aab": "cd android && ./gradlew bundleRelease"
+}
 ```
 
-签名：生成 keystore（**务必备份，丢了无法更新**），写 `android/keystore.properties`，配置 `android/app/build.gradle`。产物 `.aab` 用于上架。
+签名：生成 keystore 并妥善备份（丢失后无法更新已上架应用），参数写入 `android/keystore.properties`，在 `android/app/build.gradle` 中引用。上架产物为 `.aab`。
 
-## 5. 发布与迭代
+## 发布与迭代
 
-- **上架**：签名 keystore → 出 `.aab` → Play 控制台**内部测试轨** → 封闭测试 → 正式。
-- **合规**：应用不收集任何数据 → "Data safety" 勾不收集 + 提供一条隐私政策链接（无采集也要有）。
-- **版本**：每次发版 `versionCode` +1、`versionName` 更新。
-- **日常迭代**：
-  - Capacitor **无内置热更**；纯 JS 改动也需重新出包上传。
-  - 想要"改了即时生效"：或加 `@capawesome/capacitor-live-update`，或**继续用 PWA 这条即时通道**，native 只作商店分发。
-- **渠道策略**：`dist` 同一份，PWA 负责即时更新与免安装，Capacitor 负责商店 + 真离线 + 原生分享。
+- 上架流程：签名 → 生成 `.aab` → Play 控制台内部测试轨道 → 封闭测试 → 正式发布。
+- 合规：应用不收集数据，"Data safety" 填报为不收集，同时仍需提供一个隐私政策链接。
+- 版本：每次发版递增 `versionCode`，更新 `versionName`。
+- 更新方式：Capacitor 没有内置热更新，纯 JavaScript 改动也需要重新打包上传。需要即时生效时，使用 PWA 渠道，或引入 `@capawesome/capacitor-live-update`。
+- 渠道分工：PWA 负责免安装与即时更新，Capacitor 负责商店分发、完全离线与原生分享。
 
-## 6. 决策清单（拍板用）
+## 待确认事项
 
-1. 是否上 Google Play？（是 → 需要签名 keystore + 隐私政策 + 开发者账号）
-2. 迭代优先级：**即时更新（倾向 TWA / PWA）** 还是 **真离线 + 原生体验（倾向 Capacitor）**？
-3. 是否已有 HTTPS 托管域名？（TWA 必需；PWA 必需；Capacitor 不需要）
-4. 需要原生分享/存图到相册吗？（需要 → Capacitor）
-5. `appId` 用什么？（一旦上架不可改）
+1. 是否上架 Google Play。上架需要开发者账号、签名 keystore 与隐私政策。
+2. 迭代优先级是即时更新（倾向 PWA / TWA）还是完全离线与原生体验（倾向 Capacitor）。
+3. 是否已有稳定的 HTTPS 托管域名。PWA 与 TWA 需要，Capacitor 不需要。
+4. 是否需要原生分享与保存图片到相册。需要则选择 Capacitor。
+5. `appId` 的最终取值。
