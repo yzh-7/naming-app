@@ -53,8 +53,9 @@
 
 | 函数 | 作用 |
 |---|---|
-| `universe(opts)` | 模块内部函数。按典籍、性别、字形、叠字、搜索词过滤候选空间 |
+| `universe(opts)` | 模块内部函数。按典籍、性别、字形、叠字、搜索词、指定字、禁用字过滤候选空间 |
 | `passesShape(name, opts)` | 模块内部函数。事实类筛选：`strokeMax` 整名笔画上限（0 为不限）、`popFloor` 逐字常见度下限（经 `minGnOf`）、`noMonotone` 排除两字同结构。档位定义见 `types.ts` 的 `STROKE_MAXES`、`POP_FLOORS` |
+| `avoidPass(name, opts)` | 模块内部函数。禁用字（避讳字）：名里出现 `opts.avoidChars` 中任意一个字，这条候选整条不出现。只查名不查姓（姓是用户自己的姓），空串为不限。字数上限 `AVOID_MAX`＝8，清洗函数 `cleanAvoid` 与上限定义在 `types.ts` |
 | `plan(surname, opts, batch, surReading)` | 分页取一批候选并按 `opts.sort` 排序。排序为 `score` 或 `book` 时按典籍分组展示，`strokes`、`popular` 保持全局顺序 |
 | `scoreItem(surname, item, opts, surReading)` | 打分：静态字形与笔画差值、音韵（声调、声母、多音）、性别风格匹配、同形现代词风险 |
 | `glossOf` / `lineGlossOf` | 字义、出处今译（按条目 `lg` 下标取） |
@@ -87,7 +88,7 @@
 
 `SavedState` 的构造、序列化与解析。解析不抛异常，失败返回 `{ ok: false, error }`，`error` 取 `json`（不是 JSON 或不是对象）、`foreign`（不是本应用导出的文件：`app` 字段不是 `naming-app`，或没有任何本应用字段）、`empty`（是本应用的文件，但收藏、拉黑、设置三项全空）三种，界面按三种分别措辞。
 
-不可信输入只有一套收敛规则，定义在 `local.ts`：`sanitizeOpts`、`sanitizeReading`，以及 `engine/types.ts` 的 `cleanSurname`。本机存储、导入文件、分享链接三条路径都从这里取值，`transfer.ts` 不再自带一份。数值与枚举的口径是「不可信就回该项默认」，不夹到边界，也不静默丢弃这一项：
+不可信输入只有一套收敛规则，定义在 `local.ts`：`sanitizeOpts`、`sanitizeReading`，以及 `engine/types.ts` 的 `cleanSurname`、`cleanAvoid`、`isHan`。本机存储、导入文件、分享链接三条路径都从这里取值，`transfer.ts` 不再自带一份。数值与枚举的口径是「不可信就回该项默认」，不夹到边界，也不静默丢弃这一项。写出去之前也过一遍与读回来同样的规则（`saveOpts` 存 `mustChar`／`avoidChars` 前先收敛），免得界面上归一化了、存下来的还是原样。「是不是汉字」按 Unicode 的汉字属性判（`isHan`，正则 `\p{Script=Han}`）：基本区 U+4E00–9FFF 之外，扩展 A 区（U+3400–4DBF）、兼容区（U+F900–FAFF）与扩展 B 以后的字也算汉字，姓与筛选条件里出现它们不会被静默删掉。按项列出如下：
 
 | 项 | 可信取值 | 不可信时 |
 |---|---|---|
@@ -100,6 +101,7 @@
 | 性别 `gender`、排序 `sort`、指定字位置 `mustPos` | 只认各自白名单 | 回默认 |
 | 搜索词 `search`、篇名 `title` | 字符串，分别截断到 40 字、30 字 | 回空串 |
 | 指定用字 `mustChar` | 必须是单个汉字 | 回空串 |
+| 禁用字 `avoidChars` | 字符串，只留汉字、去重、裁到 `AVOID_MAX`＝8 个字（`cleanAvoid`） | 回空串（不限） |
 | 典籍开关 `books` | 按 `BOOK_ORDER` 顺序的 0/1 串；短于 7 位时未提到的书按开补齐，长于 7 位截断 | 不是 0/1 串则七部全开 |
 | 排除名单 `exclude` | 不接受外部输入 | 一律置空，生成时按本机拉黑名单重算 |
 | 收藏、拉黑 | `sanitizeFav` 逐条收敛 | 非法条目丢弃，不整份拒绝 |
@@ -123,19 +125,24 @@
 | `b` | 典籍开关，按 `BOOK_ORDER` 顺序的 7 位 0/1 串（诗经、楚辞、论语、水墨唐诗、宋词三百首、道法、乐府） |
 | `d` | 只看叠字 |
 | `mc` / `mp` | 指定用字与其位置（`first` / `last`） |
+| `ac` | 禁用字（避讳字），1–8 个汉字；不限时不写出 |
+
+导出与导入的口径。`candidates.ts` 的 `esc` 先把字段里的换行压成空格（一个字段塞进换行会凭空多出一行 CSV），再按 CSV 规则加引号、引号翻倍；以 `=`、`+`、`-`、`@` 打头的字符串前置一个前导单引号——Excel／WPS 会把这种打头的单元格当公式执行，而收藏的「分组」「备注」是用户手打的，最容易撞上去。前导单引号在 Excel／WPS 里是「这一格整段按文本算」的标记，打开时不显示；换别的软件打开就会看见这个引号（LibreOffice 只在手打时认它，读 CSV 时照原样给；Google Sheets 与 pandas 也照原样给）——宁可多一个可见的引号，也不让备注被执行。导入侧 `App.tsx` 的 `doImportFile` 先看 `File.size`，读出来之后按实际字节再判一次，两次都拒掉超过 8 MiB 的文件并说明上限（`File.size` 只是选文件那一刻的报告值；本应用自己导出的一份最大的——全量候选 JSON——约 0.6 MiB，离这条线很远）。
 
 ## 4. 界面（`src/ui/`、`src/App.tsx`）
 
 | 模块 | 职责 |
 |---|---|
 | `App.tsx` | 四个标签页（生成 `#/`、自选 `#/compose`、收藏 `#/fav`、拉黑 `#/block`）、导入导出、复制链接、固定页头与主题三档、离线与新版本提示、打印名单、URL 初始状态、跳转链接、`aria-live` 播报、tablist 语义。切换标签页时执行 `window.scrollTo(0, 0)` |
-| `Controls.tsx` | 姓氏、读音、字数、性别、典籍、叠字、每批条数、换一批、搜索、排序、笔画上限、常见度下限、避开同结构 |
-| `NameCard.tsx` | 读音、出处、原句、今译、字义、字形、常见度、多音、小名与四个动作。局部变量 `shadow` 表示阴影，不要改名为 `shape`（与 `shapeTags` 冲突）。动作区与折叠详情带 `no-print`。`Source` 与 `SourceRef` 单独导出，供自选页复用 |
-| `Compose.tsx` | 自选页。用 `composeName` 做读音、谐音、字形核对；出处用 `findCombo` 精确查询 Pool-B 与单字池，未命中时显示「未见此搭配」；`pairCandidates` 从 `candidates.json` 现算同句读搭配；随机池默认只含出处组合。无出处的组合不提供收藏入口（收藏按 `id` 回查） |
+| `Controls.tsx` | 姓氏、读音、字数、性别、典籍、叠字、每批条数、换一批、搜索、排序、指定用字与位置、禁用字（避讳字）、笔画上限、常见度下限、避开同结构 |
+| `NameCard.tsx` | 读音、出处、原句、今译、字义、字形、常见度、多音、小名与四个动作。局部变量 `shadow` 表示阴影，不要改名为 `shape`（与 `shapeTags` 冲突）。动作区与折叠详情带 `no-print`。`Source` 与 `SourceRef` 单独导出，供自选页复用。「同篇还有 N 条」上的数字由调用方按当前候选池传入（`sameTitle`，来自 `plan()` 的 `titleCounts`）：卡片自己不去查全语料的篇名索引，设了禁用字、性别或典籍之后按钮上的数就是点进去以后的数 |
+| `Compose.tsx` | 自选页。用 `composeName` 做读音、谐音、字形核对；出处用 `findCombo` 精确查询 Pool-B 与单字池，未命中时显示「未见此搭配」；`pairCandidates` 从 `candidates.json` 现算同句读搭配；随机池默认只含出处组合。无出处的组合不提供收藏入口（收藏按 `id` 回查）。自选是自己挑字，不套用生成页的禁用字筛除，但挑到禁用字时明说「这里照旧能组合，生成页不会出现含它的名字」 |
 | `TopNav.tsx` / `ThemeControl.tsx` | 页头标签组与主题三档按钮，均为 `aria-pressed`；窄视口下只显示图标加 `aria-label` |
 | `ErrorBoundary.tsx` | 根级兜底界面 |
 
 对比表 `Compare` 定义在 `App.tsx` 内，接收 2–3 个收藏项。
+
+筛选条件里要清洗汉字的两个框（指定用字、禁用字）走同一份 `CharField`：打字期间 DOM 归用户，归一化后的值归状态。原先的做法是「状态一变就用 `key` 重建输入框」，看着像受控输入更严格，实际会在打第二个字的瞬间把框换成带着旧值的新一份——逐字输入时后打的字被顶掉，只有真键盘路径能复现，用 `fill()` 一类一次性灌值的测试测不出来。现在的规则是输入框不被重建：只有外部改变（点「不限」、导入、带参数的链接、失焦后写回归一化结果）才写 DOM，且框正被 focused 时不写，免得打断输入法组字。姓那个框一直是受控输入（清洗只发生在失焦与提交时），没有这个问题。
 
 ### 4.1 样式令牌（`src/styles.css`）
 
@@ -160,6 +167,8 @@ Tailwind 4 的 CSS-first 写法：`@theme` 定义刻度，`@utility` 定义可�
 
 `public/manifest.webmanifest`、`public/icon.svg`、`public/icon-192.png`、`public/icon-512.png` 与 `public/sw.js`。Service Worker 注册集中在 `src/lib/pwa.ts` 的 `usePwa()`：仅在 http(s) 下注册，cache-first 缓存应用壳，暴露 `offline`、`updateReady`、`applyUpdate`。页面点击刷新时向等待中的 worker 发送 `SKIP_WAITING`，`sw.js` 在 `message` 监听中处理。站点本身不发起网络请求，Service Worker 的作用是加快二次访问并支持离线打开。
 
+`sw.js` 的 fetch 处理分两路：导航请求 network-first（部署新版后刷新即取到新 `index.html`，不会被旧缓存顶住），失败时退回缓存里的这一条，再没有就退回缓存的 `index.html`；带哈希的静态资源 cache-first，未命中时走网络并回填当前这一版的缓存。资源既没缓存又连不上网络时回一个 504 的纯文本小响应（`offlineAsset()`），不退回 `index.html`——把 HTML 当作 `.js`／`.css` 交给浏览器，用户看到的是「脚本语法错误」这种看不懂的表现；这个 504 也不写进缓存。
+
 ### 5.2 版本与缓存
 
 版本号只有一个来源：`package.json` 的 `version`。`vite.config.ts` 读它并校验形态（`x.y.z`，可带预发布后缀），形态不对就地停构建，而不是让界面和 worker 拿到一个怪字符串。三个出口都由这一个值注入：
@@ -174,7 +183,7 @@ Tailwind 4 的 CSS-first 写法：`@theme` 定义刻度，`@utility` 定义可�
 
 1. `fetch('./index.html', { cache: 'no-store' })`。不能用缓存里的那一份，它可能属于旧版本。
 2. 取其中的 `assets/*.js`、`assets/*.css` 文件名排序后哈希，得到 `naming-app-<hash>`。产物内容变了文件名就变，缓存名跟着变，旧缓存由 `activate` 删除。
-3. 没有分包产物（单文件版）时退回 meta 中的版本号，得到 `naming-app-0.2.0` 这样的名字。
+3. 没有分包产物（单文件版）时退回 meta 中的版本号，得到 `naming-app-0.3.0` 这样的名字。
 4. 连 `index.html` 都取不到（离线安装）时退回注册参数 `?v=`；都没有则 `naming-app-unreleased`。
 
 同一个 worker 实例只解析一次（`cacheName()` 记忆结果），`install` 预取、`activate` 清理、`fetch` 回填用的是同一个名字；`activate` 只删除带 `naming-app-` 前缀且与当前名字不同的缓存，不碰其它缓存。导航请求走 network-first，带哈希的静态资源走 cache-first。`tests/e2e/app.spec.ts` 中有一条用例直接从浏览器读缓存，验证名字形态以及应用壳确实写进了这个缓存。
@@ -195,15 +204,15 @@ Tailwind 4 的 CSS-first 写法：`@theme` 定义刻度，`@utility` 定义可�
 | `eslint .` | 覆盖 `src/`、`scripts/`、`tests/` 与 `public/sw.js`（后者按 Service Worker 全局检查：它没有单元测试，写错了原本只能靠浏览器运行暴露）。`dist/`、`dist-single/` 与测试产物目录不检查——之前 `dist-single/` 没列入，那份产物被当作源码送去 lint |
 | `size-check.mjs` | 非 HTML 资源的 gzip 合计不超过 400 KiB；HTML 自身的 gzip 按产物形态取预算（页面壳 400 KiB、单文件产物 450 KiB）。两条判定都进退出码，同时打印原文件大小与压缩实现版本 |
 
-当前实测（gzip level 9，版本 0.2.0）。「CI 口径」指 GitHub Actions 上官方 Node 构建（自带 zlib-ng），「本机口径」指系统 zlib；同一份文件的 gzip 结果不同，门禁按较大的一侧算：
+当前实测（gzip level 9，版本 0.3.0）。「CI 口径」指 GitHub Actions 上官方 Node 构建（自带 zlib-ng），「本机口径」指系统 zlib；同一份文件的 gzip 结果不同，门禁按较大的一侧算：
 
 | 产物 | 原文件 | gzip（CI 口径） | gzip（本机口径） | 预算 |
 |---|---:|---:|---:|---:|
-| `dist/` 非 HTML 资源合计 | — | 387,462 B（378.4 KiB） | 385,587 B（376.6 KiB） | 409,600 B |
-| `dist/index.html` 页面壳 | 2,921 B | 1,325 B | 1,298 B | 409,600 B |
-| `dist-single/index.html` | 1,675,319 B（1.60 MiB） | 413,537 B（403.8 KiB） | 407,880 B（398.3 KiB） | 460,800 B |
+| `dist/` 非 HTML 资源合计 | — | 388,857 B（379.7 KiB） | 386,961 B（377.9 KiB） | 409,600 B |
+| `dist/index.html` 页面壳 | 2,921 B | 1,332 B | 1,305 B | 409,600 B |
+| `dist-single/index.html` | 1,678,496 B（1.60 MiB） | 414,718 B（405.0 KiB） | 408,954 B（399.4 KiB） | 460,800 B |
 
-同一份单文件产物在 zlib-ng 下压出 413,537 B，比系统 zlib 的 407,880 B 多 5,657 B（1.4%）。本版第一次把这条判定接进 CI 时就是被这个差值撞挂的：400 KiB 在 CI 口径下过不去（超 3,937 B），在本机口径下刚好通过。因此单文件产物单列 450 KiB 预算——它把本体与数据全部装进一个 HTML，首屏的 400 KiB 对它过窄；当前余量 47,263 B（10.3%），语料或字表扩充会先撞这条线。原先文档写的「单文件目标 ≤1.5 MB」既没有脚本执行、口径也没说清是原文件还是 gzip：按原文件算当时就已经超过（1.57 MB），按 gzip 算又过于宽松。现在两条判定统一到 gzip，原文件大小只报出、不作判定。
+同一份单文件产物在 zlib-ng 下压出 414,718 B，比系统 zlib 的 408,954 B 多 5,764 B（1.4%）。0.2.0 第一次把这条判定接进 CI 时就是被这个差值撞挂的：当时产物 413,537 B，400 KiB 预算在 CI 口径下过不去（超 3,937 B），在本机口径下刚好通过。因此单文件产物单列 450 KiB 预算——它把本体与数据全部装进一个 HTML，首屏的 400 KiB 对它过窄；当前余量 46,082 B（10.0%），语料或字表扩充会先撞这条线。0.3.0 的禁用字与随后的修正让这份产物在 CI 口径下增加 1,181 B。原先文档写的「单文件目标 ≤1.5 MB」既没有脚本执行、口径也没说清是原文件还是 gzip：按原文件算当时就已经超过（1.57 MB），按 gzip 算又过于宽松。现在两条判定统一到 gzip，原文件大小只报出、不作判定。
 
 ## 7. 诊断脚本的口径一致性
 
