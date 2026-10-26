@@ -81,7 +81,7 @@
 | `naming.theme.v1` | `system` / `light` / `dark` |
 | `naming.compose.v1` | 自选页草稿 |
 
-`saveFavorites` / `saveBlocklist` 供导入时整体写回。`loadOpts` 把本机存下来的对象交给 `sanitizeOpts`，`loadSurname` / `loadReading` 分别过 `cleanSurname` 与 `sanitizeReading`，写回时同样先清洗再落盘：本机存储里遗留的脏值（旧版本写入的、或用户在控制台改过的）不会被读回界面，也不会原样带进导出文件。`resolveDark` 与 `prefersDark` 决定是否给 `<html>` 加 `dark` 类，`THEME_ORDER` / `THEME_LABEL` 供界面循环使用。
+`saveFavorites` / `saveBlocklist` 供导入时整体写回。`loadOpts` 把本机存下来的对象交给 `sanitizeOpts`，`loadSurname` / `loadReading` 分别过 `cleanSurname` 与 `sanitizeReading`，这两项写回时也先清洗再落盘：本机存储里遗留的脏值（旧版本写入的、或用户在控制台改过的）不会被读回界面，也不会原样带进导出文件。`saveOpts` 只截断搜索串与篇名的长度，筛选取值的收敛放在读取侧。`resolveDark` 与 `prefersDark` 决定是否给 `<html>` 加 `dark` 类，`THEME_ORDER` / `THEME_LABEL` 供界面循环使用。
 
 ### 3.2 `transfer.ts`
 
