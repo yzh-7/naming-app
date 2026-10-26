@@ -25,8 +25,15 @@ for (const vp of VIEWPORTS) {
       await page.getByLabel('姓（可复姓）').fill('苏');
       const sizes = await page.evaluate(() => Array.from(document.querySelectorAll('input, select, textarea'))
         .filter((el) => !(el instanceof HTMLInputElement && el.type === 'file'))
-        .map((el) => ({ tag: el.tagName.toLowerCase(), label: el.getAttribute('aria-label') ?? el.placeholder ?? '', px: parseFloat(getComputedStyle(el).fontSize) })));
-      expect(sizes.length).toBeGreaterThan(0);
+        .map((el) => ({
+          tag: el.tagName.toLowerCase(),
+          label: el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.closest('label')?.textContent || '',
+          px: parseFloat(getComputedStyle(el).fontSize),
+        })));
+      // 至少要量到姓、搜索、篇名三个常驻输入框，并且姓那一个必须在里面；
+      // 否则「一个都没量到」也能空过的断言就没意义了
+      expect(sizes.length).toBeGreaterThanOrEqual(3);
+      expect(sizes.find((s) => s.label.includes('姓')), '姓输入框没被量到（label 改名了？）').toBeTruthy();
       const tooSmall = sizes.filter((s) => s.px < 15);
       expect(tooSmall, JSON.stringify(tooSmall)).toEqual([]);
     });

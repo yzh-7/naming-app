@@ -74,3 +74,77 @@ test('axe：生成页无 serious/critical 级可访问性问题', async ({ page 
   const serious = violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
   expect(serious, serious.map((v) => `${v.id}: ${v.help}`).join('\n')).toEqual([]);
 });
+
+test('篇名筛选：卡片上的「同篇还有 N 条」收到这一篇，「不限篇名」回到全部', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('姓（可复姓）').fill('苏');
+  await expect(page.locator('article').first()).toBeVisible();
+  const jump = page.getByRole('button', { name: /^同篇还有 \d+ 条$/ }).first();
+  await expect(jump).toBeVisible();
+  const want = (await jump.getAttribute('title'))!.match(/《(.+?)》/)![1];
+  await jump.click();
+  await expect(page.getByLabel('篇名（只看这一篇）')).toHaveValue(want);
+  const arts = page.locator('article');
+  const n = await arts.count();
+  expect(n).toBeGreaterThan(0);
+  for (let i = 0; i < n; i++) await expect(arts.nth(i), `第 ${i + 1} 张卡不在《${want}》`).toContainText(`·${want}》`);
+  await page.getByRole('button', { name: '不限篇名' }).click();
+  await expect(page.getByLabel('篇名（只看这一篇）')).toHaveValue('');
+  await expect(arts.first()).toBeVisible();
+});
+
+test('卡片上的「按拼音看」把这张卡的拼音写进搜索框', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('姓（可复姓）').fill('苏');
+  await expect(page.locator('article').first()).toBeVisible();
+  const btn = page.getByRole('button', { name: '按拼音看' }).first();
+  await expect(btn).toBeVisible();
+  const card = btn.locator('xpath=ancestor::article');
+  const full = (await card.getByRole('heading', { level: 3 }).textContent())!;
+  await btn.click();
+  const value = await page.getByLabel('搜索名字、拼音或篇名').inputValue();
+  expect(value).toBeTruthy();
+  expect([...value].every((c) => /[a-z0-9 ]/.test(c)), value).toBe(true);
+  expect(page.getByText(/按拼音「.+」搜索同音写法/)).toBeVisible();
+  // 搜索框里的拼音是这张卡的名字去姓后的写法，结果里应当还能看见这张卡
+  await expect(page.getByRole('heading', { name: full })).toBeVisible();
+});
+
+test('收藏页：分组可改名、可解散（解散不删收藏），导出 CSV 给出下载', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('姓（可复姓）').fill('苏');
+  const card = page.locator('article').first();
+  await card.getByRole('button', { name: '收藏' }).click();
+  await page.getByRole('link', { name: /收藏 1/ }).click();
+  await page.getByLabel('分组').fill('备选');
+  await page.getByRole('button', { name: '备选' }).click();
+  await page.getByRole('button', { name: '改组名' }).click();
+  await page.getByLabel('分组「备选」的新名字').fill('终选');
+  await page.getByRole('button', { name: '改名' }).click();
+  await expect(page.getByText('分组「备选」已改名为「终选」')).toBeVisible();
+  const waiting = page.waitForEvent('download');
+  await page.getByRole('button', { name: '导出 CSV' }).click();
+  const dl = await waiting;
+  expect(dl.suggestedFilename()).toMatch(/^收藏-终选-\d{4}-\d{2}-\d{2}\.csv$/);
+  const body = await dl.createReadStream().then((rs) => new Promise<string>((res) => {
+    let t = ''; rs.on('data', (c) => { t += c; }); rs.on('end', () => res(t));
+  }));
+  expect(body).toContain('分组');
+  expect(body).toContain('终选');
+  await page.getByRole('button', { name: '解散组' }).click();
+  await expect(page.getByText(/分组「终选」已解散，1 条收藏回到未分组/)).toBeVisible();
+  await expect(page.getByText('收藏 2')).toHaveCount(0);
+  await expect(page.getByText('收藏 1')).toBeVisible();
+});
+
+test('名单图导出：说清二维码有没有画出来', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('姓（可复姓）').fill('苏');
+  await page.locator('article').first().getByRole('button', { name: '收藏' }).click();
+  await page.getByRole('link', { name: /收藏 1/ }).click();
+  const waiting = page.waitForEvent('download');
+  await page.getByRole('button', { name: '导出名单图' }).click();
+  const dl = await waiting;
+  expect(dl.suggestedFilename()).toMatch(/^名单-\d{4}-\d{2}-\d{2}\.png$/);
+  await expect(page.getByText(/名单图已生成（1 条），含扫码二维码/)).toBeVisible();
+});
