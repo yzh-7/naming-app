@@ -148,3 +148,48 @@ test('名单图导出：说清二维码有没有画出来', async ({ page }) => 
   expect(dl.suggestedFilename()).toMatch(/^名单-\d{4}-\d{2}-\d{2}\.png$/);
   await expect(page.getByText(/名单图已生成（1 条），含扫码二维码/)).toBeVisible();
 });
+
+test('页脚给出应用版本与语料指纹，版本号与页面 meta 同源', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByText(/应用版本 \d+\.\d+\.\d+ · 语料指纹 [0-9a-f]{12}（语料清单变化即变）/)).toBeVisible();
+  const meta = await page.locator('meta[name="app-version"]').getAttribute('content');
+  expect(meta, 'index.html 的 meta 应当被构建注入真实版本，不能留占位符').toMatch(/^\d+\.\d+\.\d+$/);
+});
+
+test('分享链接里的性别微调（gw）会带过来：带 gw=1 打开时「含疑似」是按下态', async ({ page }) => {
+  await page.goto('/?s=苏&g=f&gw=1');
+  const chip = page.getByRole('button', { name: '含「疑似偏女」' });
+  await expect(chip).toHaveCount(1);
+  await expect(chip).toHaveAttribute('aria-pressed', 'true');
+  // 链接只覆盖它出现的项，没出现的沿用本机已存值；要看「链接里没带 gw」的默认态，得先清掉本机存储
+  await page.evaluate(() => localStorage.clear());
+  await page.goto('/?s=苏&g=f');
+  await expect(page.getByRole('button', { name: '含「疑似偏女」' })).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('链接里的越界参数回默认值（不是夹到边界、也不是忽略）', async ({ page }) => {
+  await page.goto('/?s=苏&n=601&pf=999&sm=999&nm=0');
+  // 每批条数越界 → 回默认 12：池内计数按 12 一页分页
+  await expect(page.getByText(/12×\d+页·第1页/)).toBeVisible();
+  await page.getByRole('button', { name: '高级筛选' }).click();
+  await expect(page.getByLabel('整名笔画上限')).toHaveValue('0');
+  await expect(page.getByLabel('用字常见度下限')).toHaveValue('0');
+  await expect(page.getByRole('button', { name: '避开同结构' })).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('service worker：缓存名按当前产物算出来（不再写死），且确实把 shell 存进了这个缓存', async ({ page }) => {
+  await page.goto('/');
+  const info = await page.evaluate(async () => {
+    const reg = await navigator.serviceWorker.ready;
+    const sw = reg.active ?? reg.installing ?? reg.waiting;
+    // 页面侧的 caches 与 worker 侧看到的是同一份缓存存储，从这里读比 worker 内部 API 稳
+    const keys = await caches.keys();
+    const mine = keys.find((k) => k.startsWith('naming-app-'));
+    return { scriptURL: sw?.scriptURL ?? '', keys, hasShell: mine ? Boolean(await caches.match('./index.html')) : false };
+  });
+  // 注册参数带版本号（pwa.ts 与页脚、构建注入同源）
+  expect(info.scriptURL).toMatch(/sw\.js\?v=\d+\.\d+\.\d+$/);
+  // 站点版有带 hash 的分包产物 → 缓存名取产物名指纹（base36，不含点号），不是 version 回退、也不是 unreleased
+  expect(info.keys, JSON.stringify(info.keys)).toEqual([expect.stringMatching(/^naming-app-[0-9a-z]+$/)]);
+  expect(info.hasShell, 'install 阶段应把 shell 写进解析出来的那个缓存').toBe(true);
+});
