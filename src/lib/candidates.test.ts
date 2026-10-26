@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { candidateRows, candidatesCsv, candidatesJson, CSV_HEADER } from './candidates';
+import { candidateRows, candidatesCsv, candidatesJson, favoritesCsv, FAV_CSV_HEADER, CSV_HEADER } from './candidates';
 import { plan } from '../engine/name';
 import type { Opts, Result } from '../engine/types';
 import { BOOK_ORDER } from '../engine/types';
@@ -7,7 +7,7 @@ import { BOOK_ORDER } from '../engine/types';
 const opts: Opts = {
   gender: 'any', genderWeak: false, length: 2,
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
-  redupOnly: false, exclude: [], count: 0, search: '', sort: 'score',
+  redupOnly: false, exclude: [], count: 0, search: '', title: '', sort: 'score',
   strokeMax: 0, noMonotone: false, popFloor: 0, mustChar: '', mustPos: 'any',
 };
 
@@ -49,5 +49,23 @@ describe('候选全量导出', () => {
     expect(row.gloss).toBeTruthy();
     expect(row.strokes).toBeGreaterThan(0);
     expect(['很常见', '常见', '一般', '少见', '冷僻'].some((b) => b.includes(row.popularity) || row.popularity.includes(b))).toBe(true);
+  });
+
+  it('收藏 CSV 在候选列之后加上分组与备注两列，带逗号的备注要加引号', () => {
+    const r = plan('苏', { ...opts, search: '清馨' }, 0).page[0];
+    const csv = favoritesCsv([{ r, group: '终选', note: '喜欢, 但笔画多' }]);
+    const lines = csv.replace(/\r\n/g, '\n').split('\n');
+    expect(lines[0]).toBe('\ufeff' + FAV_CSV_HEADER.join(','));
+    expect(FAV_CSV_HEADER.slice(CSV_HEADER.length)).toEqual(['分组', '备注']);
+    const cells = lines[1].split(',');
+    // 含逗号的字段必须整字段加引号，否则列会错位（这里数一下就看得出多了一列）
+    expect(lines[1]).toContain('"喜欢, 但笔画多"');
+    expect(lines[1].endsWith('"喜欢, 但笔画多"')).toBe(true);
+    expect(cells[0]).toBe(r.full);
+    expect(cells[CSV_HEADER.length]).toBe('终选');
+    // 没有分组与备注的条目留空，不缺列
+    const bare = favoritesCsv([{ r }]).replace(/\r\n/g, '\n').split('\n')[1].split(',');
+    expect(bare).toHaveLength(FAV_CSV_HEADER.length);
+    expect(bare.slice(CSV_HEADER.length)).toEqual(['', '']);
   });
 });

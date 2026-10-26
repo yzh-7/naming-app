@@ -46,3 +46,14 @@ export function candidatesCsv(results: Result[]): string {
     [x.full, x.name, x.readings, x.score, x.book, x.title, x.author, x.line, x.gloss, x.strokes, x.popularity, x.gender].map(esc).join(','));
   return '\ufeff' + [CSV_HEADER.join(','), ...rows].join('\r\n');
 }
+
+// 收藏名单 CSV：候选的列全部保留，再加「分组」「备注」两列（这两列只在收藏里有意义）
+export const FAV_CSV_HEADER = [...CSV_HEADER, '分组', '备注'];
+
+export function favoritesCsv(entries: { r: Result; note?: string; group?: string }[]): string {
+  const rows = entries.map((e) => {
+    const x = candidateRows([e.r])[0];
+    return [x.full, x.name, x.readings, x.score, x.book, x.title, x.author, x.line, x.gloss, x.strokes, x.popularity, x.gender, e.group ?? '', e.note ?? ''].map(esc).join(',');
+  });
+  return '\ufeff' + [FAV_CSV_HEADER.join(','), ...rows].join('\r\n');
+}
