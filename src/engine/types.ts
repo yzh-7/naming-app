@@ -55,6 +55,8 @@ export type Opts = {
   exclude: string[];
   count: number;
   search: string;
+  // 篇名筛选：只保留这一篇里的候选；''＝不限。篇名从候选卡片上的「同篇候选」进入
+  title: string;
   sort: SortKey;
   // 字形/用字筛选（可核对的事实，不掺命理）：整名笔画上限、是否避开两字同结构、逐字用字频次下限
   strokeMax: number; // 0 = 不限

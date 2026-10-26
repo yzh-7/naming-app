@@ -1,5 +1,5 @@
 import { CHARS, GENDER_FEMALE, GENDER_MALE, GLOSS, HOMO_FULL, HOMO_INIT, LINE_GLOSS, POOL, RADICAL, RISK_HIGH, SINGLES } from './data';
-import type { Book, Delta, GenderSide, GenderTag, Named, Opts, Result, SortKey } from './types';
+import type { Book, Delta, GenderSide, GenderTag, Named, Opts, PoolItem, Result, SortKey } from './types';
 import { BOOK_ORDER } from './types';
 
 const BILABIAL = new Set(['b', 'p', 'm']);
@@ -141,11 +141,13 @@ export function shapeTags(name: string) {
   const uniq = [...new Set([...name])];
   const chars = uniq.map((ch) => ({ ch, st: CHARS[ch]?.st, sx: CHARS[ch]?.sx }));
   const strokes = [...name].reduce((a, ch) => a + (CHARS[ch]?.st ?? 0), 0);
+  // 数据缺项时不装成 0：strokesTotal 为 null，界面据此说「笔画未收录」而不是「共 0 画」
+  const strokesTotal = chars.every((c) => c.st != null) ? strokes : null;
   const sxs = uniq.map((ch) => CHARS[ch]?.sx).filter(Boolean) as string[];
   // 叠字（依依）天然同结构，不算单调；只对两个以上不同字判
   const sameStructure = uniq.length > 1 && sxs.length === uniq.length && new Set(sxs).size === 1;
   const note = sameStructure ? `${sxs[0]}结构连用，字形偏单调` : null;
-  return { chars, strokes, sameStructure, note };
+  return { chars, strokes, strokesTotal, sameStructure, note };
 }
 
 // 小名/乳名：把名字里的字叠用（沐→沐沐），并给末字加「小」前缀（小沐）
@@ -368,11 +370,76 @@ export function mustPass(name: string, opts: Opts): boolean {
 
 function universe(opts: Opts): (Named & { famous?: boolean; tier?: string })[] {
   const q = (opts.search ?? '').trim().toLowerCase();
+  const t = (opts.title ?? '').trim();
   return bookUniverse(opts)
     .filter((it) => genderPass(it.name, opts))
     .filter((it) => passesShape(it.name, opts))
     .filter((it) => mustPass(it.name, opts))
+    .filter((it) => !t || it.title === t)
     .filter((it) => !q || searchText(it).includes(q));
+}
+
+// 候选池里出现过的篇名（含单名条目的出处），按书在前、篇名在后排序，供筛选框的候选列表
+export const POOL_TITLES: string[] = (() => {
+  const seen = new Set<string>();
+  for (const it of ALL_ITEMS) seen.add(`${it.book}\u0000${it.title}`);
+  return [...seen]
+    .sort((a, b) => BOOK_ORDER.indexOf(a.split('\u0000')[0] as Book) - BOOK_ORDER.indexOf(b.split('\u0000')[0] as Book) || (a < b ? -1 : 1))
+    .map((x) => x.split('\u0000')[1]);
+})();
+
+// 同篇还有多少条候选：卡片上的「同篇候选」按钮用（含自己，1 就是这一篇里只有它）
+const titleCountIndex = new Map<string, number>();
+for (const it of ALL_ITEMS) {
+  const k = `${it.book}\u0000${it.title}`;
+  titleCountIndex.set(k, (titleCountIndex.get(k) ?? 0) + 1);
+}
+// 同篇还有多少条候选（含自己）：卡片上的「同篇候选」按钮用，1 就是这一篇里只有它
+export const sameTitleCount = (it: Named) => titleCountIndex.get(`${it.book}\u0000${it.title}`) ?? 1;
+
+// 同音异形：读音（去声调）相同、写法不同的池内名字。多音字取常用读音，所以这一行标「按常用读音」
+export type Peer = { id: string; name: string; book: Book; title: string };
+let peerIndex: Map<string, PoolItem[]> | null = null;
+function peersIndex(): Map<string, PoolItem[]> {
+  if (!peerIndex) {
+    const m = new Map<string, PoolItem[]>();
+    for (const it of POOL) {
+      const py = namePinyin(it.name);
+      if (!py) continue;
+      const list = m.get(py);
+      if (list) list.push(it); else m.set(py, [it]);
+    }
+    peerIndex = m;
+  }
+  return peerIndex;
+}
+export function sameSoundPeers(name: string, limit = 6): Peer[] {
+  const py = namePinyin(name);
+  if (!py) return [];
+  const seen = new Set<string>([name]);
+  const out: Peer[] = [];
+  for (const it of peersIndex().get(py) ?? []) {
+    if (seen.has(it.name)) continue;
+    seen.add(it.name);
+    out.push({ id: it.id, name: it.name, book: it.book, title: it.title });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+// 收藏条目的解析：先按 id；id 找不到时按卡片上记下的名字＋出处回退（旧版本 id 口径不同时会走到这里）。
+// by 说明是哪条路走通的，界面据此决定要不要标「按名字对上的」。
+export type SavedMatch = { item: (Named & { famous?: boolean; tier?: string }) | null; by: 'id' | 'name' | null };
+export function resolveSaved(rec: { id: string; name?: string; book?: Book; title?: string }): SavedMatch {
+  const byId = findItem(rec.id);
+  if (byId) return { item: byId, by: 'id' };
+  if (rec.name) {
+    const exact = ALL_ITEMS.filter((it) => it.name === rec.name && it.book === rec.book && it.title === rec.title);
+    if (exact.length === 1) return { item: exact[0], by: 'name' };
+    const sameName = ALL_ITEMS.filter((it) => it.name === rec.name);
+    if (sameName.length === 1) return { item: sameName[0], by: 'name' };
+  }
+  return { item: null, by: null };
 }
 
 export function genderStats(opts: Opts) {

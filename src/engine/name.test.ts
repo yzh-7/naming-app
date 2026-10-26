@@ -13,7 +13,7 @@ const gen = (sur: string, o: Opts, b: number) => plan(sur, o, b).page;
 const ALL_BOOKS = Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Record<Book, boolean>;
 const opts = (p: Partial<Opts> = {}): Opts => ({
   gender: 'any', genderWeak: false, length: 2, books: { ...ALL_BOOKS },
-  redupOnly: false, exclude: [], count: 12, search: '', sort: 'score',
+  redupOnly: false, exclude: [], count: 12, search: '', title: '', sort: 'score',
   strokeMax: 0, noMonotone: false, popFloor: 0, mustChar: '', mustPos: 'any', ...p,
 });
 
