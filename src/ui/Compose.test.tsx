@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import Compose from './Compose';
 import { DEFAULT_OPTS } from '../store/local';
-import { findCombo } from '../engine/name';
+import { composeName, findCombo } from '../engine/name';
 import { at, one } from '../testing';
 
 const baseProps = () => ({
@@ -125,5 +125,171 @@ describe('自选页', () => {
     for (const h of hints) {
       expect(h.getAttribute('title')).not.toContain('子归');
     }
+  });
+
+  it('清除某个字位后回到「还差一个字」，不留下半条名字', () => {
+    const p = { ...baseProps(), surname: '苏' };
+    render(<Compose {...p} />);
+    pickChar(1, '子');
+    pickChar(2, '归');
+    expect(screen.getByRole('heading', { name: '苏子归' })).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('清除第 1 字'));
+    expect(screen.queryByRole('heading', { name: '苏子归' })).not.toBeInTheDocument();
+    expect(screen.getByText(/还差一个字/)).toBeInTheDocument();
+    // 字位本身还在，可以直接重选
+    expect(screen.getByLabelText('选择第 1 字')).toBeInTheDocument();
+  });
+
+  it('选字面板：Escape 收起并把焦点送回原来那个字位', () => {
+    const p = { ...baseProps(), surname: '苏' };
+    render(<Compose {...p} />);
+    fireEvent.click(screen.getByLabelText('选择第 1 字'));
+    // 面板里的输入框是自动聚焦的
+    expect(document.activeElement).toBe(screen.getByLabelText('第 1 字搜索'));
+    fireEvent.keyDown(screen.getByLabelText('第 1 字搜索'), { key: 'Escape' });
+    expect(screen.queryByLabelText('第 1 字搜索')).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(screen.getByLabelText('选择第 1 字'));
+  });
+
+  it('选字面板：「关闭」按钮与 Escape 等价', () => {
+    const p = { ...baseProps(), surname: '苏' };
+    render(<Compose {...p} />);
+    fireEvent.click(screen.getByLabelText('选择第 2 字'));
+    expect(screen.getByLabelText('第 2 字搜索')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+    expect(screen.queryByLabelText('第 2 字搜索')).not.toBeInTheDocument();
+  });
+
+  it('姓输入框：改动时原样交回（不打断拼音输入法），失焦时按清洗规则交回', () => {
+    const p = baseProps();
+    const { rerender } = render(<Compose {...p} />);
+    const input = screen.getByLabelText('姓（可复姓）');
+    fireEvent.change(input, { target: { value: ' 苏 abc明' } });
+    expect(p.setSurname).toHaveBeenLastCalledWith(' 苏 abc明');
+    rerender(<Compose {...p} surname=" 苏 abc明" />);
+    fireEvent.blur(screen.getByLabelText('姓（可复姓）'));
+    expect(p.setSurname).toHaveBeenLastCalledWith('苏明');
+  });
+
+  it('姓里有查不到读音的字时明说算不出，不含糊过去', () => {
+    const p = { ...baseProps(), surname: '龘' };
+    render(<Compose {...p} />);
+    pickChar(1, '子');
+    pickChar(2, '归');
+    expect(screen.getByText(/「龘」有字不在读音表/)).toBeInTheDocument();
+  });
+
+  it('多音姓给出读音选择器，选定后把序号交回上层', () => {
+    const p = { ...baseProps(), surname: '单' };
+    render(<Compose {...p} />);
+    const select = screen.getByLabelText('姓的读音（多音姓请选）');
+    expect(within(select).getAllByRole('option')).toHaveLength(3);
+    fireEvent.change(select, { target: { value: '1' } });
+    expect(p.setReading).toHaveBeenLastCalledWith(1);
+  });
+
+  it('随机自由组合一次给 8 个互不重复的名字（不看有无出处）', () => {
+    const p = { ...baseProps(), surname: '苏' };
+    render(<Compose {...p} />);
+    fireEvent.click(screen.getByLabelText('随机自由组合（不看有无出处）'));
+    fireEvent.click(screen.getByRole('button', { name: '换一批随机' }));
+    expect(screen.getByText(/随机 8 个（自由组合，可能有出处也可能没有）/)).toBeInTheDocument();
+    const box = screen.getByText(/随机 8 个/).closest('section');
+    expect(box).not.toBeNull();
+    const chips = within(box as HTMLElement).getAllByRole('button');
+    expect(chips).toHaveLength(8);
+    const names = chips.map((c) => (c.textContent ?? '').split('·')[0] ?? '');
+    expect(new Set(names).size).toBe(8);
+  });
+
+  it('搜索框里直接写满两个字：一次填满两格并收起面板', () => {
+    const p = { ...baseProps(), surname: '苏' };
+    render(<Compose {...p} />);
+    fireEvent.click(screen.getByLabelText('选择第 1 字'));
+    fireEvent.change(screen.getByLabelText('第 1 字搜索'), { target: { value: '子归' } });
+    fireEvent.click(screen.getByRole('button', { name: '直接使用「子归」' }));
+    expect(screen.queryByLabelText('第 1 字搜索')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '苏子归' })).toBeInTheDocument();
+  });
+
+  it('拼音搜索列出候选字，点一下填进正在选的那个字位', () => {
+    const p = { ...baseProps(), surname: '苏' };
+    render(<Compose {...p} />);
+    fireEvent.click(screen.getByLabelText('选择第 2 字'));
+    fireEvent.change(screen.getByLabelText('第 2 字搜索'), { target: { value: 'zi' } });
+    const grid = screen.getByRole('group', { name: '候选字' });
+    const chars = within(grid)
+      .getAllByRole('button')
+      .map((b) => b.textContent);
+    expect(chars).toContain('子');
+    fireEvent.click(within(grid).getByRole('button', { name: '子' }));
+    expect(screen.getByLabelText('选择第 2 字：子')).toBeInTheDocument();
+  });
+
+  it('搜不到字时说明为什么搜不到；「仅名用字表」开关换了，说法也跟着换', () => {
+    const p = { ...baseProps(), surname: '苏' };
+    render(<Compose {...p} />);
+    fireEvent.click(screen.getByLabelText('选择第 1 字'));
+    fireEvent.change(screen.getByLabelText('第 1 字搜索'), { target: { value: '龘' } });
+    expect(screen.getByText(/没有匹配的字：「龘」/)).toBeInTheDocument();
+    expect(screen.getByText(/当前只列名用字表内的字/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '仅名用字表' }));
+    expect(screen.getByText(/这个字表里没有这样的字/)).toBeInTheDocument();
+  });
+
+  it('无出处的组合也能分享与复制，交回的是自选页算出来的读音', () => {
+    const p = { ...baseProps(), surname: '苏' };
+    render(<Compose {...p} />);
+    pickChar(1, '龙');
+    pickChar(2, '凤');
+    const c = composeName('苏', '龙凤', 0);
+    fireEvent.click(screen.getByRole('button', { name: '分享卡' }));
+    fireEvent.click(screen.getByRole('button', { name: '复制信息' }));
+    expect(p.onShare).toHaveBeenCalledWith({ full: c.full, name: c.name, readings: c.readings });
+    expect(p.onCopy).toHaveBeenCalledWith({ full: c.full, name: c.name, readings: c.readings });
+  });
+
+  it('自选字正好是生成页的禁用字时说明清楚：这里照旧能组合，生成页不出现它', () => {
+    const p = { ...baseProps(), surname: '苏', opts: { ...DEFAULT_OPTS, exclude: [], avoidChars: '子' } };
+    render(<Compose {...p} />);
+    pickChar(1, '子');
+    pickChar(2, '归');
+    expect(screen.getByText(/在生成页的禁用字里/)).toBeInTheDocument();
+  });
+
+  it('拗口、生僻与字形单调这类判定在自选结果里露出来', () => {
+    const p = { ...baseProps(), surname: '苏' };
+    render(<Compose {...p} />);
+    pickChar(1, '明');
+    pickChar(2, '铄');
+    expect(screen.getByText('较生僻')).toBeInTheDocument();
+    expect(screen.getByText(/左右结构连用，字形偏单调/)).toBeInTheDocument();
+  });
+
+  it('单名且还没选字时给单名的提示，不写「还差一个字」', () => {
+    const p = { ...baseProps(), surname: '苏' };
+    render(<Compose {...p} />);
+    fireEvent.click(screen.getByRole('button', { name: '单名' }));
+    expect(screen.getByText('还没选字。')).toBeInTheDocument();
+  });
+
+  it('两格都填满且含非名用字时，说明仍做读音与谐音核对', () => {
+    const p = { ...baseProps(), surname: '苏' };
+    render(<Compose {...p} />);
+    pickChar(1, '龘');
+    pickChar(2, '归');
+    expect(screen.getByText(/有字不在名用字表：仍做读音与谐音核对/)).toBeInTheDocument();
+  });
+
+  it('已收藏的组合按钮写成「已收藏」，不伪装成还能收藏', () => {
+    const combo = findCombo('子归');
+    expect(combo).not.toBeNull();
+    const p = { ...baseProps(), surname: '苏', fav: new Set<string>([combo!.id]) };
+    render(<Compose {...p} />);
+    pickChar(1, '子');
+    pickChar(2, '归');
+    const btn = screen.getByRole('button', { name: '已收藏' });
+    expect(btn).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('button', { name: '收藏' })).not.toBeInTheDocument();
   });
 });

@@ -44,12 +44,14 @@ export default defineConfig({
       include: ['src/**'],
       exclude: ['src/data/**', 'src/**/*.test.{ts,tsx}', 'src/styles.css'],
       thresholds: {
-        // 阈值取自 0.3.1 之后第一次实测（见 DESIGN.md 6.4），各留 3～5 个百分点余量：
-        // 门禁要能拦住"覆盖掉了"，但不该因为一次小重构就红。
-        lines: 85,
-        statements: 83,
-        functions: 80,
-        branches: 76,
+        // 阈值取本轮补测试收口后的实测（94.23 / 87.56 / 94.89 / 95.79，13 个文件 249 条单元与组件用例，见 DESIGN.md 6 节与 CHANGELOG），
+        // 各留 3～5 个百分点余量：门禁要能拦住"覆盖掉了"，但不该因为一次小重构就红。
+        // 本轮中途（补 App 那批用例之前）的实测是 93.37 / 86.78 / 93.19 / 94.79，阈值只按最后一轮实测定一次，
+        // 不在同一轮里追着实数拧两次。
+        lines: 91,
+        statements: 90,
+        functions: 90,
+        branches: 83,
       },
     },
   },

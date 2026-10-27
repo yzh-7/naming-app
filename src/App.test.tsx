@@ -3,8 +3,9 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import App from './App';
 import { POOL } from './engine/data';
 import { BOOK_LABEL } from './engine/types';
-import { lineGlossOf, namePinyin } from './engine/name';
+import { lineGlossOf, namePinyin, shapeTags } from './engine/name';
 import { at, one } from './testing';
+import { FAV_KEY } from './store/local';
 
 const ctxStub = () => ({
   fillStyle: '',
@@ -328,5 +329,265 @@ describe('App 集成冒烟', () => {
     expect(screen.getAllByRole('heading', { level: 3 }).length).toBeGreaterThan(0);
     expect(screen.getByText(/收藏、拉黑与筛选不会保存/)).toBeInTheDocument();
     spy.mockRestore();
+  });
+});
+
+describe('App 的分组、排序、对比上限、导出与主题联动', () => {
+  const stamp = new Date().toISOString().slice(0, 10);
+  const groupInputs = () => screen.getAllByPlaceholderText('如 女孩/备选').map((el) => el as HTMLInputElement);
+  const compareCells = (label: string) =>
+    within(screen.getByRole('rowheader', { name: label }).closest('tr')!).getAllByRole('cell');
+
+  // 渲染 App、生成、收藏前 n 条，再切到收藏页
+  function favPageWith(n: number) {
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
+    const favBtns = screen.getAllByRole('button', { name: '收藏' });
+    for (let i = 0; i < n; i++) fireEvent.click(at(favBtns, i, '「收藏」按钮列表'));
+    fireEvent.click(screen.getByRole('link', { name: new RegExp(`收藏 ${n}`) }));
+  }
+
+  it('收藏排序三档各用各的尺子：笔画档真的重排，同分的两条不被强行换位', () => {
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
+    fireEvent.click(one(screen.getAllByRole('button', { name: '收藏' }), '「收藏」按钮列表'));
+    fireEvent.click(screen.getByRole('button', { name: /^换一批/ }));
+    const second = screen.getAllByRole('button', { name: '收藏' });
+    fireEvent.click(at(second, 0, '「收藏」按钮列表'));
+    fireEvent.click(at(second, 1, '「收藏」按钮列表'));
+    fireEvent.click(screen.getByRole('link', { name: /收藏 3/ }));
+
+    const select = screen.getByLabelText('收藏排序') as HTMLSelectElement;
+    const order = () => screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent!);
+    const strokes = () => order().map((full) => shapeTags(full.slice(1)).strokes); // 卡片标题是全名，姓固定一个字
+    const checkAll = () =>
+      (screen.getAllByLabelText('对比') as HTMLInputElement[])
+        .filter((b) => !b.checked)
+        .forEach((b) => fireEvent.click(b));
+
+    const recent = order();
+    const recentStrokes = strokes();
+    expect(
+      [...recentStrokes].sort((a, b) => a - b),
+      '默认这一档不按笔画排，笔画序列本身应当是乱序的，否则下面的比对没有意义',
+    ).not.toEqual(recentStrokes);
+
+    fireEvent.change(select, { target: { value: 'strokes' } });
+    const byStroke = strokes();
+    expect(
+      [...byStroke].sort((a, b) => a - b),
+      '「笔画少→多」这一档应按笔画递增',
+    ).toEqual(byStroke);
+    const strokeOrder = order();
+    expect(strokeOrder, '换了档就得真的重排').not.toEqual(recent);
+
+    fireEvent.change(select, { target: { value: 'popular' } });
+    const popularOrder = order();
+    expect(popularOrder, '「用字常见度」用的是另一把尺子').not.toEqual(recent);
+    expect(popularOrder).not.toEqual(strokeOrder);
+
+    // 这三条的分数相同（对比表里那一行读得出），同分时换档不该把它们强行换位
+    fireEvent.change(select, { target: { value: 'score' } });
+    expect(order(), '同分的三条应保持收藏时的先后').toEqual(recent);
+    checkAll();
+    const scores = compareCells('分数').map((c) => c.textContent);
+    expect(new Set(scores).size, '这三条同分，用例断言的是同分不换位').toBe(1);
+  });
+
+  it('分组改名：组名改掉后当前视图跟着走，卡上的组名也换成新的', () => {
+    favPageWith(2);
+    fireEvent.change(at(groupInputs(), 0, '收藏卡的分组输入框列表'), { target: { value: '备选' } });
+    fireEvent.click(screen.getByRole('button', { name: '备选' })); // 选中这个分组，组工具才出现
+    fireEvent.click(screen.getByRole('button', { name: '改组名' }));
+    const rename = screen.getByLabelText('分组「备选」的新名字') as HTMLInputElement;
+    fireEvent.change(rename, { target: { value: '备选池' } });
+    fireEvent.click(screen.getByRole('button', { name: '改名' }));
+    expect(screen.getByText('分组「备选」已改名为「备选池」')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '备选' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '备选池' })).toHaveAttribute('aria-pressed', 'true');
+    expect(groupInputs().map((i) => i.value)).toContain('备选池');
+  });
+
+  it('解散组只删组名不删收藏：条目回到未分组，条数写在反馈里', () => {
+    favPageWith(2);
+    fireEvent.change(at(groupInputs(), 0, '收藏卡的分组输入框列表'), { target: { value: '备选' } });
+    fireEvent.click(screen.getByRole('button', { name: '备选' }));
+    fireEvent.click(screen.getByRole('button', { name: '解散组' }));
+    expect(screen.getByText('分组「备选」已解散，1 条收藏回到未分组（收藏本身没删）')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '备选' })).not.toBeInTheDocument();
+    expect(groupInputs().map((i) => i.value)).toEqual(['', '']);
+  });
+
+  it('对比最多三条：第四条勾不上，对比表也只有三列', () => {
+    favPageWith(4);
+    const boxes = screen.getAllByLabelText('对比') as HTMLInputElement[];
+    expect(boxes).toHaveLength(4);
+    for (const box of boxes) fireEvent.click(box);
+    expect(
+      boxes.map((b) => b.checked),
+      '第四勾不进去，前三条还在对比里',
+    ).toEqual([true, true, true, false]);
+    expect(compareCells('名字')).toHaveLength(3);
+  });
+
+  it('换页时回到顶部：粘性页头不会把这一页的第一张卡片压在下面', () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    const desc = Object.getOwnPropertyDescriptor(window, 'scrollY');
+    Object.defineProperty(window, 'scrollY', { value: 0, configurable: true, writable: true });
+    render(<App />);
+    expect(scrollTo).not.toHaveBeenCalled(); // 本来就在顶部，不该动
+    Object.defineProperty(window, 'scrollY', { value: 420, configurable: true, writable: true });
+    window.location.hash = '#fav';
+    fireEvent(window, new HashChangeEvent('hashchange'));
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenCalledWith(0, 0);
+    Object.defineProperty(window, 'scrollY', { value: 0, configurable: true, writable: true });
+    window.location.hash = '#/compose';
+    fireEvent(window, new HashChangeEvent('hashchange'));
+    expect(scrollTo).toHaveBeenCalledTimes(1); // 已经在顶部了，再换页也不调
+    if (desc) Object.defineProperty(window, 'scrollY', desc);
+  });
+
+  it('跟随系统主题时系统的深色偏好一变就套用，卸载时把监听摘掉', () => {
+    const handlers = new Map<string, EventListener[]>();
+    const mq = {
+      matches: false,
+      media: '(prefers-color-scheme: dark)',
+      addEventListener: (t: string, cb: EventListener) => {
+        handlers.set(t, [...(handlers.get(t) ?? []), cb]);
+      },
+      removeEventListener: (t: string, cb: EventListener) => {
+        handlers.set(
+          t,
+          (handlers.get(t) ?? []).filter((x) => x !== cb),
+        );
+      },
+    };
+    const prevMatchMedia = window.matchMedia;
+    window.matchMedia = (() => mq) as unknown as typeof window.matchMedia;
+    try {
+      const { unmount } = render(<App />);
+      expect(handlers.get('change') ?? [], '「跟随系统」应当挂上系统偏好变化的监听').toHaveLength(1);
+      expect(document.documentElement.classList.contains('dark')).toBe(false);
+      mq.matches = true;
+      for (const cb of handlers.get('change') ?? []) cb(new Event('change'));
+      expect(document.documentElement.classList.contains('dark')).toBe(true);
+      unmount();
+      expect(handlers.get('change') ?? [], '卸载时应当摘掉监听').toHaveLength(0);
+    } finally {
+      mq.matches = false;
+      document.documentElement.classList.remove('dark');
+      window.matchMedia = prevMatchMedia;
+    }
+  });
+
+  it('候选全量导出不止这一屏，收藏 CSV 按当前视图导出，文件名都带日期', () => {
+    const downloads: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      downloads.push(this.download);
+    });
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
+    const shown = screen.getAllByRole('button', { name: '收藏' }).length;
+    fireEvent.click(screen.getByRole('button', { name: '候选CSV' }));
+    const notice = screen.getByText(/已导出候选 \d+ 条（当前筛选全量，不只这一屏）/).textContent!;
+    const total = Number(notice.match(/已导出候选 (\d+) 条/)?.[1]);
+    expect(total, '导出的条数应当大于这一屏画出来的卡片数').toBeGreaterThan(shown);
+    expect(downloads).toEqual([`候选-苏-${stamp}.csv`]);
+    fireEvent.click(screen.getByRole('button', { name: '候选JSON' }));
+    expect(downloads).toEqual([`候选-苏-${stamp}.csv`, `候选-苏-${stamp}.json`]);
+
+    const favBtn = one(screen.getAllByRole('button', { name: '收藏' }), '「收藏」按钮列表');
+    fireEvent.click(favBtn);
+    fireEvent.click(screen.getByRole('link', { name: /收藏 1/ }));
+    fireEvent.click(screen.getByRole('button', { name: '导出 CSV' }));
+    expect(screen.getByText('已导出 CSV：1 条（全部）')).toBeInTheDocument();
+    expect(downloads).toEqual([`候选-苏-${stamp}.csv`, `候选-苏-${stamp}.json`, `收藏-${stamp}.csv`]);
+  });
+  it('导入弹窗里「取消」什么都不改，「覆盖」把原有收藏换掉', async () => {
+    const { container } = render(<App />);
+    const input = () => container.querySelector('input[type=file]') as HTMLInputElement;
+    const imported = at(POOL, 5, '候选池 POOL');
+    const st = {
+      app: 'naming-app',
+      version: 1,
+      exportedAt: '',
+      surname: '',
+      reading: 0,
+      opts: {},
+      favorites: [{ id: imported.id, ts: 1 }],
+      blocklist: [],
+    };
+    const feed = () => {
+      const file = new File([JSON.stringify(st)], 'x.json', { type: 'application/json' });
+      (file as unknown as { text: () => Promise<string> }).text = () => Promise.resolve(JSON.stringify(st));
+      fireEvent.change(input(), { target: { files: [file] } });
+    };
+
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
+    fireEvent.click(one(screen.getAllByRole('button', { name: '收藏' }), '「收藏」按钮列表'));
+    const mine = screen.getAllByRole('heading', { level: 3 })[0]?.textContent ?? '';
+
+    feed();
+    const dialog = await screen.findByRole('dialog', { name: '导入方式' });
+    fireEvent.click(within(dialog).getByRole('button', { name: '取消' }));
+    expect(screen.queryByRole('dialog', { name: '导入方式' })).not.toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(FAV_KEY) ?? '[]')).toHaveLength(1);
+
+    feed();
+    const again = await screen.findByRole('dialog', { name: '导入方式' });
+    fireEvent.click(within(again).getByRole('button', { name: '覆盖' }));
+    expect(await screen.findByText(/已导入（覆盖）/)).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(FAV_KEY) ?? '[]')).toEqual([expect.objectContaining({ id: imported.id })]);
+    fireEvent.click(screen.getByRole('link', { name: /收藏 1/ }));
+    expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent(imported.name);
+    expect(mine).not.toBe(imported.name);
+    expect(screen.queryByText(mine)).not.toBeInTheDocument();
+  });
+
+  it('导入一个「什么都没有」的文件与导入一个读不出来的文件：两条失败文案各自说清原因', async () => {
+    const { container } = render(<App />);
+    const input = () => container.querySelector('input[type=file]') as HTMLInputElement;
+
+    // 只有 favorites/blocklist 两个空数组、没有 surname/reading/opts 这三个键，才落到「没有可导入的东西」这一支
+    const empty = { app: 'naming-app', version: 1, exportedAt: '', favorites: [], blocklist: [] };
+    const fileEmpty = new File([JSON.stringify(empty)], 'empty.json', { type: 'application/json' });
+    (fileEmpty as unknown as { text: () => Promise<string> }).text = () => Promise.resolve(JSON.stringify(empty));
+    fireEvent.change(input(), { target: { files: [fileEmpty] } });
+    expect(await screen.findByText(/没有可导入的东西/)).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '导入方式' })).not.toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(FAV_KEY) ?? '[]')).toHaveLength(0);
+
+    const fileBroken = new File(['{}'], 'broken.json', { type: 'application/json' });
+    (fileBroken as unknown as { text: () => Promise<string> }).text = () => Promise.reject(new Error('blocked'));
+    fireEvent.change(input(), { target: { files: [fileBroken] } });
+    expect(await screen.findByText(/这个文件读不出来/)).toBeInTheDocument();
+  });
+
+  it('卡片上的「分享卡」与「复制信息」各自给出说得清的反馈', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
+    fireEvent.click(one(screen.getAllByRole('button', { name: '分享卡' }), '「分享卡」按钮列表'));
+    const shareNotice = await screen.findByText(/分享卡片已生成/);
+    expect(shareNotice.textContent).toMatch(/含扫码二维码|二维码没画出来/);
+    fireEvent.click(one(screen.getAllByRole('button', { name: '复制信息' }), '「复制信息」按钮列表'));
+    expect(await screen.findByText('名字信息已复制')).toBeInTheDocument();
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('苏'));
+  });
+
+  it('拉黑页上「已拉黑」就是解除入口，这一页上也能直接收藏', () => {
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
+    const blockBtns = screen.getAllByRole('button', { name: '拉黑' });
+    fireEvent.click(at(blockBtns, 0, '「拉黑」按钮列表'));
+    fireEvent.click(at(blockBtns, 1, '「拉黑」按钮列表'));
+    fireEvent.click(screen.getByRole('link', { name: /拉黑 2/ }));
+    expect(screen.getAllByRole('button', { name: '已拉黑' })).toHaveLength(2);
+    fireEvent.click(one(screen.getAllByRole('button', { name: '已拉黑' }), '「已拉黑」按钮列表'));
+    expect(screen.getAllByRole('button', { name: '已拉黑' })).toHaveLength(1);
+    fireEvent.click(one(screen.getAllByRole('button', { name: '收藏' }), '「收藏」按钮列表'));
+    expect(screen.getByRole('link', { name: /收藏 1/ })).toBeInTheDocument();
   });
 });
