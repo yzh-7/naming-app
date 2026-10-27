@@ -93,16 +93,21 @@ afterEach(() => {
 
 function cleanupStubs() {
   delete (window.navigator as { serviceWorker?: unknown }).serviceWorker;
+  // onLine 也是 defineProperty 钉在 navigator 上的 own 属性（jsdom 原本挂在原型上），
+  // 不删就会一直留到本文件结束，后面的用例都带着它跑。
+  delete (window.navigator as { onLine?: unknown }).onLine;
   vi.unstubAllGlobals();
 }
 
 describe('usePwa 离线提示', () => {
-  it('navigator.onLine 为假时开局就报离线', () => {
+  it('navigator.onLine 为假时开局报离线，为真时开局报联网', () => {
     install({ onLine: false });
-    render(<Harness />);
+    const first = render(<Harness />);
     expect(screen.getByText('当前离线')).toBeInTheDocument();
+    first.unmount(); // 两份替身之间要把前一份卸掉，否则「当前离线/当前联网」在同一次用例里歧义
     cleanupStubs();
     Object.defineProperty(window.navigator, 'onLine', { value: true, configurable: true });
+    install();
     render(<Harness />);
     expect(screen.getByText('当前联网')).toBeInTheDocument();
   });
@@ -140,12 +145,25 @@ describe('usePwa 注册服务Worker', () => {
     expect(url.split('?v=')[1]).toBe(encodeURIComponent(APP_VERSION));
   });
 
-  it('注册失败只静默收口，界面照常可用', async () => {
-    const { container: c } = install();
-    c.registerPromise = Promise.reject(new Error('offline sandbox'));
-    render(<Harness />);
-    await vi.waitFor(() => expect(c.registered).toHaveLength(1));
-    expect(screen.getByText('当前联网')).toBeInTheDocument();
+  it('注册失败只静默收口：界面照常可用，rejection 也不漏到全局', async () => {
+    // 全局这一条是显式断言，不是碰运气：jsdom 不发 window 层的 unhandledrejection，
+    // 所以这里直接挂 process 层的监听数它有几条。删掉 pwa.ts 里的 .catch(() => {})，
+    // 这条会红（runner 自己也会报 unhandled error，但不能把门禁交给 runner 的默认行为）。
+    const rejections: unknown[] = [];
+    const onRejection = (reason: unknown) => rejections.push(reason);
+    process.on('unhandledRejection', onRejection);
+    try {
+      const { container: c } = install();
+      c.registerPromise = Promise.reject(new Error('offline sandbox'));
+      render(<Harness />);
+      await vi.waitFor(() => expect(c.registered).toHaveLength(1));
+      expect(screen.getByText('当前联网')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '立即更新' })).toBeInTheDocument();
+      await new Promise((r) => setTimeout(r, 20)); // 让这一支的微任务跑完
+    } finally {
+      process.off('unhandledRejection', onRejection);
+    }
+    expect(rejections, '注册失败不该把 rejection 漏到全局').toHaveLength(0);
   });
 });
 
@@ -173,6 +191,15 @@ describe('usePwa 新版本就绪', () => {
     reg.waiting = new FakeWorker();
     render(<Harness />);
     await screen.findByText('有新版本可用');
+  });
+
+  it('注册返回时已有 waiting 但没有旧版在控制：不提示（首次访问没有可更新的对象）', async () => {
+    const { reg } = install({ controller: null });
+    reg.waiting = new FakeWorker();
+    render(<Harness />);
+    // 先确认注册真的落地了、这一支确实走到了，否则「没提示」会因为什么都没发生而空过
+    await vi.waitFor(() => expect(reg.listenerCount('updatefound')).toBe(1));
+    expect(screen.queryByText('有新版本可用')).toBeNull();
   });
 
   it('安装中的 worker 进入 installed 且旧版还在控制，才给提示', async () => {

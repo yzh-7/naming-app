@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import NameCard, { Source } from './NameCard';
-import { scoreItem, findItem, glossOf, lineGlossOf, sameSoundPeers } from '../engine/name';
+import { scoreItem, findItem, glossOf, lineGlossOf, sameSoundPeers, shapeTags } from '../engine/name';
 import { POOL } from '../engine/data';
 import { BOOK_LABEL, BOOK_ORDER, type Opts } from '../engine/types';
 import { one } from '../testing';
@@ -78,7 +78,6 @@ describe('NameCard 组件', () => {
 const scoredAll = POOL.map((x) => scoreItem('苏', x, opts, 0));
 const shadowR = scoredAll.find((x) => x.flags.some((f) => f.startsWith('同形')));
 const loudR = scoredAll.find((x) => x.flags.some((f) => !f.startsWith('同形')));
-const cleanR = scoredAll.find((x) => x.flags.length === 0);
 // 出处窗口需要一个长句：命中处既不贴着句首也不贴着句尾
 const longR = scoredAll.find((x) => {
   const at = x.line.indexOf(x.seg);
@@ -111,9 +110,12 @@ describe('NameCard 警示分区', () => {
   });
 
   it('没有旗标时整块警示不出现，不给干净名字叠警示色', () => {
-    expect(cleanR ?? null).not.toBeNull();
+    // 断言的范围是整张卡，所以选的这条还得满足「合注里没有小注」：
+    // NameCard 的字形小注也是 chip-warn，note 一出现就跟旗标混在一起，语料一变就会误报。
+    const clean = scoredAll.find((x) => x.flags.length === 0 && !shapeTags(x.name).note);
+    expect(clean ?? null, '用例前提：语料里得有一条既没有旗标、合注里也没有小注的名').not.toBeNull();
     const { container } = render(
-      <NameCard r={cleanR!} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />,
+      <NameCard r={clean!} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />,
     );
     expect(container.querySelector('.chip-danger')).toBeNull();
     expect(container.querySelector('.chip-warn')).toBeNull();
@@ -144,7 +146,8 @@ describe('NameCard 出处行', () => {
     expect(longR ?? null).not.toBeNull();
     const r2 = longR!;
     const at = r2.line.indexOf(r2.seg);
-    // 把取词段挪到「同一小句末字」与「下一小句里」两侧：命中跨句，窗口取不到单一小句
+    // 合成的落点：foot/gap 这两个数是手工摆出来的（语料里没有这样一条），
+    // 目的是把取词段挪到「同一小句末字」与「下一小句里」两侧，让命中跨句、窗口取不到单一小句。
     const crossed = { ...r2, foot: r2.line.slice(at).indexOf('，'), gap: 3 };
     const { container } = render(<Source r={crossed} />);
     const root = container.firstChild as HTMLElement;
@@ -155,15 +158,23 @@ describe('NameCard 出处行', () => {
   });
 
   it('短句不截窗、不加省略号', () => {
-    const short = scoredAll.find((x) => x.gap === 1 && x.line.length > 0 && x.line.length <= 28);
-    expect(short ?? null).not.toBeNull();
+    // 三个条件都是为了让这条断言咬得住东西：
+    // 28 是 NameCard.tsx 里的 WINDOW_MAX（改那一处也得改这里）；小句数 >= 3 保证「整行不截」
+    // 这条早退守卫真在被测的位置上——换掉这条守卫，这种多小句的短句会被截成带省略号的窗口
+    //（实测白鹿 21 字 4 小句、君君 26 字 6 小句、德博 26 字 5 小句都会因此变红）。
+    const short = scoredAll.find(
+      (x) => x.gap === 1 && x.line.length > 0 && x.line.length <= 28 && (x.line.match(/[，、；：]/g) ?? []).length >= 3,
+    );
+    expect(short ?? null, '用例前提：语料里得有一条不长、但小句够多的整句').not.toBeNull();
     const { container } = render(<Source r={short!} />);
     const text = excerptOf(container.firstChild as HTMLElement);
     // 短句整句给出，末尾补一个句号，不出现省略号
     expect(text).toBe(`${short!.line}。`);
+    expect(text).not.toContain('…');
   });
 
   it('取词段在原句里找不到时如实说明，不假装高亮成功', () => {
+    // 合成的取词段：语料里不存在这种 seg，测的是防御分支，不是真实条目
     const broken = { ...r, seg: '不可能出现的取词段' };
     const { container } = render(<Source r={broken} />);
     expect(container.textContent).toContain('取词段「不可能出现的取词段」');
@@ -173,8 +184,13 @@ describe('NameCard 出处行', () => {
 
 describe('NameCard 同音与同篇', () => {
   it('同音写法列出来并给来源说明；给了回调就出现「按拼音看」', () => {
-    const withPeers = scoredAll.find((x) => sameSoundPeers(x.name, 4).length > 0);
-    expect(withPeers ?? null).not.toBeNull();
+    // 选例条件：这一条的候选至少两条。组件里的上限是 4（NameCard.tsx），当前语料里同音候选最多的
+    // 一条只有 3 个（实测最多的是 焱焱），够不到那个上限，所以上限数字本身在这一层测不出来；
+    // 这里钉住的是「引擎给几条就列几条」——把上限改成 1 或 2 都会红。
+    const withPeers = scoredAll.find((x) => sameSoundPeers(x.name, 4).length >= 2);
+    expect(withPeers ?? null, '用例前提：语料里得有一条同音候选不止一个的名').not.toBeNull();
+    const peers = sameSoundPeers(withPeers!.name, 4);
+    expect(peers.length, '用例前提：这一条的候选不止一个，否则「列全」这条断言咬不住东西').toBeGreaterThanOrEqual(2);
     const onSameSound = vi.fn();
     render(
       <NameCard
@@ -186,8 +202,9 @@ describe('NameCard 同音与同篇', () => {
         onSameSound={onSameSound}
       />,
     );
-    const peers = sameSoundPeers(withPeers!.name, 4);
+    // 期望值就是引擎给出的那份候选（组件的契约是「引擎给几条列几条」），不是另写一遍名字
     expect(screen.getByText(peers.map((p) => p.name).join('、'))).toBeInTheDocument();
+    expect(peers.length).toBeGreaterThan(1);
     expect(screen.getByText('去声调同音，按常用读音')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '按拼音看' }));
     expect(onSameSound).toHaveBeenCalledOnce();

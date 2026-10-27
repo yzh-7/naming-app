@@ -189,6 +189,14 @@ describe('自选页', () => {
   });
 
   it('随机自由组合一次给 8 个互不重复的名字（不看有无出处）', () => {
+    // 随机钉成定数，不然「互不重复」这条只是碰运气：抽样序列按对给出（每一对是两个字），
+    // 里面故意安排了一对重复——第 2 轮抽到与第 1 轮完全相同的两个字。
+    // 于是必须靠 Compose.tsx 里的 used 去重才能凑满 8 个不同名字；去重一旦被删，
+    // 这一批 8 个名字里就露出一对重复，下面的 Set 断言立刻变红。
+    const pair = (k: number) => [0.01 + k * 0.05, 0.02 + k * 0.05];
+    const draws = [pair(0), pair(0), ...Array.from({ length: 9 }, (_, i) => pair(i + 1))].flat();
+    let drawn = 0;
+    vi.spyOn(Math, 'random').mockImplementation(() => draws[drawn++ % draws.length] ?? 0.5);
     const p = { ...baseProps(), surname: '苏' };
     render(<Compose {...p} />);
     fireEvent.click(screen.getByLabelText('随机自由组合（不看有无出处）'));
@@ -200,6 +208,7 @@ describe('自选页', () => {
     expect(chips).toHaveLength(8);
     const names = chips.map((c) => (c.textContent ?? '').split('·')[0] ?? '');
     expect(new Set(names).size).toBe(8);
+    expect(names.every((n) => n.length > 0)).toBe(true);
   });
 
   it('搜索框里直接写满两个字：一次填满两格并收起面板', () => {
@@ -242,6 +251,9 @@ describe('自选页', () => {
     render(<Compose {...p} />);
     pickChar(1, '龙');
     pickChar(2, '凤');
+    // 期望值用的是与 Compose.tsx 分享/复制那一步同一条 composeName('苏','龙凤',0)：
+    // 这一条钉的是「交回父级的是自选页算出来的那一份（含读音）」这个契约，
+    // 读音数值本身对不对由 engine 的用例钉。
     const c = composeName('苏', '龙凤', 0);
     fireEvent.click(screen.getByRole('button', { name: '分享卡' }));
     fireEvent.click(screen.getByRole('button', { name: '复制信息' }));

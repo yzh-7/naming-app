@@ -36,6 +36,10 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   localStorage.clear();
+  // defineProperty 钉在 navigator 上的 clipboard 不归 restoreAllMocks 管；
+  // 不摘掉的话，后面那些「没有剪贴板所以走退路」的分支会被静默跳过。
+  if (Object.prototype.hasOwnProperty.call(navigator, 'clipboard'))
+    delete (navigator as unknown as { clipboard?: unknown }).clipboard;
 });
 afterEach(() => {
   window.location.hash = '';
@@ -333,7 +337,13 @@ describe('App 集成冒烟', () => {
 });
 
 describe('App 的分组、排序、对比上限、导出与主题联动', () => {
-  const stamp = new Date().toISOString().slice(0, 10);
+  // 文件名里的日期：App 是在点击那一刻各取一次 UTC 日，用例若只在模块作用域取一次，
+  // 跨 UTC 日界（北京时间早上八点左右）跑就会假红。这里认「今天或前一天」，
+  // 并显式断言同一批文件的日期是同一个。
+  const dateOf = (name: string) => /(\d{4}-\d{2}-\d{2})/.exec(name)?.[1] ?? '';
+  const dated = (prefix: string, ext: string) =>
+    expect.stringMatching(new RegExp(`^${prefix}-\\d{4}-\\d{2}-\\d{2}\\.${ext}$`)) as unknown as string;
+  const recentStamps = () => [0, 1].map((i) => new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10));
   const groupInputs = () => screen.getAllByPlaceholderText('如 女孩/备选').map((el) => el as HTMLInputElement);
   const compareCells = (label: string) =>
     within(screen.getByRole('rowheader', { name: label }).closest('tr')!).getAllByRole('cell');
@@ -347,7 +357,7 @@ describe('App 的分组、排序、对比上限、导出与主题联动', () => 
     fireEvent.click(screen.getByRole('link', { name: new RegExp(`收藏 ${n}`) }));
   }
 
-  it('收藏排序三档各用各的尺子：笔画档真的重排，同分的两条不被强行换位', () => {
+  it('收藏排序的笔画档与常见度档各用各的尺子：默认档不按笔画排，两档都真的重排', () => {
     render(<App />);
     fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
     fireEvent.click(one(screen.getAllByRole('button', { name: '收藏' }), '「收藏」按钮列表'));
@@ -359,12 +369,7 @@ describe('App 的分组、排序、对比上限、导出与主题联动', () => 
 
     const select = screen.getByLabelText('收藏排序') as HTMLSelectElement;
     const order = () => screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent!);
-    const strokes = () => order().map((full) => shapeTags(full.slice(1)).strokes); // 卡片标题是全名，姓固定一个字
-    const checkAll = () =>
-      (screen.getAllByLabelText('对比') as HTMLInputElement[])
-        .filter((b) => !b.checked)
-        .forEach((b) => fireEvent.click(b));
-
+    const strokes = () => order().map((full) => shapeTags(full.slice(1)).strokes); // 卡片标题是全名；这一用例的姓固定一个字，所以 slice(1) 取的就是双名
     const recent = order();
     const recentStrokes = strokes();
     expect(
@@ -385,13 +390,57 @@ describe('App 的分组、排序、对比上限、导出与主题联动', () => 
     const popularOrder = order();
     expect(popularOrder, '「用字常见度」用的是另一把尺子').not.toEqual(recent);
     expect(popularOrder).not.toEqual(strokeOrder);
+  });
 
-    // 这三条的分数相同（对比表里那一行读得出），同分时换档不该把它们强行换位
+  it('分数档真的按分数排：先收藏的那条低分的被挪到后面，同分的两条保持收藏时的先后', () => {
+    // 这三条要满足：分数不全都相同、其中有两条同分、而且收藏时的先后本身不是按分数排好的。
+    // 不满足的话「按分数递减」这条断言就咬不住东西（把 sort 换成什么都不做也能过），
+    // 所以这三条前提都写成显式断言，语料一变就以「前提不成立」红，而不是悄悄放行。
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
+    const batch = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent!);
+    // 按卡片认领「收藏」按钮（按钮列表会因为已经收藏的那条换名而缩，按下标取会漂）
+    const favOf = (full: string) =>
+      within(screen.getByRole('heading', { level: 3, name: full }).closest('article')!).getByRole('button', {
+        name: '收藏',
+      });
+    // 当前语料里这三条：batch[5] 分数低于另外两条，batch[3] 与 batch[4] 同分（下面全部显式断言）。
+    // 收藏的先后顺序很要紧：默认档就是收藏记录的顺序（新的在前），低分的那条最后收藏、
+    // 才会正好落在队首，被分数档挪到队尾。
+    fireEvent.click(favOf(at(batch, 3, '这一屏的卡片标题列表')));
+    fireEvent.click(favOf(at(batch, 4, '这一屏的卡片标题列表')));
+    fireEvent.click(favOf(at(batch, 5, '这一屏的卡片标题列表')));
+    fireEvent.click(screen.getByRole('link', { name: /收藏 3/ }));
+
+    const order = () => screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent!);
+    // 分数从对比表里读，不在用例里另算一份（列的顺序就是勾对比的顺序，也就是卡片顺序）
+    for (const box of screen.getAllByLabelText('对比') as HTMLInputElement[]) fireEvent.click(box);
+    const names = compareCells('名字').map((c) => c.textContent!);
+    const scores = compareCells('分数').map((c) => Number(c.textContent));
+    expect(names, '对比表应当三条，与卡片一一对应').toHaveLength(3);
+    expect(scores).toHaveLength(3);
+    const scoreOf = new Map(names.map((n, i) => [n, scores[i]]));
+    expect(new Set(scores).size, '这三条不能全都同分，否则「按分数排」没有可排的东西').toBeGreaterThan(1);
+    const dup = scores.find((s, i) => scores.indexOf(s) !== i);
+    expect(dup, '这三条里应当有两条同分，否则「同分不换位」没有可断言的对象').toBeDefined();
+
+    const recent = order(); // 默认这一档不换顺序，就是收藏记录本身的先后（新的在前）
+    const asCollected = recent.map((n) => scoreOf.get(n)!);
+    expect(asCollected, '默认档的顺序本身不该已经按分数排好，否则下面的断言分不出「排过」与「没排」').not.toEqual(
+      [...asCollected].sort((a, b) => b - a),
+    );
+
+    const select = screen.getByLabelText('收藏排序') as HTMLSelectElement;
     fireEvent.change(select, { target: { value: 'score' } });
-    expect(order(), '同分的三条应保持收藏时的先后').toEqual(recent);
-    checkAll();
-    const scores = compareCells('分数').map((c) => c.textContent);
-    expect(new Set(scores).size, '这三条同分，用例断言的是同分不换位').toBe(1);
+    const byScore = order();
+    const got = byScore.map((n) => scoreOf.get(n)!);
+    expect(got, '「分数高→低」这一档应按分数递减').toEqual([...got].sort((a, b) => b - a));
+    expect(byScore, '换了档就得真的重排').not.toEqual(recent);
+    const tied = recent.filter((n) => scoreOf.get(n) === dup);
+    expect(
+      byScore.filter((n) => tied.includes(n)),
+      '同分的两条应保持收藏时的先后',
+    ).toEqual(tied);
   });
 
   it('分组改名：组名改掉后当前视图跟着走，卡上的组名也换成新的', () => {
@@ -433,19 +482,23 @@ describe('App 的分组、排序、对比上限、导出与主题联动', () => 
   it('换页时回到顶部：粘性页头不会把这一页的第一张卡片压在下面', () => {
     const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     const desc = Object.getOwnPropertyDescriptor(window, 'scrollY');
-    Object.defineProperty(window, 'scrollY', { value: 0, configurable: true, writable: true });
-    render(<App />);
-    expect(scrollTo).not.toHaveBeenCalled(); // 本来就在顶部，不该动
-    Object.defineProperty(window, 'scrollY', { value: 420, configurable: true, writable: true });
-    window.location.hash = '#fav';
-    fireEvent(window, new HashChangeEvent('hashchange'));
-    expect(scrollTo).toHaveBeenCalledTimes(1);
-    expect(scrollTo).toHaveBeenCalledWith(0, 0);
-    Object.defineProperty(window, 'scrollY', { value: 0, configurable: true, writable: true });
-    window.location.hash = '#/compose';
-    fireEvent(window, new HashChangeEvent('hashchange'));
-    expect(scrollTo).toHaveBeenCalledTimes(1); // 已经在顶部了，再换页也不调
-    if (desc) Object.defineProperty(window, 'scrollY', desc);
+    try {
+      Object.defineProperty(window, 'scrollY', { value: 0, configurable: true, writable: true });
+      render(<App />);
+      expect(scrollTo).not.toHaveBeenCalled(); // 本来就在顶部，不该动
+      Object.defineProperty(window, 'scrollY', { value: 420, configurable: true, writable: true });
+      window.location.hash = '#fav';
+      fireEvent(window, new HashChangeEvent('hashchange'));
+      expect(scrollTo).toHaveBeenCalledTimes(1);
+      expect(scrollTo).toHaveBeenCalledWith(0, 0);
+      Object.defineProperty(window, 'scrollY', { value: 0, configurable: true, writable: true });
+      window.location.hash = '#/compose';
+      fireEvent(window, new HashChangeEvent('hashchange'));
+      expect(scrollTo).toHaveBeenCalledTimes(1); // 已经在顶部了，再换页也不调
+    } finally {
+      // 中途断失败也要还原：否则本文件后面的用例带着一个被钉住的 scrollY 跑
+      if (desc) Object.defineProperty(window, 'scrollY', desc);
+    }
   });
 
   it('跟随系统主题时系统的深色偏好一变就套用，卸载时把监听摘掉', () => {
@@ -481,11 +534,19 @@ describe('App 的分组、排序、对比上限、导出与主题联动', () => 
     }
   });
 
-  it('候选全量导出不止这一屏，收藏 CSV 按当前视图导出，文件名都带日期', () => {
+  it('候选全量导出不止这一屏，收藏 CSV 按当前视图导出，文件名都带日期', async () => {
     const downloads: string[] = [];
+    const bodies: Blob[] = [];
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
       downloads.push(this.download);
     });
+    // 把真正交给下载的那份 Blob 收下来：只断言条数与文件名的话，导出内容被截掉一半也查不出来
+    (URL as unknown as { createObjectURL: unknown }).createObjectURL = vi.fn((blob: Blob) => {
+      bodies.push(blob);
+      return 'blob:mock';
+    });
+    const csvLines = async (i: number) => (await at(bodies, i, '导出时抓到的文件内容列表').text()).split('\r\n');
+
     render(<App />);
     fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
     const shown = screen.getAllByRole('button', { name: '收藏' }).length;
@@ -493,16 +554,26 @@ describe('App 的分组、排序、对比上限、导出与主题联动', () => 
     const notice = screen.getByText(/已导出候选 \d+ 条（当前筛选全量，不只这一屏）/).textContent!;
     const total = Number(notice.match(/已导出候选 (\d+) 条/)?.[1]);
     expect(total, '导出的条数应当大于这一屏画出来的卡片数').toBeGreaterThan(shown);
-    expect(downloads).toEqual([`候选-苏-${stamp}.csv`]);
+    const candidateLines = await csvLines(0);
+    expect(candidateLines[0], 'CSV 第一行是表头（带 BOM）').toContain('全名');
+    expect(candidateLines.length - 1, 'CSV 正文的行数应当等于提示里说的那个数，不能只报一个数').toBe(total);
+    expect(downloads).toEqual([dated('候选-苏', 'csv')]);
     fireEvent.click(screen.getByRole('button', { name: '候选JSON' }));
-    expect(downloads).toEqual([`候选-苏-${stamp}.csv`, `候选-苏-${stamp}.json`]);
+    expect(downloads).toEqual([dated('候选-苏', 'csv'), dated('候选-苏', 'json')]);
 
     const favBtn = one(screen.getAllByRole('button', { name: '收藏' }), '「收藏」按钮列表');
     fireEvent.click(favBtn);
     fireEvent.click(screen.getByRole('link', { name: /收藏 1/ }));
     fireEvent.click(screen.getByRole('button', { name: '导出 CSV' }));
     expect(screen.getByText('已导出 CSV：1 条（全部）')).toBeInTheDocument();
-    expect(downloads).toEqual([`候选-苏-${stamp}.csv`, `候选-苏-${stamp}.json`, `收藏-${stamp}.csv`]);
+    const favLines = await csvLines(2);
+    expect(favLines.length - 1, '收藏 CSV 正文一行一条收藏').toBe(1);
+    expect(favLines[0], '收藏的 CSV 比候选多「分组」「备注」两列').toContain('备注');
+    expect(downloads).toEqual([dated('候选-苏', 'csv'), dated('候选-苏', 'json'), dated('收藏', 'csv')]);
+    expect(new Set(downloads.map(dateOf)), '同一次测试里三个文件的日期应当是同一个').toHaveLength(1);
+    expect(recentStamps(), '文件名里的日期是今天或前一天（UTC）').toContain(
+      dateOf(one(downloads, '这一轮导出抓到的文件名列表')),
+    );
   });
   it('导入弹窗里「取消」什么都不改，「覆盖」把原有收藏换掉', async () => {
     const { container } = render(<App />);
@@ -526,7 +597,10 @@ describe('App 的分组、排序、对比上限、导出与主题联动', () => 
 
     fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
     fireEvent.click(one(screen.getAllByRole('button', { name: '收藏' }), '「收藏」按钮列表'));
-    const mine = screen.getAllByRole('heading', { level: 3 })[0]?.textContent ?? '';
+    const mine = one(screen.getAllByRole('heading', { level: 3 }), '这一屏的卡片标题列表').textContent!.trim();
+    // 下面两条的前提：这一屏的第一条与要导入的那条不是同一个名字，而且标题取得到真文本
+    expect(mine, '标题取到空文本的话，「覆盖以后原来的那条不见了」这条断言就空过').not.toBe('');
+    expect(mine, '用例前提：导入的那条与这一屏的第一条不该是同一个名字').not.toBe(imported.name);
 
     feed();
     const dialog = await screen.findByRole('dialog', { name: '导入方式' });
@@ -545,9 +619,15 @@ describe('App 的分组、排序、对比上限、导出与主题联动', () => 
     expect(screen.queryByText(mine)).not.toBeInTheDocument();
   });
 
-  it('导入一个「什么都没有」的文件与导入一个读不出来的文件：两条失败文案各自说清原因', async () => {
+  it('导入一个「什么都没有」的文件与导入一个读不出来的文件：两条失败文案各自说清原因，都不动已有收藏', async () => {
+    // 先往库里放一条真收藏。原来这一条断言的是「库里是空的」，而用例开始时库里本来就空——
+    // 那种断言怎么改都不会红；换成「已有的那条不许被动」，失败路径顺手清库或覆盖就会被咬住。
+    const keep = at(POOL, 7, '候选池 POOL');
+    localStorage.setItem(FAV_KEY, JSON.stringify([{ id: keep.id, ts: 1 }]));
+    const idsStored = () => (JSON.parse(localStorage.getItem(FAV_KEY) ?? '[]') as { id: string }[]).map((f) => f.id);
     const { container } = render(<App />);
     const input = () => container.querySelector('input[type=file]') as HTMLInputElement;
+    expect(idsStored(), '用例前提：库里先放好了那一条收藏').toEqual([keep.id]);
 
     // 只有 favorites/blocklist 两个空数组、没有 surname/reading/opts 这三个键，才落到「没有可导入的东西」这一支
     const empty = { app: 'naming-app', version: 1, exportedAt: '', favorites: [], blocklist: [] };
@@ -556,12 +636,13 @@ describe('App 的分组、排序、对比上限、导出与主题联动', () => 
     fireEvent.change(input(), { target: { files: [fileEmpty] } });
     expect(await screen.findByText(/没有可导入的东西/)).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: '导入方式' })).not.toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem(FAV_KEY) ?? '[]')).toHaveLength(0);
+    expect(idsStored(), '这一支只该给文案，不该顺手清掉或覆盖已有收藏').toEqual([keep.id]);
 
     const fileBroken = new File(['{}'], 'broken.json', { type: 'application/json' });
     (fileBroken as unknown as { text: () => Promise<string> }).text = () => Promise.reject(new Error('blocked'));
     fireEvent.change(input(), { target: { files: [fileBroken] } });
     expect(await screen.findByText(/这个文件读不出来/)).toBeInTheDocument();
+    expect(idsStored(), '文件读不出来时也不该动库').toEqual([keep.id]);
   });
 
   it('卡片上的「分享卡」与「复制信息」各自给出说得清的反馈', async () => {
@@ -571,10 +652,31 @@ describe('App 的分组、排序、对比上限、导出与主题联动', () => 
     fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
     fireEvent.click(one(screen.getAllByRole('button', { name: '分享卡' }), '「分享卡」按钮列表'));
     const shareNotice = await screen.findByText(/分享卡片已生成/);
-    expect(shareNotice.textContent).toMatch(/含扫码二维码|二维码没画出来/);
+    // 这一条走的是「链接短、二维码画得出来」那一支，就断这一支的原话；
+    // 另一支（链接过长）在下面那条里断，两条都不写「或」，否则任一支改坏都查不出来。
+    expect(shareNotice.textContent).toBe('分享卡片已生成（含扫码二维码）');
     fireEvent.click(one(screen.getAllByRole('button', { name: '复制信息' }), '「复制信息」按钮列表'));
     expect(await screen.findByText('名字信息已复制')).toBeInTheDocument();
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('苏'));
+  });
+
+  it('链接长到画不出二维码时，提示改口说清「二维码没画出来」', async () => {
+    // 只有传给分享卡的那份 URL 走桩（App 里页签与筛选读的是 window.location，不动它）
+    vi.stubGlobal('location', {
+      origin: 'https://example.com',
+      pathname: `/${'x'.repeat(4000)}`,
+      search: '',
+      hash: '',
+    });
+    try {
+      render(<App />);
+      fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
+      fireEvent.click(one(screen.getAllByRole('button', { name: '分享卡' }), '「分享卡」按钮列表'));
+      const notice = await screen.findByText(/分享卡片已生成/);
+      expect(notice.textContent).toBe('分享卡片已生成，但二维码没画出来（链接过长）');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('拉黑页上「已拉黑」就是解除入口，这一页上也能直接收藏', () => {
