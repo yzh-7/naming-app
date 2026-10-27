@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildState, fromQuery, parseState, serialize, toQuery } from './transfer';
 import { sanitizeOpts, type FavRecord } from './local';
 import { BOOK_ORDER, type Opts } from '../engine/types';
+import { at } from '../testing';
 
 const baseOpts = (): Opts => sanitizeOpts({});
 
@@ -63,14 +64,17 @@ describe('导入解析', () => {
     if (!res.ok) throw new Error('should be ok');
     expect(res.state.favorites.map((f) => f.id)).toEqual(['bare', 'x', 'y']);
     expect(res.state.favorites[0]).toEqual({ id: 'bare', ts: 0 });
-    const x = res.state.favorites[1];
+    // 第 2、3 条必须还在：字段消毒的断言才有落点
+    const x = at(res.state.favorites, 1, '导入并消毒后的收藏');
     expect(x.note).toHaveLength(120);
     expect(x.group).toHaveLength(24);
     expect(x.name).toHaveLength(8);
     expect(x.title).toHaveLength(30);
     expect(x.line).toHaveLength(120);
-    expect(res.state.favorites[2]).toEqual({ id: 'y', ts: 3 });
-    expect(res.state.favorites[2].book).toBeUndefined();
+    const y = at(res.state.favorites, 2, '导入并消毒后的收藏');
+    expect(y).toEqual({ id: 'y', ts: 3 });
+    // book 是被丢掉了（未知典籍），不是整条不见了，所以先确认这条还在
+    expect(y.book).toBeUndefined();
     expect(res.state.blocklist).toEqual(['a', 'b'.repeat(64)]);
   });
   it('条目上限：超过 5000 条的部分不接', () => {

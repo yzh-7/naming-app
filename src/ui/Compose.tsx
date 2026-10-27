@@ -11,6 +11,7 @@ import {
   readings,
   scoreItem,
   shapeTags,
+  surnameReadingOptions,
   surnameReads,
 } from '../engine/name';
 import { CHARS, POOL, SINGLES } from '../engine/data';
@@ -40,7 +41,9 @@ function pickRandom<T>(list: T[], n: number): T[] {
     const i = Math.floor(Math.random() * list.length);
     if (seen.has(i)) continue;
     seen.add(i);
-    out.push(list[i]);
+    const item = list[i];
+    if (item === undefined) continue;
+    out.push(item);
   }
   return out;
 }
@@ -48,7 +51,7 @@ function pickRandom<T>(list: T[], n: number): T[] {
 // 有出处的随机池：双名用 Pool-B，单名用 singles；自由组合池用名用字表
 const POOL_NAMES = POOL.map((p) => p.name);
 const SINGLE_NAMES = SINGLES.map((s) => s.char);
-const ALL_CHARS = Object.keys(CHARS).sort((a, b) => (CHARS[b].gn ?? 0) - (CHARS[a].gn ?? 0) || (a < b ? -1 : 1));
+const ALL_CHARS = Object.keys(CHARS).sort((a, b) => (CHARS[b]?.gn ?? 0) - (CHARS[a]?.gn ?? 0) || (a < b ? -1 : 1));
 
 export default function Compose({
   surname,
@@ -135,7 +138,7 @@ export default function Compose({
   const applyRandom = (nm: string) => setDraft((d) => ({ ...d, chars: [...nm].slice(0, d.length) }));
 
   const surReadCount = surnameReads(sur);
-  const surReads = sur.length > 0 && surReadCount > 1 ? readings(sur[0]) : [];
+  const surReads = surnameReadingOptions(sur, surReadCount);
   const pick = Math.min(reading, Math.max(surReads.length - 1, 0));
   const surUnknown = sur.length > 0 && !isKnownSurname(sur);
 

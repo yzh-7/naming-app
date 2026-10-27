@@ -3,6 +3,7 @@ import { copyText, downloadBlob, downloadText, renderListCard, renderShareCard, 
 import { glossOf, lineGlossOf, scoreItem } from '../engine/name';
 import { POOL } from '../engine/data';
 import { BOOK_LABEL, BOOK_ORDER, type Opts } from '../engine/types';
+import { one } from '../testing';
 
 const opts: Opts = {
   gender: 'any',
@@ -50,7 +51,9 @@ describe('下载', () => {
   it('downloadText 触发一次带文件名的下载，blob 类型带 charset', () => {
     downloadText('{}', 'out.json');
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledOnce();
-    const blobArg = (URL.createObjectURL as ReturnType<typeof vi.fn>).mock.calls[0][0] as Blob;
+    // 上面已触发一次下载，调用记录必须存在；先确认再取它的第一个参数
+    const calls = (URL.createObjectURL as ReturnType<typeof vi.fn>).mock.calls;
+    const blobArg: Blob = one(calls, 'createObjectURL 的调用记录')[0];
     expect(blobArg.type).toBe('application/json;charset=utf-8');
   });
   it('downloadBlob 用传入的文件名', () => {

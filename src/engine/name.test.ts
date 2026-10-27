@@ -31,6 +31,7 @@ import {
 } from './name';
 import { CHARS, META, POOL, SINGLES } from './data';
 import { BOOK_ORDER, type Book, type Opts } from './types';
+import { at, one } from '../testing';
 
 const gen = (sur: string, o: Opts, b: number) => plan(sur, o, b).page;
 
@@ -67,8 +68,9 @@ describe('姓氏输入归一化', () => {
 
 describe('读音表', () => {
   it('已知字给出带调读音，未知字给空数组', () => {
-    expect(readings('苏')[0].syl).toBe('su');
-    expect(readings('苏')[0].mark).toBe('sū');
+    const su = one(readings('苏'), '「苏」的读音表');
+    expect(su.syl).toBe('su');
+    expect(su.mark).toBe('sū');
     expect(readings('囍')).toEqual([]);
   });
   it('姓氏读音选择器只在首字多音时可选项，且序号越界回退到首读', () => {
@@ -109,7 +111,7 @@ describe('读音表', () => {
       expect(i.pm.length, ch).toBe(i.t.length);
       expect(i.py.length, ch).toBeGreaterThan(0);
       for (let k = 0; k < i.py.length; k++) {
-        const raw = i.pm[k];
+        const raw = at(i.pm, k, `「${ch}」的带调写法（pm）列表`);
         // 只放过成音节写法（嗯 ǹg、呒 ḿ、欸 ê̄/ế）：它们用了常规拼音字母表之外的字符
         const exotic = [...raw].some((c) => !/[a-züāēīōǖáéíóúǘǎěǐǒǔǚàèìòùǜ]/.test(c));
         if (!exotic) {
@@ -135,11 +137,18 @@ describe('名用字与部首标注', () => {
   it('主池每个字都在 L0 与读音表内（+20「同在名用字表」这条规则的前提）', () => {
     for (const it of POOL) {
       for (const c of it.chars) {
-        expect(CHARS[c], `${it.name} 的 ${c} 不在 CHARS`).toBeTruthy();
-        expect(CHARS[c].l0, `${it.name} 的 ${c} 不在 L0`).toBe(true);
+        const facts = CHARS[c];
+        expect(facts, `${it.name} 的 ${c} 不在 CHARS`).toBeTruthy();
+        // 断言只记录失败、不收窄类型：取 .l0 前按规则对 Record 下标做显式存在性确认
+        if (facts === undefined) throw new Error(`用例前提不成立：字表 CHARS 里没有「${c}」`);
+        expect(facts.l0, `${it.name} 的 ${c} 不在 L0`).toBe(true);
       }
     }
-    for (const s of SINGLES) expect(CHARS[s.char].l0, s.char).toBe(true);
+    for (const s of SINGLES) {
+      const facts = CHARS[s.char];
+      if (facts === undefined) throw new Error(`用例前提不成立：字表 CHARS 里没有「${s.char}」`);
+      expect(facts.l0, s.char).toBe(true);
+    }
   });
   it('部首只标康熙五部的字，重复字不重复出标', () => {
     expect(radicalTags('沐杰').length).toBe(2);
@@ -208,12 +217,12 @@ describe('打分', () => {
     }
   });
   it('单名卡片不许出现「两字同在名用字表」', () => {
-    const single = gen('苏', opts({ length: 1 }), 0)[0];
+    const single = one(gen('苏', opts({ length: 1 }), 0), '单名首页结果');
     expect(single.name.length).toBe(1);
     expect(single.deltas.some((d) => d.rule.includes('两字'))).toBe(false);
   });
   it('无姓时不伪造姓氏：全名＝名字本身，读音只含名字的字', () => {
-    const it = POOL[0];
+    const it = one(POOL, '主池 POOL 的首条');
     const r = scoreItem('', it, opts(), 0);
     expect(r.full).toBe(it.name);
     expect(r.readings.length).toBe([...it.name].length);
@@ -222,7 +231,11 @@ describe('打分', () => {
     const rules = new Set<string>();
     for (const sur of ['苏', '林', '江', '周', '张']) {
       for (const it of POOL)
-        for (const d of scoreItem(sur, it, opts(), 0).deltas) rules.add(d.rule.split('（')[0].split('「')[0]);
+        for (const d of scoreItem(sur, it, opts(), 0).deltas) {
+          // 规则名可能被「（…」或「「…」截尾，逐级切出的首段也必须确实在
+          const head = one(d.rule.split('（'), '规则文案按「（」切出的首段');
+          rules.add(one(head.split('「'), `「${head}」按「「」切出的首段`));
+        }
     }
     const hit = (kw: string) => [...rules].some((r) => r.includes(kw));
     expect(hit('声调')).toBe(true);
@@ -303,7 +316,7 @@ describe('批次可达性：换一批必须真能翻遍全池', () => {
     const otherSur = plan('林', base, 0).page.map((r) => r.id);
     expect(otherSur).not.toEqual(p1);
     expect(plan('苏', base, 0).page.map((r) => r.id)).toEqual(p1);
-    const first = p1[0];
+    const first = one(p1, '默认批第 1 页的 id 列表');
     const blocked = plan('苏', opts({ count: 12, exclude: [first] }), 0).page.map((r) => r.id);
     expect(blocked).not.toContain(first);
     expect(plan('苏', base, 0).page.map((r) => r.id)).toEqual(p1);
@@ -346,11 +359,21 @@ describe('字义 / 字形 / 多音 / 小名 / 用字常见度', () => {
     expect(one.sameStructure).toBe(false);
   });
   it('多音字：只挑出名字里读法不止一种的字', () => {
-    const item = POOL.find((p) => p.chars.some((c) => (CHARS[c].pm?.length ?? 0) > 1));
+    const item = POOL.find((p) =>
+      p.chars.some((c) => {
+        const facts = CHARS[c];
+        if (facts === undefined) throw new Error(`用例前提不成立：字表 CHARS 里没有「${c}」`);
+        return (facts.pm?.length ?? 0) > 1;
+      }),
+    );
     expect(item, '池内应有多音字样本').toBeTruthy();
     const poly = polyphoneTags(item!.name);
     expect(poly.length).toBeGreaterThan(0);
-    for (const p of poly) expect(CHARS[p.ch].pm.length).toBeGreaterThan(1);
+    for (const p of poly) {
+      const facts = CHARS[p.ch];
+      if (facts === undefined) throw new Error(`用例前提不成立：多音标记里的「${p.ch}」不在字表 CHARS`);
+      expect(facts.pm.length).toBeGreaterThan(1);
+    }
     expect(polyphoneTags('沐沐')).toEqual([]);
   });
   it('小名：逐字叠用 + 末字加「小」', () => {
@@ -375,9 +398,9 @@ describe('字义 / 字形 / 多音 / 小名 / 用字常见度', () => {
     expect(popBand(0)).toBe('冷僻');
   });
   it('namePinyin 拼出无声调读音串，searchText 含名字/拼音/篇名/作者', () => {
-    const it = POOL[0];
+    const it = one(POOL, '主池 POOL 的首条');
     const py = namePinyin(it.name);
-    expect(py).toBe([...it.name].map((c) => readings(c)[0].syl).join(''));
+    expect(py).toBe([...it.name].map((c) => one(readings(c), `「${c}」的读音表`).syl).join(''));
     expect(py).toMatch(/^[a-z]+$/);
     const t = searchText(it);
     expect(t).toContain(it.name);
@@ -442,7 +465,10 @@ describe('自选组合：只查事实，不套池内分数', () => {
     const chs = hits.map((h) => h.ch);
     expect(new Set(chs).size).toBe(chs.length);
     expect(chs).toContain('归');
-    for (let i = 1; i < hits.length; i++) expect(hits[i - 1].score).toBeGreaterThanOrEqual(hits[i].score);
+    for (let i = 1; i < hits.length; i++)
+      expect(at(hits, i - 1, '「子」的搭配候选（按分数降序）').score).toBeGreaterThanOrEqual(
+        at(hits, i, '「子」的搭配候选（按分数降序）').score,
+      );
     // 反向也要成立：每个搭配字回查时都能找到「子」
     expect(pairCandidates('归').some((h) => h.ch === '子')).toBe(true);
   });
@@ -483,12 +509,21 @@ describe('检索与排序', () => {
         sort,
         books: Object.fromEntries(BOOK_ORDER.map((b) => [b, b === 'daofa'])) as Record<Book, boolean>,
       });
-    const strokesOf = (name: string) => [...name].reduce((a, ch) => a + (CHARS[ch].st ?? 0), 0);
+    const strokesOf = (name: string) =>
+      [...name].reduce((a, ch) => {
+        const facts = CHARS[ch];
+        if (facts === undefined) throw new Error(`用例前提不成立：字表 CHARS 里没有「${ch}」`);
+        return a + (facts.st ?? 0);
+      }, 0);
     const byStroke = plan('苏', only('strokes'), 0).page.map((r) => strokesOf(r.name));
     expect(byStroke.length).toBeGreaterThan(4);
-    for (let i = 1; i < byStroke.length; i++) expect(byStroke[i]).toBeGreaterThanOrEqual(byStroke[i - 1]);
+    for (let i = 1; i < byStroke.length; i++)
+      expect(at(byStroke, i, '按笔画排序的笔画数序列')).toBeGreaterThanOrEqual(
+        at(byStroke, i - 1, '按笔画排序的笔画数序列'),
+      );
     const byPop = plan('苏', only('popular'), 0).page.map((r) => popScore(r.name));
-    for (let i = 1; i < byPop.length; i++) expect(byPop[i]).toBeLessThanOrEqual(byPop[i - 1]);
+    for (let i = 1; i < byPop.length; i++)
+      expect(at(byPop, i, '按常见度排序的分值序列')).toBeLessThanOrEqual(at(byPop, i - 1, '按常见度排序的分值序列'));
   });
 });
 

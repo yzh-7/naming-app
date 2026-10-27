@@ -17,8 +17,8 @@ export type CandidateRow = {
   gender: string;
 };
 
-export function candidateRows(results: Result[]): CandidateRow[] {
-  return results.map((r) => ({
+export function candidateRow(r: Result): CandidateRow {
+  return {
     full: r.full,
     name: r.name,
     readings: r.readings.join(' '),
@@ -32,8 +32,10 @@ export function candidateRows(results: Result[]): CandidateRow[] {
     popularity: popularity(r.name).band,
     gender:
       r.gender.side === 'n' ? '中性' : `${r.gender.strong ? '' : '疑似'}${r.gender.side === 'f' ? '偏女' : '偏男'}`,
-  }));
+  };
 }
+
+export const candidateRows = (results: Result[]): CandidateRow[] => results.map((r) => candidateRow(r));
 
 export const candidatesJson = (results: Result[]) =>
   JSON.stringify(
@@ -87,7 +89,7 @@ export const FAV_CSV_HEADER = [...CSV_HEADER, '分组', '备注'];
 
 export function favoritesCsv(entries: { r: Result; note?: string; group?: string }[]): string {
   const rows = entries.map((e) => {
-    const x = candidateRows([e.r])[0];
+    const x = candidateRow(e.r);
     return [
       x.full,
       x.name,

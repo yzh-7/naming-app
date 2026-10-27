@@ -74,7 +74,7 @@ function drawQr(ctx: CanvasRenderingContext2D, url: string, x0: number, y0: numb
     ctx.fillStyle = '#16233a';
     for (let row = 0; row < size; row++) {
       for (let col = 0; col < size; col++) {
-        if (data[row][col]) ctx.fillRect(x0 + col * cell, y0 + row * cell, Math.ceil(cell), Math.ceil(cell));
+        if (data[row]?.[col]) ctx.fillRect(x0 + col * cell, y0 + row * cell, Math.ceil(cell), Math.ceil(cell));
       }
     }
     return true;
@@ -285,10 +285,11 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, max
   let cur = '';
   for (const ch of text) {
     if (ctx.measureText(cur + ch).width > maxWidth && cur) {
-      out.push(cur);
+      const done = cur; // 刚推进 out 的那一行就是要被截断的这一行
+      out.push(done);
       cur = ch;
       if (out.length === maxLines) {
-        out[out.length - 1] = out[out.length - 1].replace(/.$/, '…');
+        out[out.length - 1] = done.replace(/.$/, '…');
         return out;
       }
     } else {

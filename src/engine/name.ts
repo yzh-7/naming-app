@@ -25,6 +25,13 @@ export function readings(ch: string) {
   return info.py.map((syl, i) => ({ syl, mark: info.pm[i] ?? syl, tone: info.t[i] ?? 0 }));
 }
 
+// 姓是多音字时界面列出可选项（默认读音常是错的）。姓已清洗过，取不到首字
+// 只剩「姓为空」这一种情况，此时没有可选项。
+export function surnameReadingOptions(sur: string, readCount: number) {
+  const first = sur[0];
+  return first !== undefined && readCount > 1 ? readings(first) : [];
+}
+
 // 姓可指定读音序号（多音姓如 曾/单/解，默认读音常是错的）；名的风险判定遍历所有读音组合
 function surnameReadings(surname: string, pick: number) {
   return [...surname].map((ch, i) => {
@@ -93,16 +100,21 @@ function phonetics(surname: string, name: string, surReading: number) {
   if (seq.length >= 3 && tones.every((t) => t === tones[0])) deltas.push({ rule: '三字同声调，读起来平', delta: -8 });
   else if (new Set(tones).size > 1) deltas.push({ rule: '声调有起伏', delta: 6 });
 
-  const nameInitials = nm.map((x) => x.syl[0]);
-  if (nm.length === 2 && name[0] !== name[1]) {
+  const nameInitials = nm.map((x) => x.syl.charAt(0));
+  const [m0, m1] = nm;
+  // nm 是逐字读音，双名的条数就是 2；取不到只可能是数据缺读音，此时不评双声叠韵
+  if (nm.length === 2 && m0 && m1 && name[0] !== name[1]) {
     if (nameInitials[0] === nameInitials[1]) deltas.push({ rule: '名字双声（声母相同）', delta: -4 });
-    else if (finalOf(nm[0].syl) === finalOf(nm[1].syl)) deltas.push({ rule: '名字叠韵', delta: -4 });
+    else if (finalOf(m0.syl) === finalOf(m1.syl)) deltas.push({ rule: '名字叠韵', delta: -4 });
     else deltas.push({ rule: '声母韵母错开，连读顺口', delta: 6 });
   }
-  const adj = [...sur.map((x) => x.syl[0]), ...nameInitials];
+  const adj = [...sur.map((x) => x.syl.charAt(0)), ...nameInitials];
   for (let i = 1; i < adj.length; i++) {
-    if (BILABIAL.has(adj[i - 1]) && BILABIAL.has(adj[i])) {
-      deltas.push({ rule: `双唇音相邻（${adj[i - 1]}·${adj[i]}）拗口`, delta: -6 });
+    const prev = adj[i - 1];
+    const cur = adj[i];
+    if (!prev || !cur) continue;
+    if (BILABIAL.has(prev) && BILABIAL.has(cur)) {
+      deltas.push({ rule: `双唇音相邻（${prev}·${cur}）拗口`, delta: -6 });
       flags.push('拗口');
       break;
     }
@@ -110,7 +122,7 @@ function phonetics(surname: string, name: string, surReading: number) {
 
   const combos = allCombos([...surname, ...name]);
   const fullSet = new Set(combos.map((c) => c.map((x) => x.syl).join('')));
-  const initSet = new Set(combos.map((c) => c.map((x) => x.syl[0]).join('')));
+  const initSet = new Set(combos.map((c) => c.map((x) => x.syl.charAt(0)).join('')));
   const hitFull = HOMO_FULL.find((h) => fullSet.has(h.py));
   if (hitFull) {
     deltas.push({ rule: `连读谐音「${hitFull.w}」`, delta: -20 });
@@ -140,7 +152,7 @@ function phonetics(surname: string, name: string, surReading: number) {
     flags,
     readings: seq.map((x) => x.mark),
     toneless: seq.map((x) => x.syl).join(' '),
-    initials: seq.map((x) => x.syl[0]).join(''),
+    initials: seq.map((x) => x.syl.charAt(0)).join(''),
     total: 0,
   };
 }
@@ -198,8 +210,12 @@ export function popularity(name: string) {
     const gn = CHARS[ch]?.gn ?? 0;
     return { ch, gn, band: popBand(gn) };
   });
-  const lead = chars.reduce((a, c) => (c.gn > a.gn ? c : a), chars[0]);
-  return { chars, band: lead ? lead.band : '冷僻', lead: lead ?? null };
+  // 初值给 null 而不是 chars[0]：名字为空时 chars 就是空数组，reduce 直接返回初值
+  const lead = chars.reduce<{ ch: string; gn: number; band: ReturnType<typeof popBand> } | null>(
+    (a, c) => (!a || c.gn > a.gn ? c : a),
+    null,
+  );
+  return { chars, band: lead ? lead.band : '冷僻', lead };
 }
 
 // 逐字用字频次的最小值：筛「不含冷僻字」要用最小值；展示流行度用的是最大值（lead）
@@ -287,7 +303,7 @@ export const lineGlossOf = (it: { lg: number }) => LINE_GLOSS[it.lg] ?? '';
 
 // 名用字表（293 字）：自选页的「仅名用字表」筛选与随机自由组合都基于它
 export const L0_CHARS = Object.keys(CHARS)
-  .filter((ch) => CHARS[ch].l0)
+  .filter((ch) => !!CHARS[ch]?.l0)
   .sort();
 
 // 逐字可核对事实：字义/笔画/结构/用字频次/读音/是否在名用字表。查不到的字 known=false，界面留白
@@ -367,7 +383,8 @@ export function pairCandidates(ch: string): PairHint[] {
     const m = new Map<string, Map<string, PairHint>>();
     for (const c of POOL) {
       const [a, b] = c.chars;
-      if (a === b) continue;
+      // 双名的 chars 恒为 2 字；类型上取不到就没有这一对，跳过
+      if (a === undefined || b === undefined || a === b) continue;
       for (const [self, other] of [
         [a, b],
         [b, a],
@@ -455,7 +472,7 @@ export const POOL_TITLES: string[] = (() => {
         BOOK_ORDER.indexOf(a.split('\u0000')[0] as Book) - BOOK_ORDER.indexOf(b.split('\u0000')[0] as Book) ||
         (a < b ? -1 : 1),
     )
-    .map((x) => x.split('\u0000')[1]);
+    .map((x) => x.slice(x.indexOf('\u0000') + 1)); // 键由「典籍 + \u0000 + 篇名」拼成，取分隔符之后
 })();
 
 // 同篇还有多少条候选（含自己）：卡片上的「同篇候选」按钮用，1 就是这一篇里只有它。
@@ -502,9 +519,11 @@ export function resolveSaved(rec: { id: string; name?: string; book?: Book; titl
   if (byId) return { item: byId, by: 'id' };
   if (rec.name) {
     const exact = ALL_ITEMS.filter((it) => it.name === rec.name && it.book === rec.book && it.title === rec.title);
-    if (exact.length === 1) return { item: exact[0], by: 'name' };
+    const [onlyExact] = exact;
+    if (exact.length === 1 && onlyExact) return { item: onlyExact, by: 'name' };
     const sameName = ALL_ITEMS.filter((it) => it.name === rec.name);
-    if (sameName.length === 1) return { item: sameName[0], by: 'name' };
+    const [onlySame] = sameName;
+    if (sameName.length === 1 && onlySame) return { item: onlySame, by: 'name' };
   }
   return { item: null, by: null };
 }
@@ -576,7 +595,7 @@ export function plan(surname: string, opts: Opts, batch: number, surReading = 0)
   const pages = paginate(byScore, perPage);
   if (!pages.length) return { page: [], pageNo: 0, pages: 0, pool: 0, titleCounts };
   const pageNo = ((batch % pages.length) + pages.length) % pages.length;
-  const raw = pages[pageNo];
+  const raw = pages[pageNo] ?? []; // 上面已排除 pages 为空，取不到就交空页
   // 默认（按分数/按出处）按书分组展示，一屏内不至于被单一本书占满；选了笔画/常见度就尊重所选顺序
   const page = opts.sort === 'strokes' || opts.sort === 'popular' ? raw : [...raw].sort(byBookThenScore);
   return { page, pageNo, pages: pages.length, pool: byScore.length, titleCounts };

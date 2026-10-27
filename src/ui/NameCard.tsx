@@ -20,7 +20,7 @@ function windowAround(line: string, from: number, to: number): Win {
   const parts: { from: number; to: number }[] = [];
   let from0 = 0;
   for (let i = 0; i < line.length; i++) {
-    if ('，、；：'.includes(line[i])) {
+    if ('，、；：'.includes(line.charAt(i))) {
       parts.push({ from: from0, to: i + 1 });
       from0 = i + 1;
     }
@@ -30,12 +30,11 @@ function windowAround(line: string, from: number, to: number): Win {
   if (hit < 0) return { start: 0, end: line.length, cutLeft: false, cutRight: false };
   const lo = Math.max(0, hit - 1);
   const hi = Math.min(parts.length - 1, hit + 1);
-  return {
-    start: parts[lo].from,
-    end: parts[hi].to,
-    cutLeft: parts[lo].from > 0,
-    cutRight: parts[hi].to < line.length,
-  };
+  const left = parts[lo];
+  const right = parts[hi];
+  // lo/hi 已夹在 parts 的范围内；真取不到就退回整句，和上面 hit < 0 的处理一致
+  if (!left || !right) return { start: 0, end: line.length, cutLeft: false, cutRight: false };
+  return { start: left.from, end: right.to, cutLeft: left.from > 0, cutRight: right.to < line.length };
 }
 
 // 出处行只依赖这些字段：有出处的 Result、PoolItem、SingleItem 都满足，自选页可复用同一套渲染
@@ -80,9 +79,10 @@ export function Source({ r }: { r: SourceRef }) {
   const pieces: { text: string; mark: boolean }[] = [];
   for (let i = w.start; i < w.end; i++) {
     const mark = hots.has(i);
+    const ch = r.line.charAt(i);
     const last = pieces[pieces.length - 1];
-    if (last && last.mark === mark) last.text += r.line[i];
-    else pieces.push({ text: r.line[i], mark });
+    if (last && last.mark === mark) last.text += ch;
+    else pieces.push({ text: ch, mark });
   }
   const where =
     gap === 0

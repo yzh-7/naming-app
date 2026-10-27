@@ -3,6 +3,7 @@ import { candidateRows, candidatesCsv, candidatesJson, favoritesCsv, FAV_CSV_HEA
 import { plan } from '../engine/name';
 import type { Opts, Result } from '../engine/types';
 import { BOOK_ORDER } from '../engine/types';
+import { at, one } from '../testing';
 
 const opts: Opts = {
   gender: 'any',
@@ -76,7 +77,8 @@ describe('候选全量导出', () => {
   });
   it('CSV 防公式注入：= + - @ 打头的文本前置单引号，换行压成空格', () => {
     const csv = candidatesCsv([fake({ full: '=1+1', title: '-2', author: '@cmd', line: '+3' })]);
-    const row = csv.slice(1).split('\r\n')[1];
+    // 数据行必须在：后面的按列拆分断言才能继续
+    const row = at(csv.slice(1).split('\r\n'), 1, 'CSV 的数据行');
     expect(row).toContain("'=1+1");
     expect(row).toContain("'-2");
     expect(row).toContain("'@cmd");
@@ -91,13 +93,13 @@ describe('候选全量导出', () => {
     expect(row.split(',')[3]).toMatch(/^\d+(\.\d+)?$/);
   });
   it('收藏 CSV 的分组与备注（手打的）同样防公式执行', () => {
-    const r = plan('苏', { ...opts, search: '清馨' }, 0).page[0];
+    const r = one(plan('苏', { ...opts, search: '清馨' }, 0).page, 'plan 搜「清馨」的候选页');
     const csv = favoritesCsv([{ r, group: '=HYPERLINK("x")', note: '-@危险备注' }]);
     expect(csv).toContain('"\'=HYPERLINK(""x"")"');
     expect(csv).toContain("'-@危险备注");
   });
   it('字段完整：出处今译与笔画、常见度都在行里', () => {
-    const row = candidateRows(plan('苏', { ...opts, search: '清馨' }, 0).page)[0];
+    const row = one(candidateRows(plan('苏', { ...opts, search: '清馨' }, 0).page), 'candidateRows 导出的行');
     expect(row.name).toBe('清馨');
     expect(row.book).toBeTruthy();
     expect(row.gloss).toBeTruthy();
@@ -108,19 +110,22 @@ describe('候选全量导出', () => {
   });
 
   it('收藏 CSV 在候选列之后加上分组与备注两列，带逗号的备注要加引号', () => {
-    const r = plan('苏', { ...opts, search: '清馨' }, 0).page[0];
+    const r = one(plan('苏', { ...opts, search: '清馨' }, 0).page, 'plan 搜「清馨」的候选页');
     const csv = favoritesCsv([{ r, group: '终选', note: '喜欢, 但笔画多' }]);
     const lines = csv.replace(/\r\n/g, '\n').split('\n');
     expect(lines[0]).toBe('\ufeff' + FAV_CSV_HEADER.join(','));
     expect(FAV_CSV_HEADER.slice(CSV_HEADER.length)).toEqual(['分组', '备注']);
-    const cells = lines[1].split(',');
+    // 数据行必须在：下面的按列拆分与尾部断言都落在它身上
+    const dataLine = at(lines, 1, '收藏 CSV 拆出的行');
+    const cells = dataLine.split(',');
     // 含逗号的字段必须整字段加引号，否则列会错位（这里数一下就看得出多了一列）
-    expect(lines[1]).toContain('"喜欢, 但笔画多"');
-    expect(lines[1].endsWith('"喜欢, 但笔画多"')).toBe(true);
+    expect(dataLine).toContain('"喜欢, 但笔画多"');
+    expect(dataLine.endsWith('"喜欢, 但笔画多"')).toBe(true);
     expect(cells[0]).toBe(r.full);
     expect(cells[CSV_HEADER.length]).toBe('终选');
     // 没有分组与备注的条目留空，不缺列
-    const bare = favoritesCsv([{ r }]).replace(/\r\n/g, '\n').split('\n')[1].split(',');
+    const bareCsv = favoritesCsv([{ r }]).replace(/\r\n/g, '\n').split('\n');
+    const bare = at(bareCsv, 1, '无分组备注的收藏 CSV 拆出的行').split(',');
     expect(bare).toHaveLength(FAV_CSV_HEADER.length);
     expect(bare.slice(CSV_HEADER.length)).toEqual(['', '']);
   });

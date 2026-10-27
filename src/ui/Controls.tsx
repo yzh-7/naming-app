@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { cleanSurname, POOL_TITLES, readings, surnameReads } from '../engine/name';
+import { cleanSurname, POOL_TITLES, surnameReadingOptions, surnameReads } from '../engine/name';
 import {
   AVOID_MAX,
   BOOK_LABEL,
@@ -108,7 +108,7 @@ export default function Controls({
 }) {
   const sur = cleanSurname(surname);
   const surReadCount = surnameReads(sur);
-  const surReads = sur.length > 0 && surReadCount > 1 ? readings(sur[0]) : [];
+  const surReads = surnameReadingOptions(sur, surReadCount);
   const pick = Math.min(reading, surReads.length - 1);
   const perPage = opts.count === 0 ? poolCount : opts.count;
   const patch = (p: Partial<Opts>) => setOpts((o) => ({ ...o, ...p }));

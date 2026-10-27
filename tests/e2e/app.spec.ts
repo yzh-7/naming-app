@@ -85,7 +85,9 @@ test('篇名筛选：卡片上的「同篇还有 N 条」收到这一篇，「�
   await expect(page.locator('article').first()).toBeVisible();
   const jump = page.getByRole('button', { name: /^同篇还有 \d+ 条$/ }).first();
   await expect(jump).toBeVisible();
-  const want = (await jump.getAttribute('title'))!.match(/《(.+?)》/)![1];
+  const jumpTitle = (await jump.getAttribute('title')) ?? '';
+  const want = /《(.+?)》/.exec(jumpTitle)?.[1];
+  if (want === undefined) throw new Error(`跳转按钮的 title 里没有《篇名》：${jumpTitle}`);
   await jump.click();
   await expect(page.getByLabel('篇名（只看这一篇）')).toHaveValue(want);
   const arts = page.locator('article');
@@ -217,7 +219,12 @@ test('生成页的禁用字（避讳字）：输入后卡片名字都不含它�
   const arts = page.locator('article');
   await expect(arts.first()).toBeVisible();
   const summary = page.getByTitle('「换一批」往后翻，翻满页数看遍全部');
-  const poolOf = async () => Number((await summary.textContent())!.match(/候选池 ([\d,]+) 条/)![1].replace(/,/g, ''));
+  const poolOf = async () => {
+    const text = (await summary.textContent()) ?? '';
+    const pool = /候选池 ([\d,]+) 条/.exec(text)?.[1];
+    if (pool === undefined) throw new Error(`候选池摘要里读不出条数：${text}`);
+    return Number(pool.replace(/,/g, ''));
+  };
   const before = await poolOf();
   await page.getByLabel('禁用字（名里出现这些字的候选不出现）').fill('月');
   await expect(arts.first()).toBeVisible();
@@ -264,7 +271,12 @@ test('禁用字是一个字一个字打出来的：后打的字不把先打的�
   await page.goto('/?s=苏');
   const box = page.getByLabel('禁用字（名里出现这些字的候选不出现）');
   const summary = page.getByTitle('「换一批」往后翻，翻满页数看遍全部');
-  const poolOf = async () => Number((await summary.textContent())!.match(/候选池 ([\d,]+) 条/)![1].replace(/,/g, ''));
+  const poolOf = async () => {
+    const text = (await summary.textContent()) ?? '';
+    const pool = /候选池 ([\d,]+) 条/.exec(text)?.[1];
+    if (pool === undefined) throw new Error(`候选池摘要里读不出条数：${text}`);
+    return Number(pool.replace(/,/g, ''));
+  };
   const before = await poolOf();
   await box.click();
   await box.pressSequentially('月');

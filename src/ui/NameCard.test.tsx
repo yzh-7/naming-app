@@ -4,6 +4,7 @@ import NameCard from './NameCard';
 import { scoreItem, findItem, glossOf, lineGlossOf } from '../engine/name';
 import { POOL } from '../engine/data';
 import { BOOK_LABEL, BOOK_ORDER, type Opts } from '../engine/types';
+import { one } from '../testing';
 
 const opts: Opts = {
   gender: 'any',
@@ -34,7 +35,9 @@ describe('NameCard 组件', () => {
     expect(screen.getByRole('heading')).toHaveTextContent(r.full);
     expect(screen.getByText(r.readings.join(' '))).toBeInTheDocument();
     expect(screen.getAllByText(new RegExp(BOOK_LABEL[r.book])).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(new RegExp(glossOf([...r.name][0])!)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(new RegExp(glossOf(one([...r.name], '测试条目名的单字列表'))!)).length).toBeGreaterThan(
+      0,
+    );
   });
   it('原句下方给出今译，且今译与出处同一句', () => {
     render(<NameCard r={r} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />);

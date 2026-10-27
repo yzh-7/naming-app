@@ -4,6 +4,7 @@ import App from './App';
 import { POOL } from './engine/data';
 import { BOOK_LABEL } from './engine/types';
 import { lineGlossOf, namePinyin } from './engine/name';
+import { at, one } from './testing';
 
 const ctxStub = () => ({
   fillStyle: '',
@@ -52,7 +53,7 @@ describe('App 集成冒烟', () => {
   it('收藏后计数更新，切到收藏页可见并可写备注', () => {
     render(<App />);
     fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
-    const favBtn = screen.getAllByRole('button', { name: '收藏' })[0];
+    const favBtn = one(screen.getAllByRole('button', { name: '收藏' }), '「收藏」按钮列表');
     fireEvent.click(favBtn);
     expect(screen.getByRole('button', { name: '已收藏' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('link', { name: /收藏 1/ }));
@@ -77,12 +78,13 @@ describe('App 集成冒烟', () => {
     render(<App />);
     fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
     const favs = screen.getAllByRole('button', { name: '收藏' });
-    fireEvent.click(favs[0]);
-    fireEvent.click(favs[1]);
+    fireEvent.click(one(favs, '「收藏」按钮列表'));
+    fireEvent.click(at(favs, 1, '「收藏」按钮列表'));
     fireEvent.click(screen.getByRole('link', { name: /收藏 2/ }));
     const boxes = screen.getAllByLabelText('对比') as HTMLInputElement[];
-    fireEvent.click(boxes[0]);
-    fireEvent.click(boxes[1]);
+    // 后面逐列比对要有两行，两个「对比」框取不到就没法自洽
+    fireEvent.click(one(boxes, '「对比」复选框列表'));
+    fireEvent.click(at(boxes, 1, '「对比」复选框列表'));
     const cellsOf = (label: string) =>
       within(screen.getByRole('rowheader', { name: label }).closest('tr')!).getAllByRole('cell');
     const names = cellsOf('名字').map((c) => c.textContent!);
@@ -102,7 +104,7 @@ describe('App 集成冒烟', () => {
   it('导出触发一次下载并给出提示', () => {
     render(<App />);
     fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
-    fireEvent.click(screen.getAllByRole('button', { name: '收藏' })[0]);
+    fireEvent.click(one(screen.getAllByRole('button', { name: '收藏' }), '「收藏」按钮列表'));
     fireEvent.click(screen.getByRole('button', { name: '导出' }));
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
     expect(screen.getByText(/已导出：收藏 1/)).toBeInTheDocument();
@@ -137,8 +139,8 @@ describe('App 集成冒烟', () => {
   it('拉黑后卡片移出生成页、进入拉黑页', () => {
     render(<App />);
     fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
-    const firstName = screen.getAllByRole('heading', { level: 3 })[0].textContent!;
-    fireEvent.click(screen.getAllByRole('button', { name: '拉黑' })[0]);
+    const firstName = one(screen.getAllByRole('heading', { level: 3 }), '生成页的候选卡片标题').textContent!;
+    fireEvent.click(one(screen.getAllByRole('button', { name: '拉黑' }), '「拉黑」按钮列表'));
     fireEvent.click(screen.getByRole('link', { name: /拉黑 1/ }));
     expect(
       within(screen.getByRole('main'))
@@ -150,7 +152,7 @@ describe('App 集成冒烟', () => {
   it('收藏页：搜索无命中时给出空态提示', () => {
     render(<App />);
     fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
-    fireEvent.click(screen.getAllByRole('button', { name: '收藏' })[0]);
+    fireEvent.click(one(screen.getAllByRole('button', { name: '收藏' }), '「收藏」按钮列表'));
     fireEvent.click(screen.getByRole('link', { name: /收藏 1/ }));
     fireEvent.change(screen.getByLabelText('搜索收藏'), { target: { value: 'zzz不存在' } });
     expect(screen.getByText(/没有符合搜索/)).toBeInTheDocument();
@@ -159,7 +161,7 @@ describe('App 集成冒烟', () => {
   it('禁用字不筛收藏，但收藏页明说有几条含它', () => {
     render(<App />);
     fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
-    const card = screen.getAllByRole('article')[0];
+    const card = one(screen.getAllByRole('article'), '生成页的候选卡片列表');
     const full = within(card).getByRole('heading', { level: 3 }).textContent!;
     const ch = [...full].slice(1)[0]; // 名的第一个字：禁用字只查名不查姓
     fireEvent.click(within(card).getByRole('button', { name: '收藏' }));
@@ -182,7 +184,7 @@ describe('App 集成冒烟', () => {
       surname: '欧',
       reading: 0,
       opts: {},
-      favorites: [{ id: POOL[0].id, ts: 1 }],
+      favorites: [{ id: one(POOL, '候选池 POOL').id, ts: 1 }],
       blocklist: ['zzz'],
     };
     const file = new File([JSON.stringify(st)], 'x.json', { type: 'application/json' });
@@ -228,7 +230,7 @@ describe('App 集成冒烟', () => {
   it('卡片上的「同篇还有 N 条」把筛选收到这一篇', () => {
     render(<App />);
     fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
-    const jump = screen.getAllByRole('button', { name: /^同篇还有 \d+ 条$/ })[0];
+    const jump = one(screen.getAllByRole('button', { name: /^同篇还有 \d+ 条$/ }), '「同篇还有 N 条」按钮列表');
     // 按钮的 title 里写着本篇名，拿它对照输入框，不去猜卡片文本
     const want = jump.getAttribute('title')!.match(/《(.+?)》/)![1];
     fireEvent.click(jump);
@@ -244,7 +246,7 @@ describe('App 集成冒烟', () => {
     render(<App />);
     fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
     fireEvent.change(screen.getByLabelText('篇名（只看这一篇）'), { target: { value: '' } });
-    const btn = screen.getAllByRole('button', { name: '按拼音看' })[0];
+    const btn = one(screen.getAllByRole('button', { name: '按拼音看' }), '「按拼音看」按钮列表');
     const card = btn.closest('article')!;
     const full = within(card).getByRole('heading', { level: 3 }).textContent!;
     fireEvent.click(btn);
@@ -257,7 +259,7 @@ describe('App 集成冒烟', () => {
   it('收藏页导出 CSV：一次下载，提示里带条数与当前分组', () => {
     render(<App />);
     fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
-    fireEvent.click(screen.getAllByRole('button', { name: '收藏' })[0]);
+    fireEvent.click(one(screen.getAllByRole('button', { name: '收藏' }), '「收藏」按钮列表'));
     fireEvent.click(screen.getByRole('link', { name: /收藏 1/ }));
     fireEvent.click(screen.getByRole('button', { name: '导出 CSV' }));
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1);
@@ -268,10 +270,10 @@ describe('App 集成冒烟', () => {
     render(<App />);
     fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
     const favs = screen.getAllByRole('button', { name: '收藏' });
-    fireEvent.click(favs[0]);
-    fireEvent.click(favs[1]);
+    fireEvent.click(one(favs, '「收藏」按钮列表'));
+    fireEvent.click(at(favs, 1, '「收藏」按钮列表'));
     fireEvent.click(screen.getByRole('link', { name: /收藏 2/ }));
-    fireEvent.change(screen.getAllByLabelText('分组')[0], { target: { value: '备选' } });
+    fireEvent.change(one(screen.getAllByLabelText('分组'), '「分组」控件列表'), { target: { value: '备选' } });
     expect(screen.getByRole('button', { name: '备选' })).toBeInTheDocument();
     // 组工具只在「当前看某一个分组」时出现：先点组名 chip
     fireEvent.click(screen.getByRole('button', { name: '备选' }));

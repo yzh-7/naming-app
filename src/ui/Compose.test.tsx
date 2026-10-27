@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import Compose from './Compose';
 import { DEFAULT_OPTS } from '../store/local';
 import { findCombo } from '../engine/name';
+import { at, one } from '../testing';
 
 const baseProps = () => ({
   surname: '',
@@ -50,7 +51,8 @@ describe('自选页', () => {
     pickChar(2, '归');
     fireEvent.click(screen.getByRole('button', { name: '收藏' }));
     expect(p.onFav).toHaveBeenCalledOnce();
-    expect(p.onFav.mock.calls[0][0].full).toBe('苏子归');
+    // 只回调一次，那唯一一次调用必须存在
+    expect(at(p.onFav.mock.calls, 0, 'onFav 的调用记录')[0].full).toBe('苏子归');
   });
 
   it('无出处的组合明说没有出处，且不给收藏入口', () => {
@@ -98,7 +100,7 @@ describe('自选页', () => {
       .getAllByRole('button')
       .filter((b) => /· (诗经|楚辞|论语|唐诗|宋词|道法)/.test(b.textContent ?? ''));
     expect(chips.length).toBeGreaterThan(0);
-    fireEvent.click(chips[0]);
+    fireEvent.click(one(chips, '随机搭配字按钮列表'));
     expect(screen.getByRole('heading', { name: /苏./ })).toBeInTheDocument();
   });
 

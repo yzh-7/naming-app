@@ -136,7 +136,7 @@ type Meta = {
   per_book: Record<string, number>;
   ship_bytes_total: number;
   radical_chars: number;
-  radical_dist: Record<string, number>;
+  radical_dist: Record<Radical, number>;
   radical_named: number;
   shape_chars: number;
   gloss_chars: number;
@@ -145,6 +145,11 @@ type Meta = {
   corpus_sha: string;
   id_prefix_stats: { groups: number; collisions: number; max_group: number };
 };
+// 康熙五部的固定键名：界面按这五个键取计数，所以类型上必须是这五个键，
+// 构建产物少了哪个就在启动自检时报错，而不是到界面上变成 undefined。
+export const RADICALS = ['木', '火', '水', '金', '土'] as const;
+export type Radical = (typeof RADICALS)[number];
+
 function asMeta(v: unknown): Meta {
   if (!isObj(v)) fail('meta 不是对象');
   for (const k of META_KEYS) if (!isNum(v[k])) fail(`meta.${k} 不是数字`);
@@ -153,6 +158,8 @@ function asMeta(v: unknown): Meta {
   const s = v.id_prefix_stats;
   if (!isObj(s) || !isNum(s.groups) || !isNum(s.collisions) || !isNum(s.max_group))
     fail('meta.id_prefix_stats 结构不符');
+  const rd = v.radical_dist;
+  if (!isObj(rd) || !RADICALS.every((k) => isNum(rd[k]))) fail('meta.radical_dist 缺少康熙五部之一的计数');
   return v as unknown as Meta;
 }
 
