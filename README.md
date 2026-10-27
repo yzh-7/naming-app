@@ -51,10 +51,11 @@ $ npm run dev
 | `npm run build:data` | 将 `data/raw/` 固化为 `src/data/*.json` |
 | `npm run verify` | 数据门禁：输入指纹、白名单账目、出处自洽、今译覆盖率 |
 | `npm run dev` | 生成数据后启动 Vite 开发服务器 |
-| `npm test` | Vitest 单元测试 |
+| `npm test` | Vitest 单元测试（不测覆盖率，开发时快） |
+| `npm run test:coverage` | 同一批用例带覆盖率跑，并按 `vite.config.ts` 里的阈值判定；`npm run build` 走的是这一条 |
 | `npm run test:e2e` | Playwright 端到端测试与 axe 可访问性扫描，需先执行 `npm run build` |
 | `npm run audit:design` | 设计体检，5 视口 × 深浅主题 × 4 页面共 40 组，需先执行 `npm run build` |
-| `npm run build` | 依次执行 `format:check`、`build:data`、`verify`、`tsc --noEmit`、`eslint .`、`vitest`、`vite build`、体积检查。ESLint 覆盖 `public/sw.js`（Service Worker 全局），不检查 `dist/`、`dist-single/` 等产物目录 |
+| `npm run build` | 依次执行 `format:check`、`build:data`、`verify`、`tsc --noEmit`、`eslint .`、`vitest --coverage`、`vite build`、体积检查。ESLint 覆盖 `public/sw.js`（Service Worker 全局），不检查 `dist/`、`dist-single/` 等产物目录 |
 | `npm run build:single` | 先跑完 `npm run build`，再执行单文件构建（`SINGLE=1`）到 `dist-single/`，并对该产物再跑一次体积检查 |
 | `npm run single` | 只执行单文件构建与体积检查，用于已经构建过的场合（CI 在 `build` 之后跑这一步） |
 | `npm run serve` | 以 `python3 -m http.server` 静态伺服 `dist/`，端口 5178 |
@@ -156,7 +157,8 @@ LICENSE            本仓库自撰代码与文档的 MIT 全文
 
 | 层 | 命令 | 覆盖内容 |
 |---|---|---|
-| 单元测试 | `npm test` | 9 个文件、183 个用例：取词口径、打分、音韵、字形与常见度筛选、指定字与禁用字、检索排序、持久化与导入导出往返、URL 编解码、候选与收藏 CSV 的转义与防公式、组件渲染 |
+| 单元与组件 | `npm test` / `npm run test:coverage` | 12 个文件、199 个用例：取词口径、打分、音韵、字形与常见度筛选、指定字与禁用字、检索排序、持久化与导入导出往返、URL 编解码、候选与收藏 CSV 的转义与防公式、组件渲染（含出错边界只在子树崩溃时接管）、以及两条门禁自身的失败路径（`tests/gates/`：体积门禁的三条判红、验收门禁的清单不一致与语料缺口） |
+| 覆盖率 | `npm run test:coverage` | 分母只算 `src/` 下自撰的可执行代码：生成语料 `src/data/`、测试文件本身与 `src/styles.css`（CSS 不是可执行代码，v8 执行不到它）都不计；`scripts/` 里的门禁脚本由 `tests/gates/` 从行为上测，它们是被 spawn 出去的子进程，v8 插桩抓不到，所以不列进分母。当前实测（199 用例、`npm run build` 里那次）：语句 87.4%、分支 81.0%、函数 84.9%、行 89.3%；阈值取 lines 85 / statements 83 / functions 80 / branches 76，任一条低于即失败。同一棵树连跑两次，语句与函数的读数会差 0.05～0.2 个百分点（v8 的命中统计在并行 worker 间有抖动），所以阈值不贴着实测值取。这张表也直接把盲区写在明面：`main.tsx` 0%（它只做挂载与 Service Worker 注册，由端到端在真浏览器里覆盖，单元口径看不见）、`pwa.ts` 47.7%、`NameCard.tsx` 70.4%、`Compose.tsx` 71.9% |
 | 端到端 | `npm run test:e2e` | 28 个用例：关键路径 18 项（生成、自选、收藏与分组、篇名筛选、按拼音搜索、禁用字与带 `ac` 的链接、逐字输入的禁用字、导出、名单图、页脚版本、链接参数、Service Worker 缓存）＋ 390×844 与 320×640 两档视口各 5 项，含 axe（WCAG 2 A/AA）扫描与 target-size 规则，深浅主题均覆盖 |
 | 设计体检 | `npm run audit:design` | 40 个组合：320×640、390×844、768×900、1024×900、1440×1000 五个视口 × 浅色与深色 × 四个页面，检查横向溢出、触控目标尺寸、文字对比度、方块字行长、页头是否遮挡首屏卡片 |
 
@@ -174,7 +176,9 @@ LICENSE            本仓库自撰代码与文档的 MIT 全文
 | 站点 `dist/index.html` 页面壳 | 2,921 B | 1,330 B | 1,302 B | 409,600 B |
 | 单文件 `dist-single/index.html` | 1,678,890 B（1.60 MiB） | 414,892 B（405.2 KiB） | 409,115 B（399.5 KiB） | 460,800 B |
 
-gzip 的结果与压缩实现有关：CI 的官方 Node 自带 zlib-ng，同一份单文件产物压出 414,892 B，比本机系统 zlib 的 409,115 B 多 5,777 B（1.4%）。同一份产物在两种实现下都必须过门禁，所以取较大的一侧作准；单文件产物把本体与数据全部装在 HTML 里，400 KiB 这条首屏预算对它过窄，单列为 450 KiB，当前余量 45,908 B（10.0%）。语料或字表扩充会先撞这条线，扩充前先看这一行；`dist-single/` 只用于体积核对，不发布。
+gzip 的结果与压缩实现有关：CI 的官方 Node 自带 zlib-ng，同一份单文件产物压出 414,892 B，比本机系统 zlib 的 409,115 B 多 5,777 B（1.4%）。同一份产物在两种实现下都必须过门禁，所以取较大的一侧作准；单文件产物把本体与数据全部装在 HTML 里，400 KiB 这条首屏预算对它过窄，单列为 450 KiB。
+
+两条判定各自的余量不同，先撞线的不是单文件那条。站点那条的余量是 409,600 − 389,059 = 20,541 B（5.0%），单文件那条是 460,800 − 414,892 = 45,908 B（10.0%）；语料增量同时加在两侧产物上，所以限制来自余量小的那条。按边际成本换算（做法：从 `src/data/candidates.json` 里删掉池子最后 300 条双名，重量三个数据文件的 gzip 差值）每条双名的 gzip 成本是 73.3 B（CI 口径；记录本身 57.8 B ＋ 只有它用到的今译 21.3 B；本机 zlib 下 72.4 B），按它算站点那条约 280 条双名即撞线，单文件那条约 626 条。扩表前按站点那一行算幅度，新增典籍原文、字表与读音条目不在这 73.3 B 之内，只会让上限更早到。单文件那条不提预算（保持 450 KiB = 460,800 B）：要放宽的是一条永不发布的产物的天花板，真正的约束仍在站点那条，先放宽它只会让门禁允许语料长到线上发不出去的量。`dist-single/` 只用于体积核对，不发布。
 
 ## 部署
 

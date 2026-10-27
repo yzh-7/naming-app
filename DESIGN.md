@@ -194,7 +194,7 @@ Tailwind 4 的 CSS-first 写法：`@theme` 定义刻度，`@utility` 定义可�
 
 ## 6. 门禁与预算
 
-`npm run build` 依次执行 `format:check`、`build:data`、`verify`、`tsc --noEmit`、`eslint .`、`vitest run`、`vite build`、`size-check`。`npm run build:single` 是先完整跑一遍 `build`，再执行 `npm run single`（`SINGLE=1 vite build --outDir dist-single --emptyOutDir` 加一次针对 `dist-single/` 的体积检查）。CI 的两个构建分支都在 `build` 之后追加 `npm run single`，产物不发布，只为让单文件版的体积口径真的是门禁。
+`npm run build` 依次执行 `format:check`、`build:data`、`verify`、`tsc --noEmit`、`eslint .`、`vitest run --coverage`、`vite build`、`size-check`。`npm run build:single` 是先完整跑一遍 `build`，再执行 `npm run single`（`SINGLE=1 vite build --outDir dist-single --emptyOutDir` 加一次针对 `dist-single/` 的体积检查）。CI 的两个构建分支都在 `build` 之后追加 `npm run single`，产物不发布，只为让单文件版的体积口径真的是门禁。日常开发用 `npm test`（同一批用例、不带覆盖率），带阈值的那条留在门禁里。
 
 `vite.config.ts` 用 `manualChunks` 分出 `vendor`（React 等）、`data`（固化的词典 JSON）、`index`（业务代码）三块。数据块单独拆分便于长期缓存，其体积超过 Vite 默认警告阈值，因此 `chunkSizeWarningLimit` 设在其上方并注明原因；发布预算由 `size-check` 判定。单文件构建必须关掉 `manualChunks`（`viteSingleFile` 会关掉代码分割，此时 `manualChunks` 会让构建报错）。
 
@@ -205,6 +205,8 @@ Tailwind 4 的 CSS-first 写法：`@theme` 定义刻度，`@utility` 定义可�
 | `eslint .` | 覆盖 `src/`、`scripts/`、`tests/` 与 `public/sw.js`（后者按 Service Worker 全局检查：它没有单元测试，写错了原本只能靠浏览器运行暴露）。`dist/`、`dist-single/` 与测试产物目录不检查——之前 `dist-single/` 没列入，那份产物被当作源码送去 lint |
 | `prettier --check .` | 代码、脚本、CSS、YAML 与 JS／JSON 配置必须已是 prettier 形态（`.prettierrc.json`：单引号、保留分号、行宽 120、尾逗号、箭头参数必带括号），不在形态上就构建失败。排除项见 `.prettierignore`：Markdown 文档与 `index.html`、`ANDROID.html`（文档表格保持紧凑写法，否则改一个单元格会得到整张表的 diff）、`data/raw/`（第三方语料与字表）、`data/measured/`、`src/data/*.json`、`design-audit.json`（脚本产物）与三类测试产物目录。`eslint.config.js` 的最后一项是 `eslint-config-prettier`，关掉与形态规则冲突的 lint 规则，两条门禁不会互相判错 |
 | `size-check.mjs` | 非 HTML 资源的 gzip 合计不超过 400 KiB；HTML 自身的 gzip 按产物形态取预算（页面壳 400 KiB、单文件产物 450 KiB）。两条判定都进退出码，同时打印原文件大小与压缩实现版本 |
+| `vitest run --coverage` | 覆盖率阈值：行 85%、语句 83%、函数 80%、分支 76%，任一条低于即构建失败。分母只算 `src/` 下自撰的可执行代码——`src/data/` 是生成的语料、测试文件自身不计、`src/styles.css` 不是可执行代码（v8 执行不到它，算进去只会让数字失真）。阈值取第一次实测（行 89.3%、语句 87.4%、函数 84.9%、分支 81.0%）下方 4～5 个百分点：要能拦住「覆盖掉了」，也不该因一次小重构就红。实测里的盲区一并写进 `README.md` 的测试表：`main.tsx` 0%（它只做挂载与 Service Worker 注册，由端到端在真浏览器里覆盖，单元口径看不见，这条差值是口径问题不是漏测）、`pwa.ts` 47.7%、`NameCard.tsx` 70.4%、`Compose.tsx` 71.9% |
+| `tests/gates/` | 门禁自身的失败路径用例（12 条，纯 Node，靠 `// @vitest-environment node` 换环境，不进 jsdom）。两个门禁脚本都在临时夹具里被 spawn 执行：夹具从仓库复制出产物副本或语料副本（`verify` 还会重跑 `build:data`，所以夹具里必须同时有 `scripts/` 与被符号链接回去的 `node_modules`），仓库本体不动。体积门禁一侧断言：预算内判绿并打出两条预算与余量、超预算判红、页面壳预算与单文件预算是两条线（同一份 HTML 不带 `--single` 判红、带 `--single` 判绿）、换了口径不等于取消门禁、SVG 与 .txt 不计入合计、没有 HTML 时那条整行不打印。验收门禁一侧断言：清单哈希与语料对不上时只报那一个文件「字节已变」、`data/raw` 多出未登记文件时点名它、判定表改了没重建时同时报出指纹不一致与「表已改动但没重跑 build:data」、把白名单的保留字挪进剔除时构建阶段就地拒掉（`line_gloss.tsv 有 17 条释义没有对应原句`）。最后一条是口径记录而不是缺陷：改动自撰今译的措辞并同步清单后仍然全绿——门禁锁的是覆盖与一致性，不锁译文的措辞 |
 
 当前实测（gzip level 9，版本 0.3.1）。「CI 口径」指 GitHub Actions 上官方 Node 构建（自带 zlib-ng），「本机口径」指系统 zlib；同一份文件的 gzip 结果不同，门禁按较大的一侧算：
 
@@ -214,7 +216,7 @@ Tailwind 4 的 CSS-first 写法：`@theme` 定义刻度，`@utility` 定义可�
 | `dist/index.html` 页面壳 | 2,921 B | 1,330 B | 1,302 B | 409,600 B |
 | `dist-single/index.html` | 1,678,890 B（1.60 MiB） | 414,892 B（405.2 KiB） | 409,115 B（399.5 KiB） | 460,800 B |
 
-同一份单文件产物在 zlib-ng 下压出 414,892 B，比系统 zlib 的 409,115 B 多 5,777 B（1.4%）。0.2.0 第一次把这条判定接进 CI 时就是被这个差值撞挂的：当时产物 413,537 B，400 KiB 预算在 CI 口径下过不去（超 3,937 B），在本机口径下刚好通过。因此单文件产物单列 450 KiB 预算——它把本体与数据全部装进一个 HTML，首屏的 400 KiB 对它过窄；当前余量 45,908 B（10.0%），语料或字表扩充会先撞这条线。0.3.0 的禁用字与随后的修正让这份产物在 CI 口径下增加 1,181 B；0.3.1 把代码统一成 prettier 形态后只增加 13 B（构建时源码里的换行与缩进已被压掉，剩下的差别来自 JSX 文本节点前后的空白），打开 `noUncheckedIndexedAccess` 并逐处补上下标取值确认后增加 161 B（多出来的是判空分支本身），本版累计 174 B。原先文档写的「单文件目标 ≤1.5 MB」既没有脚本执行、口径也没说清是原文件还是 gzip：按原文件算当时就已经超过（1.57 MB），按 gzip 算又过于宽松。现在两条判定统一到 gzip，原文件大小只报出、不作判定。
+同一份单文件产物在 zlib-ng 下压出 414,892 B，比系统 zlib 的 409,115 B 多 5,777 B（1.4%）。0.2.0 第一次把这条判定接进 CI 时就是被这个差值撞挂的：当时产物 413,537 B，400 KiB 预算在 CI 口径下过不去（超 3,937 B），在本机口径下刚好通过。因此单文件产物单列 450 KiB 预算——它把本体与数据全部装进一个 HTML，首屏的 400 KiB 对它过窄；当前余量 45,908 B（10.0%）。这句后面原先写着「语料或字表扩充会先撞这条线」，把两条余量摆到一起量才知道是反的：站点那条的余量是 409,600 − 389,059 = 20,541 B（5.0%），只有单文件那条的 45%，而语料增量同时加在两侧产物上，所以先撞线的是站点那条。边际成本是实测的：从 `src/data/candidates.json` 里删掉池子最后 300 条双名，重量 `candidates.json`、`line_gloss.json`、`singles.json` 三个文件的 gzip 差值，得到每条双名 73.3 B（CI 口径：记录本身 57.8 B ＋ 只有它用到的今译 21.3 B；本机系统 zlib 下 72.4 B）。按它换算，站点那条约 280 条双名即撞线，单文件那条约 626 条。据此不把单文件预算上调到 500 KiB（512,000 B）：要放宽的是一条永不发布的产物的天花板，真正的约束仍在站点那条，先放宽它只会让门禁允许语料长到线上发不出去的量；扩表幅度按站点那一行算，新增典籍原文、字表与读音条目不在这 73.3 B 之内。0.3.0 的禁用字与随后的修正让这份产物在 CI 口径下增加 1,181 B；0.3.1 把代码统一成 prettier 形态后只增加 13 B（构建时源码里的换行与缩进已被压掉，剩下的差别来自 JSX 文本节点前后的空白），打开 `noUncheckedIndexedAccess` 并逐处补上下标取值确认后增加 161 B（多出来的是判空分支本身），本版累计 174 B。原先文档写的「单文件目标 ≤1.5 MB」既没有脚本执行、口径也没说清是原文件还是 gzip：按原文件算当时就已经超过（1.57 MB），按 gzip 算又过于宽松。现在两条判定统一到 gzip，原文件大小只报出、不作判定。
 
 ## 7. 诊断脚本的口径一致性
 
