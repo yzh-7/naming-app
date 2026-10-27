@@ -28,7 +28,30 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
-    include: ['src/**/*.test.{ts,tsx}'],
+    // tests/gates/ 放门禁脚本自身的失败路径用例（纯 Node，不进浏览器）；
+    // tests/e2e/ 是 Playwright 的规格，不在这里收走。
+    include: ['src/**/*.test.{ts,tsx}', 'tests/gates/*.test.mjs'],
+    // 覆盖率口径（只在带 --coverage 的那条路上生效，见 package.json 的 test:coverage）：
+    // 分母只算 src/ 下我们自己写的可执行代码。
+    //   src/data/ 是 build:data 写出的语料 JSON，不是代码；测试文件自身不计；
+    //   src/styles.css 不是可执行代码，v8 执行不到它，算进分母只会让数字失真。
+    // 门禁脚本（scripts/*.mjs）由 tests/gates/ 的失败路径用例从行为上测——
+    // 它们是被 spawn 出去的子进程，v8 插桩抓不到，所以不列进分母。
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      reportsDirectory: 'coverage',
+      include: ['src/**'],
+      exclude: ['src/data/**', 'src/**/*.test.{ts,tsx}', 'src/styles.css'],
+      thresholds: {
+        // 阈值取自 0.3.1 之后第一次实测（见 DESIGN.md 6.4），各留 3～5 个百分点余量：
+        // 门禁要能拦住"覆盖掉了"，但不该因为一次小重构就红。
+        lines: 85,
+        statements: 83,
+        functions: 80,
+        branches: 76,
+      },
+    },
   },
   build: {
     chunkSizeWarningLimit: 1200,

@@ -35,7 +35,7 @@ jobs:
       # 供应链门禁：high/critical 直接红（moderate 只报，不拦——dev 依赖的 moderate 常常只能等上游）
       - name: 依赖漏洞门禁（npm audit --audit-level=high）
         run: npm audit --audit-level=high
-      - name: 构建数据 + 门禁 + 类型检查 + lint + 测试 + 构建 + 体积门禁
+      - name: 构建数据 + 形态检查 + 门禁 + 类型检查 + lint + 测试与覆盖率阈值 + 构建 + 体积门禁
         run: npm run build
       - name: 单文件版构建 + 体积门禁（产物 dist-single/ 不发布，只为让那条体积口径真的是门禁）
         run: npm run single
