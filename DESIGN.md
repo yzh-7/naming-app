@@ -194,7 +194,7 @@ Tailwind 4 的 CSS-first 写法：`@theme` 定义刻度，`@utility` 定义可�
 
 ## 6. 门禁与预算
 
-`npm run build` 依次执行 `build:data`、`verify`、`tsc --noEmit`、`eslint .`、`vitest run`、`vite build`、`size-check`。`npm run build:single` 是先完整跑一遍 `build`，再执行 `npm run single`（`SINGLE=1 vite build --outDir dist-single --emptyOutDir` 加一次针对 `dist-single/` 的体积检查）。CI 的两个构建分支都在 `build` 之后追加 `npm run single`，产物不发布，只为让单文件版的体积口径真的是门禁。
+`npm run build` 依次执行 `format:check`、`build:data`、`verify`、`tsc --noEmit`、`eslint .`、`vitest run`、`vite build`、`size-check`。`npm run build:single` 是先完整跑一遍 `build`，再执行 `npm run single`（`SINGLE=1 vite build --outDir dist-single --emptyOutDir` 加一次针对 `dist-single/` 的体积检查）。CI 的两个构建分支都在 `build` 之后追加 `npm run single`，产物不发布，只为让单文件版的体积口径真的是门禁。
 
 `vite.config.ts` 用 `manualChunks` 分出 `vendor`（React 等）、`data`（固化的词典 JSON）、`index`（业务代码）三块。数据块单独拆分便于长期缓存，其体积超过 Vite 默认警告阈值，因此 `chunkSizeWarningLimit` 设在其上方并注明原因；发布预算由 `size-check` 判定。单文件构建必须关掉 `manualChunks`（`viteSingleFile` 会关掉代码分割，此时 `manualChunks` 会让构建报错）。
 
@@ -202,17 +202,18 @@ Tailwind 4 的 CSS-first 写法：`@theme` 定义刻度，`@utility` 定义可�
 |---|---|
 | `verify.mjs` | 原始数据指纹、白名单账目、候选出处自洽、单字名覆盖、出处今译覆盖率（唯一原句数等于释义条数、一句一译）、五部标注只落在 L0 字上、性别表规模、候选 id 前缀冲突统计与 `meta.id_prefix_stats` 对账。种子版（无 `l0-verdicts.txt`）与扩表版走不同断言分支（`SEED_MODE = !meta.L0_added`） |
 | `eslint .` | 覆盖 `src/`、`scripts/`、`tests/` 与 `public/sw.js`（后者按 Service Worker 全局检查：它没有单元测试，写错了原本只能靠浏览器运行暴露）。`dist/`、`dist-single/` 与测试产物目录不检查——之前 `dist-single/` 没列入，那份产物被当作源码送去 lint |
+| `prettier --check .` | 代码、脚本、CSS、YAML 与 JS／JSON 配置必须已是 prettier 形态（`.prettierrc.json`：单引号、保留分号、行宽 120、尾逗号、箭头参数必带括号），不在形态上就构建失败。排除项见 `.prettierignore`：Markdown 文档与 `index.html`、`ANDROID.html`（文档表格保持紧凑写法，否则改一个单元格会得到整张表的 diff）、`data/raw/`（第三方语料与字表）、`data/measured/`、`src/data/*.json`、`design-audit.json`（脚本产物）与三类测试产物目录。`eslint.config.js` 的最后一项是 `eslint-config-prettier`，关掉与形态规则冲突的 lint 规则，两条门禁不会互相判错 |
 | `size-check.mjs` | 非 HTML 资源的 gzip 合计不超过 400 KiB；HTML 自身的 gzip 按产物形态取预算（页面壳 400 KiB、单文件产物 450 KiB）。两条判定都进退出码，同时打印原文件大小与压缩实现版本 |
 
 当前实测（gzip level 9，版本 0.3.0）。「CI 口径」指 GitHub Actions 上官方 Node 构建（自带 zlib-ng），「本机口径」指系统 zlib；同一份文件的 gzip 结果不同，门禁按较大的一侧算：
 
 | 产物 | 原文件 | gzip（CI 口径） | gzip（本机口径） | 预算 |
 |---|---:|---:|---:|---:|
-| `dist/` 非 HTML 资源合计 | — | 388,857 B（379.7 KiB） | 386,961 B（377.9 KiB） | 409,600 B |
-| `dist/index.html` 页面壳 | 2,921 B | 1,332 B | 1,305 B | 409,600 B |
-| `dist-single/index.html` | 1,678,496 B（1.60 MiB） | 414,718 B（405.0 KiB） | 408,954 B（399.4 KiB） | 460,800 B |
+| `dist/` 非 HTML 资源合计 | — | 388,910 B（379.8 KiB） | 387,016 B（377.9 KiB） | 409,600 B |
+| `dist/index.html` 页面壳 | 2,921 B | 1,330 B | 1,303 B | 409,600 B |
+| `dist-single/index.html` | 1,678,520 B（1.60 MiB） | 414,731 B（405.0 KiB） | 408,967 B（399.4 KiB） | 460,800 B |
 
-同一份单文件产物在 zlib-ng 下压出 414,718 B，比系统 zlib 的 408,954 B 多 5,764 B（1.4%）。0.2.0 第一次把这条判定接进 CI 时就是被这个差值撞挂的：当时产物 413,537 B，400 KiB 预算在 CI 口径下过不去（超 3,937 B），在本机口径下刚好通过。因此单文件产物单列 450 KiB 预算——它把本体与数据全部装进一个 HTML，首屏的 400 KiB 对它过窄；当前余量 46,082 B（10.0%），语料或字表扩充会先撞这条线。0.3.0 的禁用字与随后的修正让这份产物在 CI 口径下增加 1,181 B。原先文档写的「单文件目标 ≤1.5 MB」既没有脚本执行、口径也没说清是原文件还是 gzip：按原文件算当时就已经超过（1.57 MB），按 gzip 算又过于宽松。现在两条判定统一到 gzip，原文件大小只报出、不作判定。
+同一份单文件产物在 zlib-ng 下压出 414,731 B，比系统 zlib 的 408,967 B 多 5,764 B（1.4%）。0.2.0 第一次把这条判定接进 CI 时就是被这个差值撞挂的：当时产物 413,537 B，400 KiB 预算在 CI 口径下过不去（超 3,937 B），在本机口径下刚好通过。因此单文件产物单列 450 KiB 预算——它把本体与数据全部装进一个 HTML，首屏的 400 KiB 对它过窄；当前余量 46,069 B（10.0%），语料或字表扩充会先撞这条线。0.3.0 的禁用字与随后的修正让这份产物在 CI 口径下增加 1,181 B；0.3.1 把代码统一成 prettier 形态后只增加 13 B（构建时源码里的换行与缩进已被压掉，剩下的差别来自 JSX 文本节点前后的空白）。原先文档写的「单文件目标 ≤1.5 MB」既没有脚本执行、口径也没说清是原文件还是 gzip：按原文件算当时就已经超过（1.57 MB），按 gzip 算又过于宽松。现在两条判定统一到 gzip，原文件大小只报出、不作判定。
 
 ## 7. 诊断脚本的口径一致性
 

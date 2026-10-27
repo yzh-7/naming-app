@@ -5,10 +5,22 @@ import { POOL } from '../engine/data';
 import { BOOK_LABEL, BOOK_ORDER, type Opts } from '../engine/types';
 
 const opts: Opts = {
-  gender: 'any', genderWeak: false, length: 2,
+  gender: 'any',
+  genderWeak: false,
+  length: 2,
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
-  redupOnly: false, exclude: [], count: 12, search: '', title: '', sort: 'score',
-  strokeMax: 0, noMonotone: false, popFloor: 0, mustChar: '', mustPos: 'any', avoidChars: '',
+  redupOnly: false,
+  exclude: [],
+  count: 12,
+  search: '',
+  title: '',
+  sort: 'score',
+  strokeMax: 0,
+  noMonotone: false,
+  popFloor: 0,
+  mustChar: '',
+  mustPos: 'any',
+  avoidChars: '',
 };
 const item = POOL.find((p) => [...p.name].every((c) => glossOf(c)))!;
 const r = scoreItem('苏', item, opts, 0);
@@ -26,7 +38,10 @@ describe('复制文本', () => {
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     expect(await copyText('hello')).toBe(true);
     expect(writeText).toHaveBeenCalledWith('hello');
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) }, configurable: true });
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
+      configurable: true,
+    });
     expect(await copyText('hello')).toBe(false);
   });
 });
@@ -62,12 +77,20 @@ describe('结果摘要', () => {
 describe('分享卡', () => {
   it('用 Canvas 现画并 resolve 出 PNG Blob（无第三方库、不联网）', async () => {
     const ctx = {
-      fillStyle: '', strokeStyle: '', lineWidth: 0, font: '', textAlign: '',
-      fillRect: vi.fn(), strokeRect: vi.fn(), fillText: vi.fn(),
+      fillStyle: '',
+      strokeStyle: '',
+      lineWidth: 0,
+      font: '',
+      textAlign: '',
+      fillRect: vi.fn(),
+      strokeRect: vi.fn(),
+      fillText: vi.fn(),
       measureText: (t: string) => ({ width: [...t].length * 30 }),
     };
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx as unknown as CanvasRenderingContext2D);
-    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((cb: BlobCallback) => cb(new Blob(['x'], { type: 'image/png' })));
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((cb: BlobCallback) =>
+      cb(new Blob(['x'], { type: 'image/png' })),
+    );
     const { blob, qr } = await renderShareCard(r);
     expect(blob).toBeInstanceOf(Blob);
     expect(blob.type).toBe('image/png');
@@ -80,14 +103,27 @@ describe('分享卡', () => {
   });
 
   const ctxStub = () => ({
-    fillStyle: '', strokeStyle: '', lineWidth: 0, font: '', textAlign: '',
-    fillRect: vi.fn(), strokeRect: vi.fn(), fillText: vi.fn(),
-    beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(),
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 0,
+    font: '',
+    textAlign: '',
+    fillRect: vi.fn(),
+    strokeRect: vi.fn(),
+    fillText: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    stroke: vi.fn(),
     measureText: (t: string) => ({ width: [...t].length * 30 }),
   });
   function mockCanvas(ctx: ReturnType<typeof ctxStub>) {
-    const getCtx = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx as unknown as CanvasRenderingContext2D);
-    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((cb: BlobCallback) => cb(new Blob(['x'], { type: 'image/png' })));
+    const getCtx = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(ctx as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((cb: BlobCallback) =>
+      cb(new Blob(['x'], { type: 'image/png' })),
+    );
     // getContext 被调用的那个 canvas 实例：toBlob 也挂在它上面，用实例反查高度
     return () => getCtx.mock.instances[0] as HTMLCanvasElement;
   }

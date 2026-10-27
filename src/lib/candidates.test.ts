@@ -5,19 +5,47 @@ import type { Opts, Result } from '../engine/types';
 import { BOOK_ORDER } from '../engine/types';
 
 const opts: Opts = {
-  gender: 'any', genderWeak: false, length: 2,
+  gender: 'any',
+  genderWeak: false,
+  length: 2,
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
-  redupOnly: false, exclude: [], count: 0, search: '', title: '', sort: 'score',
-  strokeMax: 0, noMonotone: false, popFloor: 0, mustChar: '', mustPos: 'any', avoidChars: '',
+  redupOnly: false,
+  exclude: [],
+  count: 0,
+  search: '',
+  title: '',
+  sort: 'score',
+  strokeMax: 0,
+  noMonotone: false,
+  popFloor: 0,
+  mustChar: '',
+  mustPos: 'any',
+  avoidChars: '',
 };
 
 // 假 Result 只填 CSV 会读到的字段，专测转义
-const fake = (over: Partial<Result>): Result => ({
-  id: 'x', name: '清婉', full: '苏清婉', book: 'shijing', title: '野有死麕', author: '佚名',
-  line: '野有死麕，白茅包之', seg: '野有死麕', foot: 2, gap: 1, strict: true, redup: false, lg: 0,
-  readings: ['qīng', 'wǎn'], total: 31, deltas: [], flags: [], gender: { side: 'n', strong: false, why: '' },
-  ...over,
-} as Result);
+const fake = (over: Partial<Result>): Result =>
+  ({
+    id: 'x',
+    name: '清婉',
+    full: '苏清婉',
+    book: 'shijing',
+    title: '野有死麕',
+    author: '佚名',
+    line: '野有死麕，白茅包之',
+    seg: '野有死麕',
+    foot: 2,
+    gap: 1,
+    strict: true,
+    redup: false,
+    lg: 0,
+    readings: ['qīng', 'wǎn'],
+    total: 31,
+    deltas: [],
+    flags: [],
+    gender: { side: 'n', strong: false, why: '' },
+    ...over,
+  }) as Result;
 
 describe('候选全量导出', () => {
   const page = plan('林', opts, 0).page;
@@ -27,7 +55,11 @@ describe('候选全量导出', () => {
     const json = JSON.parse(candidatesJson(page));
     expect(json.kind).toBe('candidates');
     expect(json.count).toBe(page.length);
-    expect(json.rows[0]).toMatchObject({ full: expect.any(String), score: expect.any(Number), book: expect.any(String) });
+    expect(json.rows[0]).toMatchObject({
+      full: expect.any(String),
+      score: expect.any(Number),
+      book: expect.any(String),
+    });
   });
   it('CSV：BOM + 表头 + 每行一个候选', () => {
     const csv = candidatesCsv(page);
@@ -61,7 +93,7 @@ describe('候选全量导出', () => {
   it('收藏 CSV 的分组与备注（手打的）同样防公式执行', () => {
     const r = plan('苏', { ...opts, search: '清馨' }, 0).page[0];
     const csv = favoritesCsv([{ r, group: '=HYPERLINK("x")', note: '-@危险备注' }]);
-    expect(csv).toContain("\"'=HYPERLINK(\"\"x\"\")\"");
+    expect(csv).toContain('"\'=HYPERLINK(""x"")"');
     expect(csv).toContain("'-@危险备注");
   });
   it('字段完整：出处今译与笔画、常见度都在行里', () => {
@@ -70,7 +102,9 @@ describe('候选全量导出', () => {
     expect(row.book).toBeTruthy();
     expect(row.gloss).toBeTruthy();
     expect(row.strokes).toBeGreaterThan(0);
-    expect(['很常见', '常见', '一般', '少见', '冷僻'].some((b) => b.includes(row.popularity) || row.popularity.includes(b))).toBe(true);
+    expect(
+      ['很常见', '常见', '一般', '少见', '冷僻'].some((b) => b.includes(row.popularity) || row.popularity.includes(b)),
+    ).toBe(true);
   });
 
   it('收藏 CSV 在候选列之后加上分组与备注两列，带逗号的备注要加引号', () => {

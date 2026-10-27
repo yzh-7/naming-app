@@ -28,7 +28,10 @@ export async function copyText(text: string): Promise<boolean> {
 }
 
 export function resultSummary(r: ShareName) {
-  const g = [...new Set([...r.name])].map((ch) => (glossOf(ch) ? `${ch}：${glossOf(ch)}` : null)).filter(Boolean).join('；');
+  const g = [...new Set([...r.name])]
+    .map((ch) => (glossOf(ch) ? `${ch}：${glossOf(ch)}` : null))
+    .filter(Boolean)
+    .join('；');
   const pop = popularity(r.name);
   const sh = shapeTags(r.name);
   return [
@@ -38,10 +41,13 @@ export function resultSummary(r: ShareName) {
     r.line && `原句：${r.line}`,
     r.line && r.lg != null && `今译：${lineGlossOf({ lg: r.lg })}`,
     !r.book && `出处：${BOOK_COUNT} 本典籍中未见此搭配（自选组合）`,
-    sh.strokes > 0 && `字形：${sh.chars.map((c) => `${c.ch}${c.sx ?? ''}${c.st ? c.st + '画' : ''}`).join(' ')}（共 ${sh.strokes} 画）`,
+    sh.strokes > 0 &&
+      `字形：${sh.chars.map((c) => `${c.ch}${c.sx ?? ''}${c.st ? c.st + '画' : ''}`).join(' ')}（共 ${sh.strokes} 画）`,
     `用字常见度：${pop.band}（依据 114 万真实姓名用字频次估算）`,
     '—— 取名 · 典籍取词（完全离线）',
-  ].filter(Boolean).join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 const SERIF = '"Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "STSong", serif';
@@ -88,7 +94,10 @@ export function renderShareCard(r: ShareName, appName = '取名 · 典籍取词'
   c.height = 10;
   const ctx = c.getContext('2d')!;
 
-  const gloss = [...new Set([...r.name])].map((ch) => (glossOf(ch) ? `${ch} · ${glossOf(ch)}` : null)).filter(Boolean).join('    ');
+  const gloss = [...new Set([...r.name])]
+    .map((ch) => (glossOf(ch) ? `${ch} · ${glossOf(ch)}` : null))
+    .filter(Boolean)
+    .join('    ');
   const hasSource = !!(r.book && r.title && r.line);
   const src = hasSource ? `《${BOOK_LABEL[r.book!]}·${r.title}${r.author ? `·${r.author}` : ''}》` : '自选组合';
   const lineText = hasSource ? r.line! : `${BOOK_COUNT} 本典籍中未见这个搭配的出处。`;
@@ -141,20 +150,32 @@ export function renderShareCard(r: ShareName, appName = '取名 · 典籍取词'
   ctx.font = `400 36px ${SERIF}`;
   ctx.fillStyle = '#37465c';
   let ly = 780;
-  for (const ln of lines) { ctx.fillText(ln, cx, ly); ly += 56; }
+  for (const ln of lines) {
+    ctx.fillText(ln, cx, ly);
+    ly += 56;
+  }
 
   // 今译（小一号、低对比，最多 3 行）；自选组合没有出处时这一行不画
   if (gl.length) {
     ctx.font = `400 28px ${SANS}`;
     ctx.fillStyle = '#5a6b83';
     let gy2 = gy;
-    for (const ln of gl) { ctx.fillText(ln, cx, gy2); gy2 += 40; }
+    for (const ln of gl) {
+      ctx.fillText(ln, cx, gy2);
+      gy2 += 40;
+    }
   }
 
   // 合注
   const sh = shapeTags(r.name);
   const pop = popularity(r.name);
-  const note = [sh.strokes ? `共 ${sh.strokes} 画` : null, sh.chars.every((c) => c.sx) ? sh.chars.map((c) => c.sx).join('') : null, `用字常见度 ${pop.band}`].filter(Boolean).join(' · ');
+  const note = [
+    sh.strokes ? `共 ${sh.strokes} 画` : null,
+    sh.chars.every((c) => c.sx) ? sh.chars.map((c) => c.sx).join('') : null,
+    `用字常见度 ${pop.band}`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
   ctx.font = `400 28px ${SANS}`;
   ctx.fillStyle = '#7a8699';
   ctx.fillText(note, cx, H - (url ? 464 : 200));
@@ -176,7 +197,10 @@ export function renderShareCard(r: ShareName, appName = '取名 · 典籍取词'
 }
 
 // 收藏名单图：竖版长图，一次导出多个名字（含读音/分数/出处/备注），方便整屏分享或打印
-export function renderListCard(entries: { r: Result; note?: string }[], opt: { title?: string; url?: string } = {}): Promise<CardResult> {
+export function renderListCard(
+  entries: { r: Result; note?: string }[],
+  opt: { title?: string; url?: string } = {},
+): Promise<CardResult> {
   const W = 1080;
   const ROW = 168;
   const HEAD = 220;
@@ -195,7 +219,8 @@ export function renderListCard(entries: { r: Result; note?: string }[], opt: { t
   ctx.fillText(opt.title ?? '取名 · 备选名单', W / 2, 130);
   ctx.font = `400 26px ${SANS}`;
   ctx.fillStyle = '#7a8699';
-  const more = entries.length > list.length ? `（共 ${entries.length} 条，图内前 ${list.length} 条）` : `共 ${list.length} 条`;
+  const more =
+    entries.length > list.length ? `（共 ${entries.length} 条，图内前 ${list.length} 条）` : `共 ${list.length} 条`;
   ctx.fillText(`${more} · 典籍取词 · 完全离线`, W / 2, 172);
 
   let y = HEAD + 40;
@@ -224,9 +249,20 @@ export function renderListCard(entries: { r: Result; note?: string }[], opt: { t
     ctx.fillStyle = '#7a8699';
     ctx.font = `400 24px ${SANS}`;
     ctx.fillText(`《${BOOK_LABEL[r.book]}·${r.title}》  ${r.line}`, 110, y + 96);
-    const gloss = [...new Set([...r.name])].map((ch) => (glossOf(ch) ? `${ch}·${glossOf(ch)}` : '')).filter(Boolean).join('；');
-    if (gloss) { ctx.fillStyle = '#5a6b83'; ctx.font = `400 22px ${SANS}`; ctx.fillText(gloss, 110, y + 122); }
-    if (note) { ctx.fillStyle = '#1f3a5f'; ctx.font = `400 24px ${SANS}`; ctx.fillText(`· ${note}`, W - 110 - ctx.measureText(note).width, y + 96); }
+    const gloss = [...new Set([...r.name])]
+      .map((ch) => (glossOf(ch) ? `${ch}·${glossOf(ch)}` : ''))
+      .filter(Boolean)
+      .join('；');
+    if (gloss) {
+      ctx.fillStyle = '#5a6b83';
+      ctx.font = `400 22px ${SANS}`;
+      ctx.fillText(gloss, 110, y + 122);
+    }
+    if (note) {
+      ctx.fillStyle = '#1f3a5f';
+      ctx.font = `400 24px ${SANS}`;
+      ctx.fillText(`· ${note}`, W - 110 - ctx.measureText(note).width, y + 96);
+    }
     y += ROW;
   });
 
@@ -251,7 +287,10 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, max
     if (ctx.measureText(cur + ch).width > maxWidth && cur) {
       out.push(cur);
       cur = ch;
-      if (out.length === maxLines) { out[out.length - 1] = out[out.length - 1].replace(/.$/, '…'); return out; }
+      if (out.length === maxLines) {
+        out[out.length - 1] = out[out.length - 1].replace(/.$/, '…');
+        return out;
+      }
     } else {
       cur += ch;
     }

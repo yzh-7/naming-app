@@ -1,5 +1,5 @@
 /* 关掉自动探测：否则 scripts/ 里的 HTML 字符串会被当成类名候选，把用不到的工具类扫进产物 CSS */
-@import "tailwindcss" source(none);
+@import 'tailwindcss' source(none);
 @source "./";
 
 /* 深色模式：跟随 <html class="dark">（可手动切换并持久化），而不是只看系统偏好 */
@@ -12,31 +12,41 @@
    深色下不会出现「浅底浅字」的对比度塌陷。色值按 WCAG 2.1 AA 核算过。
    --------------------------------------------------------------------------- */
 :root {
-  --canvas: #f6f5f1;        /* 页面底：暖纸色，不是纯白 */
-  --surface: #ffffff;       /* 卡片面 */
-  --surface-2: #faf9f5;     /* 次级面：输入区、控件沟槽 */
-  --ink: #191817;           /* 主文字 */
-  --ink-2: #55514a;         /* 正文次要 */
-  --ink-3: #6c675d;         /* 标签与元信息 */
+  --canvas: #f6f5f1; /* 页面底：暖纸色，不是纯白 */
+  --surface: #ffffff; /* 卡片面 */
+  --surface-2: #faf9f5; /* 次级面：输入区、控件沟槽 */
+  --ink: #191817; /* 主文字 */
+  --ink-2: #55514a; /* 正文次要 */
+  --ink-3: #6c675d; /* 标签与元信息 */
   --line: #e4e1d9;
   --line-strong: #cec9be;
-  --accent: #9a3a12;        /* 赭石/朱砂：典籍感，也用作焦点环 */
+  --accent: #9a3a12; /* 赭石/朱砂：典籍感，也用作焦点环 */
   --accent-ink: #7d2f0e;
   --accent-btn-ink: #ffffff;
   --accent-soft: #fbede3;
   --accent-line: #efd2bf;
   --neutral-soft: #f0eee7;
-  --mark: #f6e3bb;          /* 原句取词高亮 */
-  --mark-ink: #3f3212;      /* 高亮上的字色（不能沿用正文灰，否则浅底浅字） */
-  --seg-bg: #faf9f5;        /* 分段控件的沟槽 */
-  --seg-on-bg: #ffffff;     /* 分段控件的选中块 */
+  --mark: #f6e3bb; /* 原句取词高亮 */
+  --mark-ink: #3f3212; /* 高亮上的字色（不能沿用正文灰，否则浅底浅字） */
+  --seg-bg: #faf9f5; /* 分段控件的沟槽 */
+  --seg-on-bg: #ffffff; /* 分段控件的选中块 */
   --seg-on-line: #cec9be;
 
-  --danger: #a52a1e;   --danger-soft: #fceae7;  --danger-line: #f1ccc4;
-  --warn: #7c5300;     --warn-soft: #faf1dc;    --warn-line: #e8d5a8;
-  --ok: #12643a;       --ok-soft: #e6f2ea;      --ok-line: #c4e0d0;
-  --cool: #1c5c86;     --cool-soft: #e8f1f8;    --cool-line: #c8ddea;  /* 偏男 */
-  --warm: #9c3560;     --warm-soft: #fce9f0;    --warm-line: #f2cadb;  /* 偏女 */
+  --danger: #a52a1e;
+  --danger-soft: #fceae7;
+  --danger-line: #f1ccc4;
+  --warn: #7c5300;
+  --warn-soft: #faf1dc;
+  --warn-line: #e8d5a8;
+  --ok: #12643a;
+  --ok-soft: #e6f2ea;
+  --ok-line: #c4e0d0;
+  --cool: #1c5c86;
+  --cool-soft: #e8f1f8;
+  --cool-line: #c8ddea; /* 偏男 */
+  --warm: #9c3560;
+  --warm-soft: #fce9f0;
+  --warm-line: #f2cadb; /* 偏女 */
 
   color-scheme: light;
 }
@@ -59,36 +69,48 @@
   --mark: #5b4a1c;
   --mark-ink: #f7e6c4;
   --seg-bg: #232322;
-  --seg-on-bg: #35342f;     /* 深色里「抬起」＝比沟槽更亮，不用阴影 */
+  --seg-on-bg: #35342f; /* 深色里「抬起」＝比沟槽更亮，不用阴影 */
   --seg-on-line: #55524a;
 
-  --danger: #f0b1a8;   --danger-soft: #3b201d;  --danger-line: #5f332c;
-  --warn: #e3bd74;     --warn-soft: #2e2517;    --warn-line: #4f4022;
-  --ok: #8fd4a9;       --ok-soft: #18291f;      --ok-line: #2d4836;
-  --cool: #a3cbe8;     --cool-soft: #17242f;    --cool-line: #2a4150;
-  --warm: #efb4cd;     --warm-soft: #2e1d25;    --warm-line: #4f303b;
+  --danger: #f0b1a8;
+  --danger-soft: #3b201d;
+  --danger-line: #5f332c;
+  --warn: #e3bd74;
+  --warn-soft: #2e2517;
+  --warn-line: #4f4022;
+  --ok: #8fd4a9;
+  --ok-soft: #18291f;
+  --ok-line: #2d4836;
+  --cool: #a3cbe8;
+  --cool-soft: #17242f;
+  --cool-line: #2a4150;
+  --warm: #efb4cd;
+  --warm-soft: #2e1d25;
+  --warm-line: #4f303b;
 
   color-scheme: dark;
 }
 
 @theme {
   /* 拉丁部分先交给系统 UI 字体，汉字再落到 CJK 字体——不然拼音/英文会用方块字字体里的西文 */
-  --font-sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif;
-  --font-serif: "Songti SC", "STSong", "Source Han Serif SC", "Noto Serif CJK SC", "SimSun", serif;
+  --font-sans:
+    system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC',
+    'Source Han Sans SC', sans-serif;
+  --font-serif: 'Songti SC', 'STSong', 'Source Han Serif SC', 'Noto Serif CJK SC', 'SimSun', serif;
 
   /* 字阶：正文按中文习惯 15px / 1.75——方块字要比西文行距更松。
      全站只用这六级，不再出现 text-[17px] 这类临时值 */
-  --text-meta: 0.8125rem;         /* 13 标签、元信息 */
+  --text-meta: 0.8125rem; /* 13 标签、元信息 */
   --text-meta--line-height: 1.55;
-  --text-body: 0.9375rem;         /* 15 正文、按钮 */
+  --text-body: 0.9375rem; /* 15 正文、按钮 */
   --text-body--line-height: 1.75;
-  --text-title: 1.0625rem;        /* 17 小标题、候选名、姓输入 */
+  --text-title: 1.0625rem; /* 17 小标题、候选名、姓输入 */
   --text-title--line-height: 1.45;
-  --text-glyph: 1.1875rem;        /* 19 字格里的单字 */
+  --text-glyph: 1.1875rem; /* 19 字格里的单字 */
   --text-glyph--line-height: 1.3;
-  --text-name: 1.5rem;            /* 24 卡片上的名字 */
+  --text-name: 1.5rem; /* 24 卡片上的名字 */
   --text-name--line-height: 1.3;
-  --text-name-lg: 1.875rem;       /* 30 自选页大字 */
+  --text-name-lg: 1.875rem; /* 30 自选页大字 */
   --text-name-lg--line-height: 1.25;
 
   --radius-card: 0.875rem;
@@ -99,7 +121,9 @@
 }
 
 @media (max-width: 1023.98px) {
-  :root { --text-meta: 0.875rem; }   /* 手机端元信息 14px */
+  :root {
+    --text-meta: 0.875rem;
+  } /* 手机端元信息 14px */
 }
 
 @theme inline {
@@ -151,13 +175,34 @@
     line-height: 1.75;
     -webkit-font-smoothing: antialiased;
   }
-  h1, h2, h3 { text-wrap: balance; }
-  p { text-wrap: pretty; overflow-wrap: break-word; }
-  mark { background: var(--mark); color: var(--mark-ink); }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  ::selection { background: var(--mark); color: var(--mark-ink); }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+    overflow-wrap: break-word;
+  }
+  mark {
+    background: var(--mark);
+    color: var(--mark-ink);
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--mark);
+    color: var(--mark-ink);
+  }
   @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
   }
 }
 
@@ -167,165 +212,393 @@
    移动端输入字号 ≥16px，避免 iOS 聚焦时自动放大整页。
    --------------------------------------------------------------------------- */
 @utility btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem;
-  min-height: 2.75rem; padding: 0.5rem 0.875rem; border-radius: var(--radius-ctl);
-  border: 1px solid var(--line); background: var(--surface); color: var(--ink-2);
-  font-size: 1rem; line-height: 1.2; cursor: pointer; white-space: nowrap;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-  &:hover { background: var(--surface-2); border-color: var(--line-strong); color: var(--ink); }
-  &:disabled { opacity: 0.45; cursor: not-allowed; }
-  @media (min-width: 1024px) { min-height: 2.25rem; padding: 0.375rem 0.75rem; font-size: 0.875rem; }
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.875rem;
+  border-radius: var(--radius-ctl);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 1rem;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+  &:hover {
+    background: var(--surface-2);
+    border-color: var(--line-strong);
+    color: var(--ink);
+  }
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  @media (min-width: 1024px) {
+    min-height: 2.25rem;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+  }
 }
 
 @utility btn-primary {
-  display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem;
-  min-height: 2.75rem; padding: 0.5rem 1rem; border-radius: var(--radius-ctl);
-  border: 1px solid var(--accent); background: var(--accent); color: var(--accent-btn-ink);
-  font-size: 1rem; font-weight: 500; line-height: 1.2; cursor: pointer; white-space: nowrap;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
-  &:hover { background: var(--accent-ink); border-color: var(--accent-ink); }
-  &:disabled { opacity: 0.45; cursor: not-allowed; }
-  @media (min-width: 1024px) { min-height: 2.25rem; padding: 0.375rem 0.875rem; font-size: 0.875rem; }
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-ctl);
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-btn-ink);
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+  &:hover {
+    background: var(--accent-ink);
+    border-color: var(--accent-ink);
+  }
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  @media (min-width: 1024px) {
+    min-height: 2.25rem;
+    padding: 0.375rem 0.875rem;
+    font-size: 0.875rem;
+  }
 }
 
 /* 已激活的次级按钮（收藏、筛选开关） */
 @utility btn-on {
-  border-color: var(--ok-line); background: var(--ok-soft); color: var(--ok);
-  &:hover { background: var(--ok-soft); border-color: var(--ok-line); color: var(--ok); }
+  border-color: var(--ok-line);
+  background: var(--ok-soft);
+  color: var(--ok);
+  &:hover {
+    background: var(--ok-soft);
+    border-color: var(--ok-line);
+    color: var(--ok);
+  }
 }
 
 /* 状态化按钮：已拉黑（danger）、已激活的强调态（accent） */
 @utility btn-danger {
-  border-color: var(--danger-line); background: var(--danger-soft); color: var(--danger);
-  &:hover { background: var(--danger-soft); border-color: var(--danger-line); color: var(--danger); }
+  border-color: var(--danger-line);
+  background: var(--danger-soft);
+  color: var(--danger);
+  &:hover {
+    background: var(--danger-soft);
+    border-color: var(--danger-line);
+    color: var(--danger);
+  }
 }
 
 @utility btn-accent {
-  border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent-ink);
-  &:hover { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent-ink); }
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  &:hover {
+    background: var(--accent-soft);
+    border-color: var(--accent-line);
+    color: var(--accent-ink);
+  }
 }
 
-@utility chip-danger { border-color: var(--danger-line); background: var(--danger-soft); color: var(--danger); }
-@utility chip-warn { border-color: var(--warn-line); background: var(--warn-soft); color: var(--warn); }
-@utility chip-ok { border-color: var(--ok-line); background: var(--ok-soft); color: var(--ok); }
-@utility chip-cool { border-color: var(--cool-line); background: var(--cool-soft); color: var(--cool); }
-@utility chip-warm { border-color: var(--warm-line); background: var(--warm-soft); color: var(--warm); }
-@utility chip-accent { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent-ink); }
+@utility chip-danger {
+  border-color: var(--danger-line);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+@utility chip-warn {
+  border-color: var(--warn-line);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+@utility chip-ok {
+  border-color: var(--ok-line);
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+@utility chip-cool {
+  border-color: var(--cool-line);
+  background: var(--cool-soft);
+  color: var(--cool);
+}
+@utility chip-warm {
+  border-color: var(--warm-line);
+  background: var(--warm-soft);
+  color: var(--warm);
+}
+@utility chip-accent {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
 
 /* 胶囊开关：手机端 44px 高（拇指），桌面 32px；底色用次级面，白卡上才看得见边界 */
 @utility chip {
-  display: inline-flex; align-items: center; gap: 0.375rem;
-  min-height: 2.75rem; padding: 0.375rem 0.75rem; border-radius: 9999px;
-  border: 1px solid var(--line-strong); background: var(--surface-2);
-  color: var(--ink-2); font-size: 0.875rem; line-height: 1.4; white-space: nowrap;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-  &:hover { border-color: var(--line-strong); background: var(--neutral-soft); color: var(--ink); }
-  @media (min-width: 1024px) { min-height: 2rem; padding: 0.25rem 0.625rem; font-size: var(--text-meta); }
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 2.75rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 9999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+  &:hover {
+    border-color: var(--line-strong);
+    background: var(--neutral-soft);
+    color: var(--ink);
+  }
+  @media (min-width: 1024px) {
+    min-height: 2rem;
+    padding: 0.25rem 0.625rem;
+    font-size: var(--text-meta);
+  }
 }
 
 @utility field {
-  min-width: 0; min-height: 2.75rem; border-radius: var(--radius-ctl);
-  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
-  padding: 0.5rem 0.75rem; font-size: 1rem; line-height: 1.4;
-  &:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  &::placeholder { color: var(--ink-3); }
-  @media (min-width: 1024px) { min-height: 2.25rem; padding: 0.375rem 0.625rem; font-size: 0.875rem; }
+  min-width: 0;
+  min-height: 2.75rem;
+  border-radius: var(--radius-ctl);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  padding: 0.5rem 0.75rem;
+  font-size: 1rem;
+  line-height: 1.4;
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  &::placeholder {
+    color: var(--ink-3);
+  }
+  @media (min-width: 1024px) {
+    min-height: 2.25rem;
+    padding: 0.375rem 0.625rem;
+    font-size: 0.875rem;
+  }
 }
 
 /* 小标签（字段名、分组名） */
 @utility lab {
-  display: block; font-size: var(--text-meta); line-height: 1.5; color: var(--ink-3);
+  display: block;
+  font-size: var(--text-meta);
+  line-height: 1.5;
+  color: var(--ink-3);
 }
 
 @utility card {
-  border-radius: var(--radius-card); border: 1px solid var(--line);
-  background: var(--surface); padding: 1rem;
-  @media (min-width: 640px) { padding: 1.25rem; }
+  border-radius: var(--radius-card);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 1rem;
+  @media (min-width: 640px) {
+    padding: 1.25rem;
+  }
 }
 
 /* 卡片元信息行：标签列 + 值列。值列用 minmax(0,1fr)，长内容（多音注音）才会换行而不是撑破卡片 */
 @utility meta-row {
-  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.125rem 0.75rem;
-  align-items: baseline; font-size: var(--text-meta); line-height: 1.7; color: var(--ink-2);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.125rem 0.75rem;
+  align-items: baseline;
+  font-size: var(--text-meta);
+  line-height: 1.7;
+  color: var(--ink-2);
 }
 
 /* 分段控件：一条沟槽 + 抬起的选中块。选中靠「更亮的面 + 更实的边框」表达，
    不用阴影（深色下阴影看不见，浅底浅字会塌） */
 @utility seg {
-  display: inline-flex; flex-wrap: wrap; align-items: stretch; gap: 0.125rem;
-  border: 1px solid var(--line); background: var(--seg-bg);
-  border-radius: var(--radius-ctl); padding: 0.1875rem;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.125rem;
+  border: 1px solid var(--line);
+  background: var(--seg-bg);
+  border-radius: var(--radius-ctl);
+  padding: 0.1875rem;
 }
 
 @utility seg-btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem;
-  min-height: 2.75rem; padding: 0.375rem 0.75rem; border-radius: 0.375rem;
-  border: 1px solid transparent; background: transparent; color: var(--ink-3);
-  font-size: 0.9375rem; line-height: 1.2; cursor: pointer; white-space: nowrap;
-  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-  &:hover { color: var(--ink); background: var(--neutral-soft); }
-  @media (min-width: 1024px) { min-height: 2rem; padding: 0.25rem 0.625rem; font-size: var(--text-meta); }
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-height: 2.75rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.375rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 0.9375rem;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+  &:hover {
+    color: var(--ink);
+    background: var(--neutral-soft);
+  }
+  @media (min-width: 1024px) {
+    min-height: 2rem;
+    padding: 0.25rem 0.625rem;
+    font-size: var(--text-meta);
+  }
 }
 
 /* 选中态：与沟槽拉开层次（深色里靠更亮的面，不是靠阴影） */
 @utility seg-on {
-  background: var(--seg-on-bg); border-color: var(--seg-on-line); color: var(--ink);
-  &:hover { background: var(--seg-on-bg); border-color: var(--seg-on-line); color: var(--ink); }
+  background: var(--seg-on-bg);
+  border-color: var(--seg-on-line);
+  color: var(--ink);
+  &:hover {
+    background: var(--seg-on-bg);
+    border-color: var(--seg-on-line);
+    color: var(--ink);
+  }
 }
 
 /* 性别档：选中就用冷/暖色（与卡片上的偏男/偏女同一套颜色语言），hover 不褪色 */
 @utility seg-cool {
-  border-color: var(--cool-line); background: var(--cool-soft); color: var(--cool);
-  &:hover { background: var(--cool-soft); border-color: var(--cool-line); color: var(--cool); }
+  border-color: var(--cool-line);
+  background: var(--cool-soft);
+  color: var(--cool);
+  &:hover {
+    background: var(--cool-soft);
+    border-color: var(--cool-line);
+    color: var(--cool);
+  }
 }
 
 @utility seg-warm {
-  border-color: var(--warm-line); background: var(--warm-soft); color: var(--warm);
-  &:hover { background: var(--warm-soft); border-color: var(--warm-line); color: var(--warm); }
+  border-color: var(--warm-line);
+  background: var(--warm-soft);
+  color: var(--warm);
+  &:hover {
+    background: var(--warm-soft);
+    border-color: var(--warm-line);
+    color: var(--warm);
+  }
 }
 
 /* 正文行长：1em ≈ 一个方块字，40em 就是「一行约 40 字」的可读上限 */
-@utility measure { max-width: 40em; }
+@utility measure {
+  max-width: 40em;
+}
 
 /* 幽灵按钮：导出/复制这类次要操作，不给整排按钮增加边框噪音 */
 @utility btn-quiet {
-  border-color: transparent; background: transparent; color: var(--ink-3);
-  &:hover { background: var(--neutral-soft); border-color: var(--line); color: var(--ink); }
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-3);
+  &:hover {
+    background: var(--neutral-soft);
+    border-color: var(--line);
+    color: var(--ink);
+  }
 }
 
 /* 数据进出那一行（导出 / 候选CSV / 候选JSON / 导入 / 复制链接 / 导出名单图 / 打印名单）：
    实线边框 + 正文字色，显眼但不抢主操作——主色仍只给「换一批」 */
 @utility btn-outlined {
-  border-color: var(--line-strong); background: var(--surface); color: var(--ink);
-  &:hover { border-color: var(--ink-3); background: var(--surface-2); color: var(--ink); }
+  border-color: var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  &:hover {
+    border-color: var(--ink-3);
+    background: var(--surface-2);
+    color: var(--ink);
+  }
 }
 
 /* 粘性头部在锚点跳转时别盖住正文：手机端页头两行更高，留更多余量 */
 @utility anchor-offset {
   scroll-margin-top: 8.5rem;
-  @media (min-width: 640px) { scroll-margin-top: 4.75rem; }
+  @media (min-width: 640px) {
+    scroll-margin-top: 4.75rem;
+  }
 }
 
-@utility pb-safe { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+@utility pb-safe {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
 
 /* 打印：只留卡片正文（去掉导航/控件/按钮），黑字白底、卡片不跨页断开。
    这里把令牌全部拉回浅色值——深色模式下直接打印会得到黑底浅字 */
 @media print {
-  :root, .dark {
-    --canvas: #ffffff; --surface: #ffffff; --surface-2: #ffffff;
-    --ink: #111110; --ink-2: #26241f; --ink-3: #3d3830;
-    --line: #999999; --line-strong: #7a7a7a;
-    --accent: #7d2f0e; --accent-ink: #6a270c; --accent-soft: #ffffff; --accent-line: #999999;
-    --neutral-soft: #ffffff; --mark: #ffffff; --mark-ink: #111110;
-    --seg-bg: #ffffff; --seg-on-bg: #ffffff; --seg-on-line: #999999;
-    --danger: #7a1d12; --danger-soft: #ffffff; --danger-line: #999999;
-    --warn: #5c3d00; --warn-soft: #ffffff; --warn-line: #999999;
-    --ok: #0d4a2a; --ok-soft: #ffffff; --ok-line: #999999;
-    --cool: #14435f; --cool-soft: #ffffff; --cool-line: #999999;
-    --warm: #7a2647; --warm-soft: #ffffff; --warm-line: #999999;
+  :root,
+  .dark {
+    --canvas: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #ffffff;
+    --ink: #111110;
+    --ink-2: #26241f;
+    --ink-3: #3d3830;
+    --line: #999999;
+    --line-strong: #7a7a7a;
+    --accent: #7d2f0e;
+    --accent-ink: #6a270c;
+    --accent-soft: #ffffff;
+    --accent-line: #999999;
+    --neutral-soft: #ffffff;
+    --mark: #ffffff;
+    --mark-ink: #111110;
+    --seg-bg: #ffffff;
+    --seg-on-bg: #ffffff;
+    --seg-on-line: #999999;
+    --danger: #7a1d12;
+    --danger-soft: #ffffff;
+    --danger-line: #999999;
+    --warn: #5c3d00;
+    --warn-soft: #ffffff;
+    --warn-line: #999999;
+    --ok: #0d4a2a;
+    --ok-soft: #ffffff;
+    --ok-line: #999999;
+    --cool: #14435f;
+    --cool-soft: #ffffff;
+    --cool-line: #999999;
+    --warm: #7a2647;
+    --warm-soft: #ffffff;
+    --warm-line: #999999;
     color-scheme: light;
   }
-  .no-print { display: none !important; }
-  body { background: #fff; color: #000; }
-  article { break-inside: avoid; border-color: #999 !important; background: #fff !important; }
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+    color: #000;
+  }
+  article {
+    break-inside: avoid;
+    border-color: #999 !important;
+    background: #fff !important;
+  }
 }

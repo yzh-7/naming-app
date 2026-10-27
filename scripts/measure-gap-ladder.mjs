@@ -9,30 +9,58 @@ const RAW = 'data/raw';
 const NOT_CJK = /[^一-鿿]/g;
 const read = (p) => fs.readFileSync(path.join(RAW, p), 'utf-8');
 const json = (p) => JSON.parse(read(p));
-const loadCharList = (p) => read(p).split('\n').map((l) => l.trim()).filter(Boolean)
-  .map((l) => { const q = l.split(/\s+/); return q.length === 2 && /^\d+$/.test(q[0]) ? q[1] : l; });
+const loadCharList = (p) =>
+  read(p)
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => {
+      const q = l.split(/\s+/);
+      return q.length === 2 && /^\d+$/.test(q[0]) ? q[1] : l;
+    });
 
 const WH1 = new Set(loadCharList('gsc_level_1.txt'));
 const WH2 = new Set(loadCharList('gsc_level_2.txt'));
 const WH3 = new Set(loadCharList('gsc_level_3.txt'));
 const WH123 = new Set([...WH1, ...WH2, ...WH3]);
 const XUCI = new Set('兮之以太其于而则且亦何斯夫惟维矣乎焉哉也矣耶欤矣噫只且'.split(''));
-const FUNC = new Set('的了是在有他不这我都还说法把让向对为等与就只很更最些什么样怎么如果但是因为所以而且并且或者被它你们我们他们它们有个之以及然而则即便共'.split(''));
+const FUNC = new Set(
+  '的了是在有他不这我都还说法把让向对为等与就只很更最些什么样怎么如果但是因为所以而且并且或者被它你们我们他们它们有个之以及然而则即便共'.split(
+    '',
+  ),
+);
 const XU = new Set([...XUCI, ...FUNC]);
-const BAD = new Set('胸鬼懒禽鸟鸡我邪罪凶丑仇鼠蟋蟀淫秽妹狐鸭蝇悔鱼肉苦犬吠窥血丧饥搔父母昏狗蟊疾病痛死潦哀痒害蛇牲妇狸鹅穴畜烂兽靡爪氓劫鬣婚姻匪婆羞辱'.split('').filter((c) => new Set([...WH1, ...WH3]).has(c)));
+const BAD = new Set(
+  '胸鬼懒禽鸟鸡我邪罪凶丑仇鼠蟋蟀淫秽妹狐鸭蝇悔鱼肉苦犬吠窥血丧饥搔父母昏狗蟊疾病痛死潦哀痒害蛇牲妇狸鹅穴畜烂兽靡爪氓劫鬣婚姻匪婆羞辱'
+    .split('')
+    .filter((c) => new Set([...WH1, ...WH3]).has(c)),
+);
 const wf = new Map();
-for (const line of read('jieba_dict.txt').split('\n')) { const p = line.split(' '); if (p.length >= 3) wf.set(p[0], Number(p[1])); }
-const attrs = json('cnname_attributes.json'); const ad = attrs.dict ?? attrs;
-const CN_CHARS = [...new Set(Object.values(ad).filter((v) => typeof v === 'string').join('').split(''))];
+for (const line of read('jieba_dict.txt').split('\n')) {
+  const p = line.split(' ');
+  if (p.length >= 3) wf.set(p[0], Number(p[1]));
+}
+const attrs = json('cnname_attributes.json');
+const ad = attrs.dict ?? attrs;
+const CN_CHARS = [
+  ...new Set(
+    Object.values(ad)
+      .filter((v) => typeof v === 'string')
+      .join('')
+      .split(''),
+  ),
+];
 const L0 = buildL0(CN_CHARS.filter((c) => WH123.has(c)));
 
 const BOOKS = ['shijing', 'chuci', 'lunyu', 'shuimo', 'song300', 'daofa'];
 function offsets(book, n) {
-  if (book === 'shijing' || book === 'shuimo') return ({ 4: [0, 2], 5: [0, 2], 7: [0, 2, 4] })[n] ?? [...Array(n - 1).keys()];
-  if (book === 'chuci') return ({ 4: [0, 2], 5: [0, 3], 7: [0, 2, 4] })[n] ?? [...Array(n - 1).keys()];
+  if (book === 'shijing' || book === 'shuimo')
+    return { 4: [0, 2], 5: [0, 2], 7: [0, 2, 4] }[n] ?? [...Array(n - 1).keys()];
+  if (book === 'chuci') return { 4: [0, 2], 5: [0, 3], 7: [0, 2, 4] }[n] ?? [...Array(n - 1).keys()];
   return [...Array(n - 1).keys()];
 }
-const SPLIT = /[。！？；]/, COMMA = /[，、：]/;
+const SPLIT = /[。！？；]/,
+  COMMA = /[，、：]/;
 const inRedup = (cs, i) => (i > 0 && cs[i - 1] === cs[i]) || (i < cs.length - 1 && cs[i + 1] === cs[i]);
 function rawText(book) {
   const j = json(`${book}.json`);
@@ -52,11 +80,13 @@ function rawMeta(book) {
 // units：句读级（音步起点的所在单元）。line：句级。poem：篇级（同一首诗/同一章）。
 const units = [];
 for (const book of BOOKS) {
-  const texts = rawText(book), metas = rawMeta(book);
+  const texts = rawText(book),
+    metas = rawMeta(book);
   for (let ti = 0; ti < texts.length; ti++) {
     const poem = `${book}#${metas[ti]}#${ti}`;
     for (const line of String(texts[ti]).split(SPLIT)) {
-      const t = line.trim(); if (!t) continue;
+      const t = line.trim();
+      if (!t) continue;
       const lineKey = `${poem}@${t}`;
       for (const u of t.split(COMMA)) {
         const cleaned = u.replace(/[“”‘’「」《》（）()]/g, '').trim();
@@ -70,14 +100,15 @@ for (const book of BOOKS) {
   }
 }
 
-const legal = (p) => [...p].every((ch) => L0.has(ch)) && ![...p].some((ch) => XU.has(ch) || BAD.has(ch)) && (wf.get(p) ?? 0) < 5000;
+const legal = (p) =>
+  [...p].every((ch) => L0.has(ch)) && ![...p].some((ch) => XU.has(ch) || BAD.has(ch)) && (wf.get(p) ?? 0) < 5000;
 const addPair = (seen, cs, i, j) => {
   if (i === j || j < 0 || j >= cs.length) return;
   const [a, b] = j > i ? [i, j] : [j, i];
   // 相邻的相同两字（青青子佩 的 青青）本身就是典籍叠字装置，只有跨字取的才要判粘连
   if (b - a > 1 && (inRedup(cs, a) || inRedup(cs, b))) return;
   const p = cs[a] + cs[b];
-  if (p[0] === p[1] && b - a > 1) return;   // 假叠字（以德报德→德德）
+  if (p[0] === p[1] && b - a > 1) return; // 假叠字（以德报德→德德）
   if (legal(p)) seen.add(p);
 };
 
@@ -86,11 +117,12 @@ function withinSeg({ startAny = false, maxGap = Infinity } = {}) {
   const seen = new Set();
   for (const u of units) {
     const offs = startAny ? [...u.cs.keys()] : offsets(u.book, u.cs.length);
-    for (const i of offs) for (let gap = 1; gap <= maxGap; gap++) {
-      const j = i + gap;
-      if (j >= u.cs.length) break;
-      addPair(seen, u.cs, i, j);
-    }
+    for (const i of offs)
+      for (let gap = 1; gap <= maxGap; gap++) {
+        const j = i + gap;
+        if (j >= u.cs.length) break;
+        addPair(seen, u.cs, i, j);
+      }
   }
   return seen.size;
 }
@@ -105,15 +137,20 @@ function acrossUnits(groupKey) {
   }
   for (const list of byGroup.values()) {
     const flat = list.flatMap((cs, oi) => cs.map((ch, ci) => ({ ch, unit: oi, idx: ci })));
-    for (let a = 0; a < flat.length; a++) for (let b = a + 1; b < flat.length; b++) {
-      const x = flat[a], y = flat[b];
-      if (x.unit === y.unit) { addPair(seen, list[x.unit], x.idx, y.idx); continue; }
-      // 跨句读：两侧任一字在原文里紧邻同一个字，它就是叠词的一半
-      if (inRedup(list[x.unit], x.idx) || inRedup(list[y.unit], y.idx)) continue;
-      const p = x.ch + y.ch;
-      if (p[0] === p[1]) continue;
-      if (legal(p)) seen.add(p);
-    }
+    for (let a = 0; a < flat.length; a++)
+      for (let b = a + 1; b < flat.length; b++) {
+        const x = flat[a],
+          y = flat[b];
+        if (x.unit === y.unit) {
+          addPair(seen, list[x.unit], x.idx, y.idx);
+          continue;
+        }
+        // 跨句读：两侧任一字在原文里紧邻同一个字，它就是叠词的一半
+        if (inRedup(list[x.unit], x.idx) || inRedup(list[y.unit], y.idx)) continue;
+        const p = x.ch + y.ch;
+        if (p[0] === p[1]) continue;
+        if (legal(p)) seen.add(p);
+      }
   }
   return seen.size;
 }
@@ -130,13 +167,17 @@ run('同篇内·任意两字（起点不限）', acrossUnits('poem'));
 console.log(`\n自由组合（不设任何闸门）：L0 内两字全排列 ${(L0.size * (L0.size - 1)).toLocaleString('en-US')}`);
 
 // 两道减法的净剔除量（文档 5.1a 引用）：只看「该对在任一出现位置都无法以合法形态登记」的情况
-const kept = new Set(), glueSrc = new Map(), fakeSrc = new Map();
+const kept = new Set(),
+  glueSrc = new Map(),
+  fakeSrc = new Map();
 const occ = [];
 for (const u of units) {
   for (const i of offsets(u.book, u.cs.length)) {
     for (let gap = 1; gap <= 3; gap++) {
-      const j = i + gap; if (j >= u.cs.length) break;
-      const p = u.cs[i] + u.cs[j]; if (!legal(p)) continue;
+      const j = i + gap;
+      if (j >= u.cs.length) break;
+      const p = u.cs[i] + u.cs[j];
+      if (!legal(p)) continue;
       const isGlue = gap > 1 && (inRedup(u.cs, i) || inRedup(u.cs, j));
       const isFake = p[0] === p[1] && gap > 1;
       occ.push({ p, isGlue, isFake, src: `${u.seg}（第 ${i + 1}/${j + 1} 字）` });
@@ -157,7 +198,9 @@ console.log(`假叠字净剔除 ${fakeSrc.size} 条：`, [...fakeSrc].map(([p, s
 const meta = JSON.parse(fs.readFileSync('src/data/meta.json', 'utf-8'));
 const ladder = withinSeg({ maxGap: 3 });
 if (ladder !== meta.pool_B || kept.size !== meta.pool_B) {
-  console.error(`口径漂移：阶梯定稿行 ${ladder} 条 / 两遍扫描 ${kept.size} 条，build-data 报 ${meta.pool_B} 条——两边规则不一致`);
+  console.error(
+    `口径漂移：阶梯定稿行 ${ladder} 条 / 两遍扫描 ${kept.size} 条，build-data 报 ${meta.pool_B} 条——两边规则不一致`,
+  );
   process.exit(1);
 }
 console.log(`主池（与 build-data 同口径 ${meta.pool_B} 条 ✓）：${kept.size}`);

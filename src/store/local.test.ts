@@ -1,8 +1,28 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  addBlock, addFavorite, BLOCK_KEY, DEFAULT_OPTS, FAV_KEY, loadBlocklist, loadCompose, loadFavorites,
-  loadOpts, loadReading, loadSurname, loadTheme, removeBlock, removeFavorite, resolveDark,
-  saveBlocklist, saveCompose, saveFavorites, saveOpts, saveReading, saveSurname, saveTheme, updateFavorite,
+  addBlock,
+  addFavorite,
+  BLOCK_KEY,
+  DEFAULT_OPTS,
+  FAV_KEY,
+  loadBlocklist,
+  loadCompose,
+  loadFavorites,
+  loadOpts,
+  loadReading,
+  loadSurname,
+  loadTheme,
+  removeBlock,
+  removeFavorite,
+  resolveDark,
+  saveBlocklist,
+  saveCompose,
+  saveFavorites,
+  saveOpts,
+  saveReading,
+  saveSurname,
+  saveTheme,
+  updateFavorite,
 } from './local';
 import { BOOK_ORDER } from '../engine/types';
 
@@ -16,7 +36,10 @@ const K = {
 };
 
 beforeEach(() => localStorage.clear());
-afterEach(() => { vi.restoreAllMocks(); localStorage.clear(); });
+afterEach(() => {
+  vi.restoreAllMocks();
+  localStorage.clear();
+});
 
 describe('收藏：新增 / 删除 / 更新 / 去重', () => {
   it('最近收藏排在前面，重复收藏不重复记', () => {
@@ -26,20 +49,25 @@ describe('收藏：新增 / 删除 / 更新 / 去重', () => {
     expect(loadFavorites().map((r) => r.id)).toEqual(['b', 'a']);
   });
   it('updateFavorite 只改命中的那条，写回后可读', () => {
-    addFavorite('a'); addFavorite('b');
+    addFavorite('a');
+    addFavorite('b');
     const l = updateFavorite('a', { note: '喜欢', group: '女' });
     expect(l.find((r) => r.id === 'a')).toMatchObject({ note: '喜欢', group: '女' });
     expect(loadFavorites().find((r) => r.id === 'a')!.note).toBe('喜欢');
     expect(updateFavorite('missing', { note: 'x' }).length).toBe(2);
   });
   it('removeFavorite 删除后回读一致', () => {
-    addFavorite('a'); addFavorite('b');
+    addFavorite('a');
+    addFavorite('b');
     expect(removeFavorite('a').map((r) => r.id)).toEqual(['b']);
     expect(loadFavorites().map((r) => r.id)).toEqual(['b']);
   });
   it('旧格式（id 字符串数组）就地升级成记录，保留顺序并去重', () => {
     localStorage.setItem(K.fav, JSON.stringify(['a', 'b', 'a']));
-    expect(loadFavorites()).toEqual([{ id: 'a', ts: 0 }, { id: 'b', ts: 1 }]);
+    expect(loadFavorites()).toEqual([
+      { id: 'a', ts: 0 },
+      { id: 'b', ts: 1 },
+    ]);
   });
   it('脏数据不炸：非数组、空对象、漏 id 一律跳过', () => {
     localStorage.setItem(K.fav, '"nope"');
@@ -53,7 +81,9 @@ describe('收藏：新增 / 删除 / 更新 / 去重', () => {
 
 describe('拉黑名单', () => {
   it('新增去重、置顶，删除后回读一致', () => {
-    addBlock('x'); addBlock('y'); addBlock('x');
+    addBlock('x');
+    addBlock('y');
+    addBlock('x');
     expect(loadBlocklist()).toEqual(['y', 'x']);
     expect(removeBlock('y')).toEqual(['x']);
   });
@@ -110,7 +140,16 @@ describe('loadOpts：默认值与越界收敛', () => {
     expect(Object.keys(o.books)).toHaveLength(BOOK_ORDER.length);
   });
   it('count 越界回默认，0 与 600 是合法边界', () => {
-    for (const [input, expected] of [[9999, 12], [-1, 12], [601, 12], [1.5, 12], ['x', 12], [0, 0], [600, 600], [24, 24]] as const) {
+    for (const [input, expected] of [
+      [9999, 12],
+      [-1, 12],
+      [601, 12],
+      [1.5, 12],
+      ['x', 12],
+      [0, 0],
+      [600, 600],
+      [24, 24],
+    ] as const) {
       localStorage.setItem(K.opts, JSON.stringify({ count: input }));
       expect(loadOpts().count, `count=${input}`).toBe(expected);
     }
@@ -160,13 +199,25 @@ describe('loadOpts：默认值与越界收敛', () => {
     expect(loadOpts().mustChar).toBe('');
   });
   it('strokeMax 越界回默认，0..64 整数保留', () => {
-    for (const [input, expected] of [[-1, 0], [65, 0], [1.5, 0], ['x', 0], [16, 16], [0, 0]] as const) {
+    for (const [input, expected] of [
+      [-1, 0],
+      [65, 0],
+      [1.5, 0],
+      ['x', 0],
+      [16, 16],
+      [0, 0],
+    ] as const) {
       localStorage.setItem(K.opts, JSON.stringify({ strokeMax: input }));
       expect(loadOpts().strokeMax, `strokeMax=${input}`).toBe(expected);
     }
   });
   it('popFloor 只认档位，其余回默认', () => {
-    for (const [input, expected] of [[123, 0], [500, 500], [2000, 2000], [0, 0]] as const) {
+    for (const [input, expected] of [
+      [123, 0],
+      [500, 500],
+      [2000, 2000],
+      [0, 0],
+    ] as const) {
       localStorage.setItem(K.opts, JSON.stringify({ popFloor: input }));
       expect(loadOpts().popFloor, `popFloor=${input}`).toBe(expected);
     }

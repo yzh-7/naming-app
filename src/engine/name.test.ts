@@ -1,9 +1,33 @@
 import { describe, expect, it } from 'vitest';
 import {
-  avoidPass, charFacts, cleanSurname, composeName, findCombo, genderOf, genderPass, genderStats, glossOf, isKnownSurname, L0_CHARS,
-  lineGlossOf, minGnOf, namePinyin, pairCandidates,
-  nicknames, plan, polyphoneTags, poolSize, popBand, popScore, popularity, radicalTags,
-  readings, scoreItem, searchText, shapeTags, surnameReads,
+  avoidPass,
+  charFacts,
+  cleanSurname,
+  composeName,
+  findCombo,
+  genderOf,
+  genderPass,
+  genderStats,
+  glossOf,
+  isKnownSurname,
+  L0_CHARS,
+  lineGlossOf,
+  minGnOf,
+  namePinyin,
+  pairCandidates,
+  nicknames,
+  plan,
+  polyphoneTags,
+  poolSize,
+  popBand,
+  popScore,
+  popularity,
+  radicalTags,
+  readings,
+  scoreItem,
+  searchText,
+  shapeTags,
+  surnameReads,
 } from './name';
 import { CHARS, META, POOL, SINGLES } from './data';
 import { BOOK_ORDER, type Book, type Opts } from './types';
@@ -12,9 +36,23 @@ const gen = (sur: string, o: Opts, b: number) => plan(sur, o, b).page;
 
 const ALL_BOOKS = Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Record<Book, boolean>;
 const opts = (p: Partial<Opts> = {}): Opts => ({
-  gender: 'any', genderWeak: false, length: 2, books: { ...ALL_BOOKS },
-  redupOnly: false, exclude: [], count: 12, search: '', title: '', sort: 'score',
-  strokeMax: 0, noMonotone: false, popFloor: 0, mustChar: '', mustPos: 'any', avoidChars: '', ...p,
+  gender: 'any',
+  genderWeak: false,
+  length: 2,
+  books: { ...ALL_BOOKS },
+  redupOnly: false,
+  exclude: [],
+  count: 12,
+  search: '',
+  title: '',
+  sort: 'score',
+  strokeMax: 0,
+  noMonotone: false,
+  popFloor: 0,
+  mustChar: '',
+  mustPos: 'any',
+  avoidChars: '',
+  ...p,
 });
 
 describe('姓氏输入归一化', () => {
@@ -41,10 +79,30 @@ describe('读音表', () => {
   });
   it('一条读音＝一个带调音节：三数组必须等长且 mark 的声调与 t 一致', () => {
     const TONE: Record<string, string> = {
-      ā: 'a', ē: 'e', ī: 'i', ō: 'o', ū: 'u', ǖ: 'ü',
-      á: 'a', é: 'e', í: 'i', ó: 'o', ú: 'u', ǘ: 'ü',
-      ǎ: 'a', ě: 'e', ǐ: 'i', ǒ: 'o', ǔ: 'u', ǚ: 'ü',
-      à: 'a', è: 'e', ì: 'i', ò: 'o', ù: 'u', ǜ: 'ü',
+      ā: 'a',
+      ē: 'e',
+      ī: 'i',
+      ō: 'o',
+      ū: 'u',
+      ǖ: 'ü',
+      á: 'a',
+      é: 'e',
+      í: 'i',
+      ó: 'o',
+      ú: 'u',
+      ǘ: 'ü',
+      ǎ: 'a',
+      ě: 'e',
+      ǐ: 'i',
+      ǒ: 'o',
+      ǔ: 'u',
+      ǚ: 'ü',
+      à: 'a',
+      è: 'e',
+      ì: 'i',
+      ò: 'o',
+      ù: 'u',
+      ǜ: 'ü',
     };
     for (const [ch, i] of Object.entries(CHARS)) {
       expect(i.py.length, ch).toBe(i.pm.length);
@@ -58,7 +116,15 @@ describe('读音表', () => {
           const base = [...raw].map((c) => TONE[c] ?? c).join('');
           expect(base, `${ch} 第 ${k} 条：${raw} 应为 ${i.py[k]}`).toBe(i.py[k]);
         }
-        const tn = /[āēīōǖ]/.test(raw) ? 1 : /[áéíóú]/.test(raw) ? 2 : /[ǎěǐǒǔ]/.test(raw) ? 3 : /[àèìòù]/.test(raw) ? 4 : 0;
+        const tn = /[āēīōǖ]/.test(raw)
+          ? 1
+          : /[áéíóú]/.test(raw)
+            ? 2
+            : /[ǎěǐǒǔ]/.test(raw)
+              ? 3
+              : /[àèìòù]/.test(raw)
+                ? 4
+                : 0;
         if (tn) expect(i.t[k], `${ch} 第 ${k} 条声调与带调写法不符`).toBe(tn);
       }
     }
@@ -96,8 +162,18 @@ describe('性别判定：强弱两级', () => {
     expect(genderPass(both!.name, opts({ gender: 'f' }))).toBe(true);
   });
   it('单侧命中但其余字无信号＝疑似；每字同侧＝强', () => {
-    const weak = [...POOL].map((p) => p.name).find((n) => { const g = genderOf(n); return g.side !== 'n' && !g.strong; });
-    const strong = [...POOL].map((p) => p.name).find((n) => { const g = genderOf(n); return g.side !== 'n' && g.strong; });
+    const weak = [...POOL]
+      .map((p) => p.name)
+      .find((n) => {
+        const g = genderOf(n);
+        return g.side !== 'n' && !g.strong;
+      });
+    const strong = [...POOL]
+      .map((p) => p.name)
+      .find((n) => {
+        const g = genderOf(n);
+        return g.side !== 'n' && g.strong;
+      });
     expect(genderOf(weak!).strong).toBe(false);
     expect(genderOf(strong!).strong).toBe(true);
   });
@@ -109,7 +185,10 @@ describe('性别判定：强弱两级', () => {
     expect(genderPass(femName, opts({ gender: 'm' }))).toBe(false);
     expect(genderPass(maleName, opts({ gender: 'f' }))).toBe(false);
     expect(genderPass(maleName, opts({ gender: 'any' }))).toBe(true);
-    const weakFem = POOL.find((p) => { const g = genderOf(p.name); return g.side === 'f' && !g.strong; })!;
+    const weakFem = POOL.find((p) => {
+      const g = genderOf(p.name);
+      return g.side === 'f' && !g.strong;
+    })!;
     expect(genderPass(weakFem.name, opts({ gender: 'f' }))).toBe(false);
     expect(genderPass(weakFem.name, opts({ gender: 'f', genderWeak: true }))).toBe(true);
   });
@@ -142,7 +221,8 @@ describe('打分', () => {
   it('音韵规则真在跑：三字同声调 / 双声 / 叠韵 / 谐音至少各有可命中的样本', () => {
     const rules = new Set<string>();
     for (const sur of ['苏', '林', '江', '周', '张']) {
-      for (const it of POOL) for (const d of scoreItem(sur, it, opts(), 0).deltas) rules.add(d.rule.split('（')[0].split('「')[0]);
+      for (const it of POOL)
+        for (const d of scoreItem(sur, it, opts(), 0).deltas) rules.add(d.rule.split('（')[0].split('「')[0]);
     }
     const hit = (kw: string) => [...rules].some((r) => r.includes(kw));
     expect(hit('声调')).toBe(true);
@@ -172,37 +252,49 @@ describe('批次可达性：换一批必须真能翻遍全池', () => {
     return { p0, seen, uniq: new Set(seen) };
   };
   for (const count of [12, 24, 48]) {
-    it(`每批 ${count} 条：翻满 plan().pages 页不重不漏覆盖全池`, () => {
-      const o = opts({ count });
-      for (const sur of ['苏', '欧阳']) {
-        const { p0, seen, uniq } = sweep(o, sur);
-        expect(p0.pool).toBe(poolSize(o));
-        expect(uniq.size).toBe(p0.pool);
-        expect(seen.length).toBe(p0.pool);
-      }
-    }, SWEEP_TIMEOUT);
+    it(
+      `每批 ${count} 条：翻满 plan().pages 页不重不漏覆盖全池`,
+      () => {
+        const o = opts({ count });
+        for (const sur of ['苏', '欧阳']) {
+          const { p0, seen, uniq } = sweep(o, sur);
+          expect(p0.pool).toBe(poolSize(o));
+          expect(uniq.size).toBe(p0.pool);
+          expect(seen.length).toBe(p0.pool);
+        }
+      },
+      SWEEP_TIMEOUT,
+    );
   }
-  it('首页同书不超过 4 条（否则一屏全被宋词占满）；尾部只剩一本书时由补位轮装满', () => {
-    const o = opts({ count: 12 });
-    const { p0, seen, uniq } = sweep(o, '苏');
-    const per = new Map<string, number>();
-    for (const r of p0.page) per.set(r.book, (per.get(r.book) ?? 0) + 1);
-    for (const [book, n] of per) expect(n, `首页 ${book} ${n} 条`).toBeLessThanOrEqual(4);
-    expect(p0.page.length).toBe(o.count);
-    expect(uniq.size).toBe(seen.length);
-    for (let b = 0; b < p0.pages; b++) {
-      const len = gen('苏', o, b).length;
-      if (b < p0.pages - 1) expect(len, `第 ${b} 页只有 ${len} 条`).toBe(o.count);
-      else expect(len).toBeGreaterThanOrEqual(1);
-    }
-    expect(p0.pages).toBe(Math.ceil(p0.pool / o.count));
-  }, SWEEP_TIMEOUT);
-  it('页码回绕：翻过最后一页回到第 1 页，不会翻出空白', () => {
-    const o = opts({ count: 12 });
-    const { p0 } = sweep(o, '苏');
-    expect(plan('苏', o, p0.pages).page.map((r) => r.id)).toEqual(p0.page.map((r) => r.id));
-    expect(plan('苏', o, p0.pages + 1).pageNo).toBe(1);
-  }, SWEEP_TIMEOUT);
+  it(
+    '首页同书不超过 4 条（否则一屏全被宋词占满）；尾部只剩一本书时由补位轮装满',
+    () => {
+      const o = opts({ count: 12 });
+      const { p0, seen, uniq } = sweep(o, '苏');
+      const per = new Map<string, number>();
+      for (const r of p0.page) per.set(r.book, (per.get(r.book) ?? 0) + 1);
+      for (const [book, n] of per) expect(n, `首页 ${book} ${n} 条`).toBeLessThanOrEqual(4);
+      expect(p0.page.length).toBe(o.count);
+      expect(uniq.size).toBe(seen.length);
+      for (let b = 0; b < p0.pages; b++) {
+        const len = gen('苏', o, b).length;
+        if (b < p0.pages - 1) expect(len, `第 ${b} 页只有 ${len} 条`).toBe(o.count);
+        else expect(len).toBeGreaterThanOrEqual(1);
+      }
+      expect(p0.pages).toBe(Math.ceil(p0.pool / o.count));
+    },
+    SWEEP_TIMEOUT,
+  );
+  it(
+    '页码回绕：翻过最后一页回到第 1 页，不会翻出空白',
+    () => {
+      const o = opts({ count: 12 });
+      const { p0 } = sweep(o, '苏');
+      expect(plan('苏', o, p0.pages).page.map((r) => r.id)).toEqual(p0.page.map((r) => r.id));
+      expect(plan('苏', o, p0.pages + 1).pageNo).toBe(1);
+    },
+    SWEEP_TIMEOUT,
+  );
   it('打分确定：同输入两次结果逐条一致，换一个条件就重算', () => {
     const base = opts({ count: 12 });
     const p1 = plan('苏', base, 0).page.map((r) => r.id);
@@ -385,9 +477,12 @@ describe('检索与排序', () => {
   });
   it('按笔画排序时结果笔画单调不减；按常见度排序时单调不增', () => {
     // 单本典籍、一屏全展开：绕开分页的「同书每页≤4」跨书交织，直接看排序键
-    const only = (sort: Opts['sort']): Opts => opts({
-      count: 0, sort, books: Object.fromEntries(BOOK_ORDER.map((b) => [b, b === 'daofa'])) as Record<Book, boolean>,
-    });
+    const only = (sort: Opts['sort']): Opts =>
+      opts({
+        count: 0,
+        sort,
+        books: Object.fromEntries(BOOK_ORDER.map((b) => [b, b === 'daofa'])) as Record<Book, boolean>,
+      });
     const strokesOf = (name: string) => [...name].reduce((a, ch) => a + (CHARS[ch].st ?? 0), 0);
     const byStroke = plan('苏', only('strokes'), 0).page.map((r) => strokesOf(r.name));
     expect(byStroke.length).toBeGreaterThan(4);
@@ -405,7 +500,9 @@ describe('生成结果的结构约束', () => {
     expect(poolSize(o)).toBe(META.pool_B - 20);
   });
   it('只留一本典籍时，结果全部来自那一本', () => {
-    const only = opts({ books: Object.fromEntries(BOOK_ORDER.map((b) => [b, b === 'daofa'])) as Record<Book, boolean> });
+    const only = opts({
+      books: Object.fromEntries(BOOK_ORDER.map((b) => [b, b === 'daofa'])) as Record<Book, boolean>,
+    });
     expect(poolSize(only)).toBe(META.per_book.daofa);
     for (const r of gen('苏', only, 0)) expect(r.book).toBe('daofa');
   });
@@ -459,7 +556,9 @@ describe('指定用字（mustChar / mustPos）', () => {
   });
   it('单名模式：指定字就是该字本身（有对齐出处才在池）', () => {
     expect(poolSize(opts({ length: 1, mustChar: mc }))).toBe(SINGLES.filter((s) => s.char === mc).length);
-    expect(poolSize(opts({ length: 1, mustChar: mc, mustPos: 'first' }))).toBe(SINGLES.filter((s) => s.char === mc).length);
+    expect(poolSize(opts({ length: 1, mustChar: mc, mustPos: 'first' }))).toBe(
+      SINGLES.filter((s) => s.char === mc).length,
+    );
   });
   it('字不在名用字表时结果为 0——那是事实，不硬凑', () => {
     expect(poolSize(opts({ mustChar: '龘' }))).toBe(0);

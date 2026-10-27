@@ -5,8 +5,14 @@ const SORTS: SortKey[] = ['score', 'strokes', 'popular', 'book'];
 
 // 除 id 外还存一份出处快照：语料更新后 id 尾号可能指向别的名字，靠快照还能找回原来那一条
 export type FavRecord = {
-  id: string; note?: string; group?: string; ts: number;
-  name?: string; book?: Book; title?: string; line?: string;
+  id: string;
+  note?: string;
+  group?: string;
+  ts: number;
+  name?: string;
+  book?: Book;
+  title?: string;
+  line?: string;
 };
 export type Theme = 'light' | 'dark' | 'system';
 
@@ -37,7 +43,9 @@ type StorageListener = () => void;
 const storageListeners = new Set<StorageListener>();
 export function subscribeStorageFailure(fn: StorageListener): () => void {
   storageListeners.add(fn);
-  return () => { storageListeners.delete(fn); };
+  return () => {
+    storageListeners.delete(fn);
+  };
 }
 function markUnavailable() {
   const was = unavailable;
@@ -52,18 +60,36 @@ export function storageUsable(): boolean {
     localStorage.removeItem(probe);
     unavailable = false; // 探测成功说明存储恢复，之前的失败标记不该一直挂着
     return true;
-  } catch { markUnavailable(); return false; }
+  } catch {
+    markUnavailable();
+    return false;
+  }
 }
 
 function readItem(key: string): string | null {
-  try { return localStorage.getItem(key); } catch { markUnavailable(); return null; }
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    markUnavailable();
+    return null;
+  }
 }
 function writeItem(key: string, value: string): boolean {
-  try { localStorage.setItem(key, value); return true; } catch { markUnavailable(); return false; }
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    markUnavailable();
+    return false;
+  }
 }
 
 function readRaw(key: string): unknown {
-  try { return JSON.parse(readItem(key) ?? 'null'); } catch { return null; }
+  try {
+    return JSON.parse(readItem(key) ?? 'null');
+  } catch {
+    return null;
+  }
 }
 
 // 一条收藏的消毒：本机与导入文件走同一套规则。非字符串、超长、未知 book 一律收敛，
@@ -74,13 +100,22 @@ export function sanitizeFav(raw: unknown, index: number): FavRecord | null {
   const r = raw as Record<string, unknown>;
   if (typeof r.id !== 'string' || !r.id) return null;
   const str = (v: unknown, max: number) => (typeof v === 'string' && v ? v.slice(0, max) : undefined);
-  const rec: FavRecord = { id: r.id.slice(0, 64), ts: typeof r.ts === 'number' && Number.isFinite(r.ts) ? r.ts : index };
-  const note = str(r.note, 120); if (note) rec.note = note;
-  const group = str(r.group, 24); if (group) rec.group = group;
-  const name = str(r.name, SNAP.name); if (name) rec.name = name;
-  const title = str(r.title, SNAP.title); if (title) rec.title = title;
-  const line = str(r.line, SNAP.line); if (line) rec.line = line;
-  const book = BOOK_ORDER.find((b) => b === r.book); if (book) rec.book = book;
+  const rec: FavRecord = {
+    id: r.id.slice(0, 64),
+    ts: typeof r.ts === 'number' && Number.isFinite(r.ts) ? r.ts : index,
+  };
+  const note = str(r.note, 120);
+  if (note) rec.note = note;
+  const group = str(r.group, 24);
+  if (group) rec.group = group;
+  const name = str(r.name, SNAP.name);
+  if (name) rec.name = name;
+  const title = str(r.title, SNAP.title);
+  if (title) rec.title = title;
+  const line = str(r.line, SNAP.line);
+  if (line) rec.line = line;
+  const book = BOOK_ORDER.find((b) => b === r.book);
+  if (book) rec.book = book;
   return rec;
 }
 
@@ -99,7 +134,10 @@ export function loadFavorites(): FavRecord[] {
   return out;
 }
 
-const writeFav = (list: FavRecord[]) => { writeItem(K.fav, JSON.stringify(list)); return list; };
+const writeFav = (list: FavRecord[]) => {
+  writeItem(K.fav, JSON.stringify(list));
+  return list;
+};
 export const saveFavorites = (list: FavRecord[]) => writeFav(list);
 export const addFavorite = (id: string, snap?: Partial<FavRecord>): FavRecord[] => {
   const l = loadFavorites();
@@ -125,12 +163,28 @@ function readList(key: string): string[] {
   const v = readRaw(key);
   return Array.isArray(v) ? [...new Set(v.filter((x) => typeof x === 'string'))] : [];
 }
-function writeList(key: string, list: string[]) { writeItem(key, JSON.stringify([...new Set(list)])); }
+function writeList(key: string, list: string[]) {
+  writeItem(key, JSON.stringify([...new Set(list)]));
+}
 
 export const loadBlocklist = () => readList(K.block);
-export const saveBlocklist = (list: string[]) => { writeList(K.block, list); return readList(K.block); };
-export const addBlock = (id: string) => { const l = readList(K.block); if (!l.includes(id)) l.unshift(id); writeList(K.block, l); return l; };
-export const removeBlock = (id: string) => { writeList(K.block, readList(K.block).filter((x) => x !== id)); return readList(K.block); };
+export const saveBlocklist = (list: string[]) => {
+  writeList(K.block, list);
+  return readList(K.block);
+};
+export const addBlock = (id: string) => {
+  const l = readList(K.block);
+  if (!l.includes(id)) l.unshift(id);
+  writeList(K.block, l);
+  return l;
+};
+export const removeBlock = (id: string) => {
+  writeList(
+    K.block,
+    readList(K.block).filter((x) => x !== id),
+  );
+  return readList(K.block);
+};
 
 export const READING_MAX = 9;
 // 读音序号只认 0–9 的整数：引擎只用第 0 个姓字的读音表，更大的序号没有意义。
@@ -151,7 +205,8 @@ export function loadTheme(): Theme {
   return 'system';
 }
 export const saveTheme = (t: Theme) => writeItem(K.theme, t);
-export const prefersDark = () => !!(typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
+export const prefersDark = () =>
+  !!(typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
 export const resolveDark = (t: Theme) => t === 'dark' || (t === 'system' && prefersDark());
 export const THEME_ORDER: Theme[] = ['light', 'dark', 'system'];
 export const THEME_LABEL: Record<Theme, string> = { light: '浅色', dark: '深色', system: '跟随系统' };
@@ -160,11 +215,22 @@ export const THEME_LABEL: Record<Theme, string> = { light: '浅色', dark: '深�
 const POP_VALUES = POP_FLOORS.map((p) => p.v);
 
 const DEFAULT: Opts = {
-  gender: 'any', genderWeak: false, length: 2,
+  gender: 'any',
+  genderWeak: false,
+  length: 2,
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
-  redupOnly: false, exclude: [], count: 12, search: '', title: '', sort: 'score',
-  strokeMax: 0, noMonotone: false, popFloor: 0,
-  mustChar: '', mustPos: 'any', avoidChars: '',
+  redupOnly: false,
+  exclude: [],
+  count: 12,
+  search: '',
+  title: '',
+  sort: 'score',
+  strokeMax: 0,
+  noMonotone: false,
+  popFloor: 0,
+  mustChar: '',
+  mustPos: 'any',
+  avoidChars: '',
 };
 export { DEFAULT as DEFAULT_OPTS };
 
@@ -172,7 +238,8 @@ export { DEFAULT as DEFAULT_OPTS };
 // 本机存储、导入文件、分享链接三条输入路径共用这一个函数（transfer.ts 从这里导入）。
 const GENDERS: Gender[] = ['any', 'f', 'm'];
 const MUST_POS = ['any', 'first', 'last'] as const;
-const intIn = (n: unknown, min: number, max: number) => typeof n === 'number' && Number.isInteger(n) && n >= min && n <= max ? n : undefined;
+const intIn = (n: unknown, min: number, max: number) =>
+  typeof n === 'number' && Number.isInteger(n) && n >= min && n <= max ? n : undefined;
 const pickOne = <T extends string>(v: unknown, candidates: readonly T[]): T | undefined =>
   typeof v === 'string' && (candidates as readonly string[]).includes(v) ? (v as T) : undefined;
 
@@ -182,7 +249,7 @@ const isHanChar = (v: unknown): v is string => typeof v === 'string' && [...v].l
 export function sanitizeOpts(raw: unknown): Opts {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Partial<Opts> & { books?: Partial<Opts['books']> };
   const books: Record<Book, boolean> = {} as Record<Book, boolean>;
-  for (const b of BOOK_ORDER) books[b] = typeof o.books?.[b] === 'boolean' ? o.books[b] as boolean : DEFAULT.books[b];
+  for (const b of BOOK_ORDER) books[b] = typeof o.books?.[b] === 'boolean' ? (o.books[b] as boolean) : DEFAULT.books[b];
   // 长度只认 1（其余取值一律回 2）；叠词开关只在双名模式下有效
   const length = o.length === 1 ? 1 : 2;
   const pop = intIn(o.popFloor, 0, 2000);
@@ -208,11 +275,35 @@ export function sanitizeOpts(raw: unknown): Opts {
 }
 
 export function loadOpts(): Opts {
-  try { return sanitizeOpts(readRaw(K.opts)); } catch { return DEFAULT; }
+  try {
+    return sanitizeOpts(readRaw(K.opts));
+  } catch {
+    return DEFAULT;
+  }
 }
 // 写出去之前先过一遍与读回来同样的收敛规则：只这样读写两侧才不会分叉（今天 opts 只能来自已清洗的值，
 // 但任何新的写入口一旦漏清洗就会把超限的禁用字或非汉字写进存储，读回来才发现，等于把脏数据先落盘）。
-export const saveOpts = (o: Opts) => writeItem(K.opts, JSON.stringify({ gender: o.gender, genderWeak: o.genderWeak, length: o.length, redupOnly: o.redupOnly, books: o.books, count: o.count, search: o.search.slice(0, SEARCH_MAX), sort: o.sort, strokeMax: o.strokeMax, noMonotone: o.noMonotone, popFloor: o.popFloor, mustChar: isHanChar(o.mustChar) ? o.mustChar : DEFAULT.mustChar, mustPos: o.mustPos, avoidChars: cleanAvoid(o.avoidChars), title: (o.title ?? '').slice(0, TITLE_MAX) }));
+export const saveOpts = (o: Opts) =>
+  writeItem(
+    K.opts,
+    JSON.stringify({
+      gender: o.gender,
+      genderWeak: o.genderWeak,
+      length: o.length,
+      redupOnly: o.redupOnly,
+      books: o.books,
+      count: o.count,
+      search: o.search.slice(0, SEARCH_MAX),
+      sort: o.sort,
+      strokeMax: o.strokeMax,
+      noMonotone: o.noMonotone,
+      popFloor: o.popFloor,
+      mustChar: isHanChar(o.mustChar) ? o.mustChar : DEFAULT.mustChar,
+      mustPos: o.mustPos,
+      avoidChars: cleanAvoid(o.avoidChars),
+      title: (o.title ?? '').slice(0, TITLE_MAX),
+    }),
+  );
 
 export type ComposeDraft = { length: 1 | 2; chars: string[]; free: boolean };
 export function loadCompose(): ComposeDraft {

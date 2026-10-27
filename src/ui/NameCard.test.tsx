@@ -6,10 +6,22 @@ import { POOL } from '../engine/data';
 import { BOOK_LABEL, BOOK_ORDER, type Opts } from '../engine/types';
 
 const opts: Opts = {
-  gender: 'any', genderWeak: false, length: 2,
+  gender: 'any',
+  genderWeak: false,
+  length: 2,
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
-  redupOnly: false, exclude: [], count: 12, search: '', title: '', sort: 'score',
-  strokeMax: 0, noMonotone: false, popFloor: 0, mustChar: '', mustPos: 'any', avoidChars: '',
+  redupOnly: false,
+  exclude: [],
+  count: 12,
+  search: '',
+  title: '',
+  sort: 'score',
+  strokeMax: 0,
+  noMonotone: false,
+  popFloor: 0,
+  mustChar: '',
+  mustPos: 'any',
+  avoidChars: '',
 };
 
 // 挑一个两个字都有字义的名，稳定断言字义出现在卡片上
@@ -31,8 +43,13 @@ describe('NameCard 组件', () => {
     expect(lineGlossOf(r).length).toBeGreaterThan(0);
   });
   it('收藏/拉黑/分享/复制按钮回调到父级', () => {
-    const onFav = vi.fn(); const onBlock = vi.fn(); const onShare = vi.fn(); const onCopy = vi.fn();
-    render(<NameCard r={r} fav={false} blocked={false} onFav={onFav} onBlock={onBlock} onShare={onShare} onCopy={onCopy} />);
+    const onFav = vi.fn();
+    const onBlock = vi.fn();
+    const onShare = vi.fn();
+    const onCopy = vi.fn();
+    render(
+      <NameCard r={r} fav={false} blocked={false} onFav={onFav} onBlock={onBlock} onShare={onShare} onCopy={onCopy} />,
+    );
     fireEvent.click(screen.getByRole('button', { name: '收藏' }));
     fireEvent.click(screen.getByRole('button', { name: '拉黑' }));
     fireEvent.click(screen.getByRole('button', { name: '分享卡' }));

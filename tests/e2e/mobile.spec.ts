@@ -2,7 +2,10 @@ import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
 // 手机端：iPhone 12/13 的 390×844 与最窄的 320（旧 iPhone SE / 小屏安卓）都跑一遍
-const VIEWPORTS = [{ width: 390, height: 844 }, { width: 320, height: 640 }];
+const VIEWPORTS = [
+  { width: 390, height: 844 },
+  { width: 320, height: 640 },
+];
 
 for (const vp of VIEWPORTS) {
   test.describe(`手机 ${vp.width}×${vp.height}`, () => {
@@ -13,9 +16,7 @@ for (const vp of VIEWPORTS) {
         await page.goto(path);
         if (path === '/') await page.getByLabel('姓（可复姓）').fill('苏');
         await expect(page.locator('body')).toBeVisible();
-        const w = await page.evaluate(() => Math.max(
-          document.documentElement.scrollWidth, document.body.scrollWidth,
-        ));
+        const w = await page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth));
         expect(w, `${path} 出现横向滚动（${w}px > ${vp.width}px）`).toBeLessThanOrEqual(vp.width);
       }
     });
@@ -23,17 +24,23 @@ for (const vp of VIEWPORTS) {
     test('输入框字号 ≥15px（否则手机端浏览器会自动放大页面）', async ({ page }) => {
       await page.goto('/');
       await page.getByLabel('姓（可复姓）').fill('苏');
-      const sizes = await page.evaluate(() => Array.from(document.querySelectorAll('input, select, textarea'))
-        .filter((el) => !(el instanceof HTMLInputElement && el.type === 'file'))
-        .map((el) => ({
-          tag: el.tagName.toLowerCase(),
-          label: el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.closest('label')?.textContent || '',
-          px: parseFloat(getComputedStyle(el).fontSize),
-        })));
+      const sizes = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('input, select, textarea'))
+          .filter((el) => !(el instanceof HTMLInputElement && el.type === 'file'))
+          .map((el) => ({
+            tag: el.tagName.toLowerCase(),
+            label:
+              el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.closest('label')?.textContent || '',
+            px: parseFloat(getComputedStyle(el).fontSize),
+          })),
+      );
       // 至少要量到姓、搜索、篇名三个常驻输入框，并且姓那一个必须在里面；
       // 否则「一个都没量到」也能空过的断言就没意义了
       expect(sizes.length).toBeGreaterThanOrEqual(3);
-      expect(sizes.find((s) => s.label.includes('姓')), '姓输入框没被量到（label 改名了？）').toBeTruthy();
+      expect(
+        sizes.find((s) => s.label.includes('姓')),
+        '姓输入框没被量到（label 改名了？）',
+      ).toBeTruthy();
       const tooSmall = sizes.filter((s) => s.px < 15);
       expect(tooSmall, JSON.stringify(tooSmall)).toEqual([]);
     });
@@ -53,7 +60,9 @@ for (const vp of VIEWPORTS) {
       await page.getByLabel('姓（可复姓）').fill('苏');
       await expect(page.locator('article').first()).toBeVisible();
       await expect(page.locator('html')).toHaveClass(/dark/);
-      const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+      const { violations } = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+        .analyze();
       const bad = violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
       expect(bad, bad.map((v) => `${v.id}: ${v.help}（${v.nodes.length} 处）`).join('\n')).toEqual([]);
     });

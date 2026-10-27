@@ -5,14 +5,22 @@ import { DEFAULT_OPTS } from '../store/local';
 import { findCombo } from '../engine/name';
 
 const baseProps = () => ({
-  surname: '', setSurname: vi.fn(), reading: 0, setReading: vi.fn(),
+  surname: '',
+  setSurname: vi.fn(),
+  reading: 0,
+  setReading: vi.fn(),
   opts: { ...DEFAULT_OPTS, exclude: [] },
   fav: new Set<string>(),
-  onFav: vi.fn(), onShare: vi.fn(), onCopy: vi.fn(),
+  onFav: vi.fn(),
+  onShare: vi.fn(),
+  onCopy: vi.fn(),
 });
 
 beforeEach(() => localStorage.clear());
-afterEach(() => { vi.restoreAllMocks(); localStorage.clear(); });
+afterEach(() => {
+  vi.restoreAllMocks();
+  localStorage.clear();
+});
 
 const pickChar = (slot: 1 | 2, ch: string) => {
   fireEvent.click(screen.getByLabelText(`选择第 ${slot} 字`));
@@ -86,7 +94,9 @@ describe('自选页', () => {
     render(<Compose {...p} />);
     fireEvent.click(screen.getByRole('button', { name: '换一批随机' }));
     expect(screen.getByText(/都有典籍出处/)).toBeInTheDocument();
-    const chips = screen.getAllByRole('button').filter((b) => /· (诗经|楚辞|论语|唐诗|宋词|道法)/.test(b.textContent ?? ''));
+    const chips = screen
+      .getAllByRole('button')
+      .filter((b) => /· (诗经|楚辞|论语|唐诗|宋词|道法)/.test(b.textContent ?? ''));
     expect(chips.length).toBeGreaterThan(0);
     fireEvent.click(chips[0]);
     expect(screen.getByRole('heading', { name: /苏./ })).toBeInTheDocument();

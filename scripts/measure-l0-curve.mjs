@@ -9,30 +9,60 @@ const RAW = 'data/raw';
 const NOT_CJK = /[^一-鿿]/g;
 const read = (p) => fs.readFileSync(path.join(RAW, p), 'utf-8');
 const json = (p) => JSON.parse(read(p));
-const loadCharList = (p) => read(p).split('\n').map((l) => l.trim()).filter(Boolean)
-  .map((l) => { const q = l.split(/\s+/); return q.length === 2 && /^\d+$/.test(q[0]) ? q[1] : l; });
+const loadCharList = (p) =>
+  read(p)
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => {
+      const q = l.split(/\s+/);
+      return q.length === 2 && /^\d+$/.test(q[0]) ? q[1] : l;
+    });
 
 const WH1 = new Set(loadCharList('gsc_level_1.txt'));
 const WH2 = new Set(loadCharList('gsc_level_2.txt'));
 const WH3 = new Set(loadCharList('gsc_level_3.txt'));
 const WH123 = new Set([...WH1, ...WH2, ...WH3]);
 const XUCI = new Set('兮之以太其于而则且亦何斯夫惟维矣乎焉哉也矣耶欤矣噫只且'.split(''));
-const FUNC = new Set('的了是在有他不这我都还说法把让向对为等与就只很更最些什么样怎么如果但是因为所以而且并且或者被它你们我们他们它们有个之以及然而则即便共'.split(''));
+const FUNC = new Set(
+  '的了是在有他不这我都还说法把让向对为等与就只很更最些什么样怎么如果但是因为所以而且并且或者被它你们我们他们它们有个之以及然而则即便共'.split(
+    '',
+  ),
+);
 const XU = new Set([...XUCI, ...FUNC]);
-const BAD = new Set('胸鬼懒禽鸟鸡我邪罪凶丑仇鼠蟋蟀淫秽妹狐鸭蝇悔鱼肉苦犬吠窥血丧饥搔父母昏狗蟊疾病痛死潦哀痒害蛇牲妇狸鹅穴畜烂兽靡爪氓劫鬣婚姻匪婆羞辱'.split('').filter((c) => WH123.has(c)));
+const BAD = new Set(
+  '胸鬼懒禽鸟鸡我邪罪凶丑仇鼠蟋蟀淫秽妹狐鸭蝇悔鱼肉苦犬吠窥血丧饥搔父母昏狗蟊疾病痛死潦哀痒害蛇牲妇狸鹅穴畜烂兽靡爪氓劫鬣婚姻匪婆羞辱'
+    .split('')
+    .filter((c) => WH123.has(c)),
+);
 const wf = new Map();
-for (const line of read('jieba_dict.txt').split('\n')) { const p = line.split(' '); if (p.length >= 3) wf.set(p[0], Number(p[1])); }
-const attrs = json('cnname_attributes.json'); const ad = attrs.dict ?? attrs;
+for (const line of read('jieba_dict.txt').split('\n')) {
+  const p = line.split(' ');
+  if (p.length >= 3) wf.set(p[0], Number(p[1]));
+}
+const attrs = json('cnname_attributes.json');
+const ad = attrs.dict ?? attrs;
 // 与 build-data 同口径：cnname 全表字 ∩ 通用规范字表(WH123)，再并入 l0-verdicts.txt 的人工保留字。
-const SEED = buildL0([...new Set(Object.values(ad).filter((v) => typeof v === 'string').join('').split(''))].filter((c) => WH123.has(c)));
+const SEED = buildL0(
+  [
+    ...new Set(
+      Object.values(ad)
+        .filter((v) => typeof v === 'string')
+        .join('')
+        .split(''),
+    ),
+  ].filter((c) => WH123.has(c)),
+);
 
 const BOOKS = ['shijing', 'chuci', 'lunyu', 'shuimo', 'song300', 'daofa'];
 function offsets(book, n) {
-  if (book === 'shijing' || book === 'shuimo') return ({ 4: [0, 2], 5: [0, 2], 7: [0, 2, 4] })[n] ?? [...Array(n - 1).keys()];
-  if (book === 'chuci') return ({ 4: [0, 2], 5: [0, 3], 7: [0, 2, 4] })[n] ?? [...Array(n - 1).keys()];
+  if (book === 'shijing' || book === 'shuimo')
+    return { 4: [0, 2], 5: [0, 2], 7: [0, 2, 4] }[n] ?? [...Array(n - 1).keys()];
+  if (book === 'chuci') return { 4: [0, 2], 5: [0, 3], 7: [0, 2, 4] }[n] ?? [...Array(n - 1).keys()];
   return [...Array(n - 1).keys()];
 }
-const SPLIT = /[。！？；]/, COMMA = /[，、：]/;
+const SPLIT = /[。！？；]/,
+  COMMA = /[，、：]/;
 const inRedup = (cs, i) => (i > 0 && cs[i - 1] === cs[i]) || (i < cs.length - 1 && cs[i + 1] === cs[i]);
 function rawText(book) {
   const j = json(`${book}.json`);
@@ -47,7 +77,8 @@ for (const book of BOOKS) {
   const texts = rawText(book);
   for (let ti = 0; ti < texts.length; ti++) {
     for (const line of String(texts[ti]).split(SPLIT)) {
-      const t = line.trim(); if (!t) continue;
+      const t = line.trim();
+      if (!t) continue;
       for (const u of t.split(COMMA)) {
         const cleaned = u.replace(/[“”‘’「」《》（）()]/g, '').trim();
         if (!cleaned) continue;
@@ -62,13 +93,17 @@ for (const book of BOOKS) {
 
 // 定稿口径下的合法双名集合（含两道减法，按「该对有没有任一次干净出现」判定）
 function pool(L0) {
-  const clean = new Set(), dirty = new Set();
-  const ok = (p) => [...p].every((c) => L0.has(c)) && ![...p].some((c) => XU.has(c) || BAD.has(c)) && (wf.get(p) ?? 0) < 5000;
+  const clean = new Set(),
+    dirty = new Set();
+  const ok = (p) =>
+    [...p].every((c) => L0.has(c)) && ![...p].some((c) => XU.has(c) || BAD.has(c)) && (wf.get(p) ?? 0) < 5000;
   for (const u of units) {
     for (const i of offsets(u.book, u.cs.length)) {
       for (let gap = 1; gap <= 3; gap++) {
-        const j = i + gap; if (j >= u.cs.length) break;
-        const p = u.cs[i] + u.cs[j]; if (!ok(p)) continue;
+        const j = i + gap;
+        if (j >= u.cs.length) break;
+        const p = u.cs[i] + u.cs[j];
+        if (!ok(p)) continue;
         const glue = gap > 1 && (inRedup(u.cs, i) || inRedup(u.cs, j));
         const fake = p[0] === p[1] && gap > 1;
         (glue || fake ? dirty : clean).add(p);
@@ -82,19 +117,29 @@ function pool(L0) {
 // 单名：L0 字中「在任一音步起点上出现过」的字（build-data 还要求能配到出处，这里用同一近似）
 function singles(L0) {
   const s = new Set();
-  for (const u of units) for (const i of offsets(u.book, u.cs.length)) if (L0.has(u.cs[i]) && !XU.has(u.cs[i]) && !BAD.has(u.cs[i])) s.add(u.cs[i]);
+  for (const u of units)
+    for (const i of offsets(u.book, u.cs.length))
+      if (L0.has(u.cs[i]) && !XU.has(u.cs[i]) && !BAD.has(u.cs[i])) s.add(u.cs[i]);
   return s.size;
 }
 
 // 混合层：一个 L0 字 + 一个一级字（Pool-B 之外的下一档，实测其规模）
 function mix(L0) {
   const seen = new Set();
-  const ok = (a, b) => L0.has(a) && WH1.has(b) && !L0.has(b) && ![a, b].some((c) => XU.has(c) || BAD.has(c)) && (wf.get(a + b) ?? 0) < 5000 && (wf.get(b + a) ?? 0) < 5000;
+  const ok = (a, b) =>
+    L0.has(a) &&
+    WH1.has(b) &&
+    !L0.has(b) &&
+    ![a, b].some((c) => XU.has(c) || BAD.has(c)) &&
+    (wf.get(a + b) ?? 0) < 5000 &&
+    (wf.get(b + a) ?? 0) < 5000;
   for (const u of units) {
     for (const i of offsets(u.book, u.cs.length)) {
       for (let gap = 1; gap <= 3; gap++) {
-        const j = i + gap; if (j >= u.cs.length) break;
-        const a = u.cs[i], b = u.cs[j];
+        const j = i + gap;
+        if (j >= u.cs.length) break;
+        const a = u.cs[i],
+          b = u.cs[j];
         if (gap > 1 && (inRedup(u.cs, i) || inRedup(u.cs, j))) continue;
         if (a === b) continue;
         if (ok(a, b)) seen.add(a + b);
@@ -106,16 +151,21 @@ function mix(L0) {
 }
 
 // 扩充集 A：按典籍内高频（音步起点出现次数）挑字；扩充集 B：按现代词频代理（jieba 单字频率）挑字
-const cfFoot = new Map(), cfAny = new Map();
+const cfFoot = new Map(),
+  cfAny = new Map();
 for (const u of units) {
   for (let k = 0; k < u.cs.length; k++) {
-    const c = u.cs[k]; if (!WH1.has(c) || XU.has(c) || BAD.has(c) || SEED.has(c)) continue;
+    const c = u.cs[k];
+    if (!WH1.has(c) || XU.has(c) || BAD.has(c) || SEED.has(c)) continue;
     cfAny.set(c, (cfAny.get(c) ?? 0) + 1);
     if (offsets(u.book, u.cs.length).includes(k)) cfFoot.set(c, (cfFoot.get(c) ?? 0) + 1);
   }
 }
 const sf = new Map();
-for (const c of WH1) { if (XU.has(c) || BAD.has(c) || SEED.has(c)) continue; sf.set(c, wf.get(c) ?? 0); }
+for (const c of WH1) {
+  if (XU.has(c) || BAD.has(c) || SEED.has(c)) continue;
+  sf.set(c, wf.get(c) ?? 0);
+}
 const byFoot = [...cfFoot.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c);
 const byMod = [...sf.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c);
 
@@ -128,12 +178,20 @@ if (base.pair !== meta.pool_B) {
   process.exit(1);
 }
 const pad = (s, n) => String(s).padStart(n);
-console.log(`句读单元 ${units.length}｜种子 L0 ${SEED.size} 字｜一级字表 ${WH1.size}｜其中可用于扩充（非虚词非忌讳）${byMod.length}\n`);
-console.log(`${pad('L0', 6)} ${pad('Pool-B双名', 12)} ${pad('单名', 8)} ${pad('合计', 8)} ${pad('混合层', 10)}  扩充来源=典籍音步高频 ∪ 现代高频(交替)`);
+console.log(
+  `句读单元 ${units.length}｜种子 L0 ${SEED.size} 字｜一级字表 ${WH1.size}｜其中可用于扩充（非虚词非忌讳）${byMod.length}\n`,
+);
+console.log(
+  `${pad('L0', 6)} ${pad('Pool-B双名', 12)} ${pad('单名', 8)} ${pad('合计', 8)} ${pad('混合层', 10)}  扩充来源=典籍音步高频 ∪ 现代高频(交替)`,
+);
 for (const n of sizes) {
   const extra = n - SEED.size;
   if (extra < 0) continue;
   const B = new Set([...SEED, ...byMod.slice(0, Math.ceil(extra / 2)), ...byFoot.slice(0, Math.floor(extra / 2))]);
-  const p = pool(B), s = singles(B), m = mix(B);
-  console.log(`${pad(B.size, 6)} ${pad(p.pair, 12)} ${pad(s, 8)} ${pad(p.pair + s, 8)} ${pad(m, 10)}  (另剔 ${p.removed} 条粘连/假叠字)`);
+  const p = pool(B),
+    s = singles(B),
+    m = mix(B);
+  console.log(
+    `${pad(B.size, 6)} ${pad(p.pair, 12)} ${pad(s, 8)} ${pad(p.pair + s, 8)} ${pad(m, 10)}  (另剔 ${p.removed} 条粘连/假叠字)`,
+  );
 }

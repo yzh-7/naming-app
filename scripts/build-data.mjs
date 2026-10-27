@@ -6,16 +6,22 @@ import { createHash } from 'node:crypto';
 import { pinyin } from 'pinyin-pro';
 import { NAME_NOISE } from './name-noise.mjs';
 
-
 const RAW = 'data/raw';
 const OUT = 'src/data';
 const NOT_CJK = /[^一-鿿]/g;
 
 // 语料指纹：SHA256SUMS 清单本身的哈希。输入变了指纹就变，供 meta.json、verify 与页脚三处共用。
-const corpusSha = createHash('sha256').update(fs.readFileSync(path.join(RAW, 'SHA256SUMS'))).digest('hex').slice(0, 12);
+const corpusSha = createHash('sha256')
+  .update(fs.readFileSync(path.join(RAW, 'SHA256SUMS')))
+  .digest('hex')
+  .slice(0, 12);
 
-function read(p) { return fs.readFileSync(path.join(RAW, p), 'utf-8'); }
-function json(p) { return JSON.parse(read(p)); }
+function read(p) {
+  return fs.readFileSync(path.join(RAW, p), 'utf-8');
+}
+function json(p) {
+  return JSON.parse(read(p));
+}
 
 function loadCharList(p) {
   const out = [];
@@ -35,15 +41,23 @@ const WH123 = new Set([...WH1, ...WH2, ...WH3]);
 const WH12 = new Set([...WH1, ...WH2]);
 
 // 派生自开放词典/姓名语料（scripts/derive-dict.mjs，见 LICENSES.md）：笔画·结构、字义、名用字频次
-const SHAPE = json('dict_shape.json');           // 字 → [笔画, 结构名]
-const GLOSS = json('dict_gloss.json');           // 字 → 短字义（本义优先）
+const SHAPE = json('dict_shape.json'); // 字 → [笔画, 结构名]
+const GLOSS = json('dict_gloss.json'); // 字 → 短字义（本义优先）
 const GIVEN_FREQ = json('name_given_freq.json'); // 字 → 真实姓名里的用字次数
 
 // 虚词 / 现代功能词 / 忌讳字：与测量脚本同源
 const XUCI = new Set('兮之以太其于而则且亦何斯夫惟维矣乎焉哉也矣耶欤矣噫只且'.split(''));
-const FUNC = new Set('的了是在有他不这我都还说法把让向对为等与就只很更最些什么样怎么如果但是因为所以而且并且或者被它你们我们他们它们有个之以及然而则即便共'.split(''));
+const FUNC = new Set(
+  '的了是在有他不这我都还说法把让向对为等与就只很更最些什么样怎么如果但是因为所以而且并且或者被它你们我们他们它们有个之以及然而则即便共'.split(
+    '',
+  ),
+);
 const XU = new Set([...XUCI, ...FUNC]);
-const BAD = new Set('胸鬼懒禽鸟鸡我邪罪凶丑仇鼠蟋蟀淫秽妹狐鸭蝇悔鱼肉苦犬吠窥血丧饥搔父母昏狗蟊疾病痛死潦哀痒害蛇牲妇狸鹅穴畜烂兽靡爪氓劫鬣婚姻匪婆羞辱'.split('').filter((c) => WH123.has(c)));
+const BAD = new Set(
+  '胸鬼懒禽鸟鸡我邪罪凶丑仇鼠蟋蟀淫秽妹狐鸭蝇悔鱼肉苦犬吠窥血丧饥搔父母昏狗蟊疾病痛死潦哀痒害蛇牲妇狸鹅穴畜烂兽靡爪氓劫鬣婚姻匪婆羞辱'
+    .split('')
+    .filter((c) => WH123.has(c)),
+);
 
 // 词频与字频（jieba 词典，MIT，仅构建期）
 const wf = new Map();
@@ -71,7 +85,16 @@ const attrs = json('cnname_attributes.json');
 const attrDict = attrs.dict ?? attrs;
 const femaleSet = new Set((attrDict.female ?? '').split(''));
 const maleSet = new Set((attrDict.male ?? '').split(''));
-const L0_SEED = new Set([...new Set(Object.values(attrDict).filter((v) => typeof v === 'string').join('').split(''))].filter((c) => WH123.has(c)));
+const L0_SEED = new Set(
+  [
+    ...new Set(
+      Object.values(attrDict)
+        .filter((v) => typeof v === 'string')
+        .join('')
+        .split(''),
+    ),
+  ].filter((c) => WH123.has(c)),
+);
 
 // 人工过字结果（待审表「复制判定结果」的原文）。文件不存在＝只用种子，池子维持 463 条。
 // 判定文本是外部输入，先逐字校验再入表：不在一级字表、是虚词、是忌讳字、同一字既保留又剔除——都在构建期炸掉，
@@ -80,7 +103,16 @@ const VERDICT_FILE = 'l0-verdicts.txt';
 const parseVerdicts = (text) => {
   const grab = (label) => {
     const m = text.match(new RegExp(`^${label}=([\\s\\S]*?)(?=\\n(?=#|保留=|剔除=|待判=|预计)|$)`, 'm'));
-    return m ? [...new Set(m[1].replace(/[^一-鿿]/g, '').split('').filter(Boolean))] : [];
+    return m
+      ? [
+          ...new Set(
+            m[1]
+              .replace(/[^一-鿿]/g, '')
+              .split('')
+              .filter(Boolean),
+          ),
+        ]
+      : [];
   };
   return { keep: grab('保留'), drop: grab('剔除') };
 };
@@ -96,7 +128,10 @@ if (fs.existsSync(path.join(RAW, VERDICT_FILE))) {
   verdicts = { keep, drop, sha: createHash('sha256').update(text).digest('hex').slice(0, 16) };
 }
 const L0 = new Set(verdicts ? [...L0_SEED, ...verdicts.keep] : L0_SEED);
-if (verdicts) console.log(`L0 白名单＝种子 ${L0_SEED.size} ＋ 人工保留 ${verdicts.keep.length} 字（剔除 ${verdicts.drop.length}）＝ ${L0.size} 字，判定文本 ${verdicts.sha}`);
+if (verdicts)
+  console.log(
+    `L0 白名单＝种子 ${L0_SEED.size} ＋ 人工保留 ${verdicts.keep.length} 字（剔除 ${verdicts.drop.length}）＝ ${L0.size} 字，判定文本 ${verdicts.sha}`,
+  );
 else console.log(`L0 白名单＝种子 ${L0_SEED.size} 字（未找到 ${VERDICT_FILE}，用种子版）`);
 
 const BOOKS = [
@@ -115,8 +150,9 @@ const MAX_GAP = 3;
 
 // 音步按体裁配，不按字数配（这是自审时改掉的 bug）
 function offsets(book, n) {
-  if (book === 'shijing' || book === 'shuimo' || book === 'yuefu') return ({ 4: [0, 2], 5: [0, 2], 7: [0, 2, 4] })[n] ?? [...Array(n - 1).keys()];
-  if (book === 'chuci') return ({ 4: [0, 2], 5: [0, 3], 7: [0, 2, 4] })[n] ?? [...Array(n - 1).keys()];
+  if (book === 'shijing' || book === 'shuimo' || book === 'yuefu')
+    return { 4: [0, 2], 5: [0, 2], 7: [0, 2, 4] }[n] ?? [...Array(n - 1).keys()];
+  if (book === 'chuci') return { 4: [0, 2], 5: [0, 3], 7: [0, 2, 4] }[n] ?? [...Array(n - 1).keys()];
   return [...Array(n - 1).keys()];
 }
 
@@ -126,11 +162,12 @@ const SPLIT = /[。！？；]/;
 const inRedup = (cs, i) => (i > 0 && cs[i - 1] === cs[i]) || (i < cs.length - 1 && cs[i + 1] === cs[i]);
 const COMMA = /[，、：]/;
 // 语料各句本身带标点，用「，」拼接后会出现行首多余标点与「：，」这类叠标点；只影响展示，不影响取词
-const tidy = (s) => s
-  .replace(/^[\s，、：；]+/, '')
-  .replace(/[\s，、：；]+$/, '')
-  .replace(/([：；])[\s，、：；]+/g, '$1')
-  .replace(/([，、])[\s，、：；]+/g, '$1');
+const tidy = (s) =>
+  s
+    .replace(/^[\s，、：；]+/, '')
+    .replace(/[\s，、：；]+$/, '')
+    .replace(/([：；])[\s，、：；]+/g, '$1')
+    .replace(/([，、])[\s，、：；]+/g, '$1');
 
 // 道法的一条目里放的是同一章/卦里互不相干的几个句读，用「，」拼会造出一个原文里没有的连读长句，
 // 所以按「。」拼——拼完正好被 SPLIT 还原成各自的出处行。
@@ -152,9 +189,13 @@ function rawMeta(book) {
 
 const unitCounts = {};
 const unitsByBook = {};
-for (const b of BOOKS) { unitCounts[b.key] = new Map(); unitsByBook[b.key] = { segs: 0, chars: 0 }; }
+for (const b of BOOKS) {
+  unitCounts[b.key] = new Map();
+  unitsByBook[b.key] = { segs: 0, chars: 0 };
+}
 const foot = new Map();
-let sent = 0, segChars = 0;
+let sent = 0,
+  segChars = 0;
 
 for (const { key: book } of BOOKS) {
   const texts = rawText(book);
@@ -215,7 +256,10 @@ for (const [p] of pB_noise) pB.delete(p);
 const pB_rep = [...pB].filter(([p, v]) => p[0] === p[1] && v.gap > 1);
 for (const [p] of pB_rep) pB.delete(p);
 const pC_all = poolOf(foot, WH1);
-pC_all.forEach((v, k) => { if (BAD.has(k[0]) || BAD.has(k[1]) || NOISE.has(k) || (wf.get(k) ?? 0) >= 5000 || (k[0] === k[1] && v.gap > 1)) pC_all.delete(k); });
+pC_all.forEach((v, k) => {
+  if (BAD.has(k[0]) || BAD.has(k[1]) || NOISE.has(k) || (wf.get(k) ?? 0) >= 5000 || (k[0] === k[1] && v.gap > 1))
+    pC_all.delete(k);
+});
 // pMix：一个雅字（L0）带一个一级字。全量 Pool-C 只测规模、不随包发布（体积预算见 6.1）
 const pMix = new Map();
 for (const [pair, v] of pC_all) if (L0.has(pair[0]) || L0.has(pair[1])) pMix.set(pair, v);
@@ -227,21 +271,34 @@ const sameShape = [...pB].filter(([p]) => (wf.get(p) ?? 0) >= 500);
 const lineThreshold = {};
 for (const { key } of BOOKS) {
   const arr = [...unitCounts[key].values()].sort((a, b) => a - b);
-  if (!arr.length) { lineThreshold[key] = Infinity; continue; }
+  if (!arr.length) {
+    lineThreshold[key] = Infinity;
+    continue;
+  }
   const q = arr[Math.floor(arr.length * 0.9)] ?? arr[arr.length - 1];
   lineThreshold[key] = Math.max(2, q);
 }
 
-const syllable = (ch) => pinyin(ch, { toneType: 'none', type: 'string', multiple: true }).split(/[,\s]+/).filter(Boolean);
-const marked = (ch) => pinyin(ch, { toneType: 'default', type: 'string', multiple: true }).split(/[,\s]+/).filter(Boolean);
-const numbered = (ch) => pinyin(ch, { toneType: 'num', type: 'string', multiple: true }).split(/[,\s]+/).filter(Boolean);
+const syllable = (ch) =>
+  pinyin(ch, { toneType: 'none', type: 'string', multiple: true })
+    .split(/[,\s]+/)
+    .filter(Boolean);
+const marked = (ch) =>
+  pinyin(ch, { toneType: 'default', type: 'string', multiple: true })
+    .split(/[,\s]+/)
+    .filter(Boolean);
+const numbered = (ch) =>
+  pinyin(ch, { toneType: 'num', type: 'string', multiple: true })
+    .split(/[,\s]+/)
+    .filter(Boolean);
 
 // 一条读音＝一个带调音节。toneType:'none' 会把同音节的四声去重（解 jie3·jie4·xie4 只剩 jie xie），
 // 所以不能拿它当逐读音列表，否则 syl/mark/tone 三个数组错位：478 个字的第 2 条读音起标成别的音节。
 function readingsOf(ch) {
   const pm = marked(ch);
   const num = numbered(ch);
-  if (!pm.length || pm.length !== num.length) throw new Error(`读音表错位：${ch} default=${pm.length} num=${num.length}`);
+  if (!pm.length || pm.length !== num.length)
+    throw new Error(`读音表错位：${ch} default=${pm.length} num=${num.length}`);
   return pm.map((mark, i) => ({ syl: num[i].replace(/\d+$/, ''), mark, tone: Number(num[i].match(/\d+$/)?.[0]) || 0 }));
 }
 
@@ -256,8 +313,14 @@ function genderClass(name) {
   return (f ? 'f' : 'm') + (f + m === s.length ? '.strong' : '.weak');
 }
 
-const ascii = (title) => pinyin(title || 'x', { toneType: 'none', type: 'string' }).replace(/[^a-z]/gi, '').toLowerCase() || 'x';
-const sortPairs = (m) => [...m.entries()].sort((a, b) => (a[1].book < b[1].book ? -1 : a[1].book > b[1].book ? 1 : a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+const ascii = (title) =>
+  pinyin(title || 'x', { toneType: 'none', type: 'string' })
+    .replace(/[^a-z]/gi, '')
+    .toLowerCase() || 'x';
+const sortPairs = (m) =>
+  [...m.entries()].sort((a, b) =>
+    a[1].book < b[1].book ? -1 : a[1].book > b[1].book ? 1 : a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0,
+  );
 
 function makeList(entries, tier) {
   const seq = {};
@@ -270,9 +333,12 @@ function makeList(entries, tier) {
     const base = `${k}_${ascii(name)}`;
     seq[base] = (seq[base] ?? 0) + 1;
     const gapPenalty = v.gap === 1 ? 0 : v.gap === 2 ? -4 : -8;
-    const staticScore = 20 + (dup(name) ? 3 : 0) + gapPenalty
-      + ((unitCounts[v.book].get(v.seg) ?? 0) >= lineThreshold[v.book] ? 8 : 0)
-      + (v.book === 'chuci' || v.book === 'shijing' ? 3 : 0);
+    const staticScore =
+      20 +
+      (dup(name) ? 3 : 0) +
+      gapPenalty +
+      ((unitCounts[v.book].get(v.seg) ?? 0) >= lineThreshold[v.book] ? 8 : 0) +
+      (v.book === 'chuci' || v.book === 'shijing' ? 3 : 0);
     const w = wf.get(name) ?? 0;
     return {
       id: `${base}_${String(seq[base]).padStart(3, '0')}`,
@@ -303,9 +369,23 @@ const singles = [];
 for (const ch of [...L0].sort()) {
   const hits = candidates.filter((c) => c.chars.includes(ch));
   if (!hits.length) continue;
-  const best = hits.sort((a, b) => (b.score - a.score) || (a.id < b.id ? -1 : 1))[0];
+  const best = hits.sort((a, b) => b.score - a.score || (a.id < b.id ? -1 : 1))[0];
   const at = [...best.name].indexOf(ch);
-  singles.push({ char: ch, from: best.name, id: `S_${best.id}`, book: best.book, title: best.title, author: best.author, line: best.line, seg: best.seg, foot: best.foot + at * (best.gap ?? 1), gap: 0, strict: best.strict, famous: best.famous, score: best.score - 8 });
+  singles.push({
+    char: ch,
+    from: best.name,
+    id: `S_${best.id}`,
+    book: best.book,
+    title: best.title,
+    author: best.author,
+    line: best.line,
+    seg: best.seg,
+    foot: best.foot + at * (best.gap ?? 1),
+    gap: 0,
+    strict: best.strict,
+    famous: best.famous,
+    score: best.score - 8,
+  });
 }
 
 // 出处今译：本仓库自撰（data/raw/LICENSES.md），一行「原句\t释义」。
@@ -338,7 +418,8 @@ const glossAt = (src) => {
 for (const c of candidates) c.lg = glossAt(c.line);
 for (const s of singles) s.lg = glossAt(s.line);
 const unusedGloss = [...LINE_GLOSS_RAW.keys()].filter((src) => !glossIndex.has(src));
-if (unusedGloss.length) throw new Error(`line_gloss.tsv 有 ${unusedGloss.length} 条释义没有对应原句：${unusedGloss.slice(0, 3).join(' | ')}`);
+if (unusedGloss.length)
+  throw new Error(`line_gloss.tsv 有 ${unusedGloss.length} 条释义没有对应原句：${unusedGloss.slice(0, 3).join(' | ')}`);
 
 const chars = {};
 for (const ch of [...WH123].sort()) {
@@ -362,7 +443,12 @@ for (const ch of [...WH123].sort()) {
 }
 
 // 字义只对名用字（L0）发布：卡片逐字显示，其余字不留
-const gloss = Object.fromEntries([...L0].sort().filter((c) => GLOSS[c]).map((c) => [c, GLOSS[c]]));
+const gloss = Object.fromEntries(
+  [...L0]
+    .sort()
+    .filter((c) => GLOSS[c])
+    .map((c) => [c, GLOSS[c]]),
+);
 
 const negWords = new Set();
 for (const [w, f] of wf) {
@@ -371,7 +457,54 @@ for (const [w, f] of wf) {
   if (![...w].some((c) => BAD.has(c))) continue;
   negWords.add(w);
 }
-for (const w of ['肚子疼', '屁股', '王八', '乌龟', '太监', '傻瓜', '混蛋', '要饭', '死路', '苦命', '尸首', '绝后', '病故', '夭折', '短命', '贱人', '下贱', '亡命', '完蛋', '废物', '毒药', '祸害', '丧气', '晦气', '倒霉', '垃圾', '粪便', '蛆虫', '瘟病', '痢疾', '癌变', '绝症', '残废', '瞎子', '聋子', '哑巴', '疯子', '骗子', '盗贼', '强盗', '凶手', '卖花', '输钱', '毒酒', '气绝']) negWords.add(w);
+for (const w of [
+  '肚子疼',
+  '屁股',
+  '王八',
+  '乌龟',
+  '太监',
+  '傻瓜',
+  '混蛋',
+  '要饭',
+  '死路',
+  '苦命',
+  '尸首',
+  '绝后',
+  '病故',
+  '夭折',
+  '短命',
+  '贱人',
+  '下贱',
+  '亡命',
+  '完蛋',
+  '废物',
+  '毒药',
+  '祸害',
+  '丧气',
+  '晦气',
+  '倒霉',
+  '垃圾',
+  '粪便',
+  '蛆虫',
+  '瘟病',
+  '痢疾',
+  '癌变',
+  '绝症',
+  '残废',
+  '瞎子',
+  '聋子',
+  '哑巴',
+  '疯子',
+  '骗子',
+  '盗贼',
+  '强盗',
+  '凶手',
+  '卖花',
+  '输钱',
+  '毒酒',
+  '气绝',
+])
+  negWords.add(w);
 
 const homophoneFull = new Map();
 const homophoneInitial = new Map();
@@ -388,14 +521,24 @@ const homophone = {
   initial: [...homophoneInitial.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([py, w]) => ({ py, w })),
 };
 
-const riskHigh = [...wf].filter(([w, f]) => f >= 5000 && w.length === 2 && [...w].every((c) => WH1.has(c))).map(([w]) => w).sort();
-const riskMidCount = [...wf].filter(([w, f]) => f >= 500 && f < 5000 && w.length === 2 && [...w].every((c) => WH12.has(c))).length;
+const riskHigh = [...wf]
+  .filter(([w, f]) => f >= 5000 && w.length === 2 && [...w].every((c) => WH1.has(c)))
+  .map(([w]) => w)
+  .sort();
+const riskMidCount = [...wf].filter(
+  ([w, f]) => f >= 500 && f < 5000 && w.length === 2 && [...w].every((c) => WH12.has(c)),
+).length;
 
 // 部首提示只覆盖候选里真出现过的字：其余留白（留白 ≠ 无五行），不做筛选、不做吉凶
 const poolCharsSeen = new Set();
 for (const c of candidates) for (const ch of c.chars) poolCharsSeen.add(ch);
 for (const s of singles) poolCharsSeen.add(s.char);
-const radical = Object.fromEntries([...poolCharsSeen].sort().filter((ch) => radicalOf(ch)).map((ch) => [ch, radicalOf(ch)]));
+const radical = Object.fromEntries(
+  [...poolCharsSeen]
+    .sort()
+    .filter((ch) => radicalOf(ch))
+    .map((ch) => [ch, radicalOf(ch)]),
+);
 const radicalDist = {};
 for (const v of Object.values(radical)) radicalDist[v] = (radicalDist[v] ?? 0) + 1;
 
@@ -435,7 +578,11 @@ const meta = {
   removed_bad: pB_bad.map(([p]) => p),
   removed_repeat: pB_rep.map(([p]) => p),
   per_book: Object.fromEntries(BOOKS.map((b) => [b.key, candidates.filter((c) => c.book === b.key).length])),
-  gender_table: { female: [...femaleSet].length, male: [...maleSet].length, overlap: [...femaleSet].filter((c) => maleSet.has(c)).length },
+  gender_table: {
+    female: [...femaleSet].length,
+    male: [...maleSet].length,
+    overlap: [...femaleSet].filter((c) => maleSet.has(c)).length,
+  },
   gender_dist: (() => {
     const d = {};
     for (const c of candidates) {
@@ -469,9 +616,32 @@ write('gloss.json', gloss);
 write('line_gloss.json', lineGloss);
 // 混合层实测 193 KB gzip，超出体积预算，且设计里它就是一层噪声：不进包，只出到 data/measured 供人工翻查
 fs.mkdirSync('data/measured', { recursive: true });
-fs.writeFileSync('data/measured/poolC.json', JSON.stringify(
-  poolMix.map((c) => ({ name: c.name, book: c.book, title: c.title, seg: c.seg, foot: c.foot, gap: c.gap, score: c.score }))) + '\n');
-const SHIPPED = ['candidates.json', 'singles.json', 'chars.json', 'homophone.json', 'risk.json', 'whitelist-L0.json', 'gender.json', 'radical.json', 'gloss.json', 'line_gloss.json'];
+fs.writeFileSync(
+  'data/measured/poolC.json',
+  JSON.stringify(
+    poolMix.map((c) => ({
+      name: c.name,
+      book: c.book,
+      title: c.title,
+      seg: c.seg,
+      foot: c.foot,
+      gap: c.gap,
+      score: c.score,
+    })),
+  ) + '\n',
+);
+const SHIPPED = [
+  'candidates.json',
+  'singles.json',
+  'chars.json',
+  'homophone.json',
+  'risk.json',
+  'whitelist-L0.json',
+  'gender.json',
+  'radical.json',
+  'gloss.json',
+  'line_gloss.json',
+];
 // 只记未压缩字节数：gzip 结果和压缩器版本有关，写进包体会让构建不可复现（体积门槛由 size-check 现算，不进包）
 meta.ship_bytes = Object.fromEntries(SHIPPED.map((f) => [f, fs.statSync(path.join(OUT, f)).size]));
 meta.ship_bytes_total = Object.values(meta.ship_bytes).reduce((a, b) => a + b, 0);

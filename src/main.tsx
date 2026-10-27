@@ -28,8 +28,12 @@ async function boot() {
           应用的候选池与字表没能读出来（多半是更新中断或本机缓存坏了）。先刷新试试；
           还不行就在浏览器里清掉本站的站点数据／缓存，再重新打开。收藏与设置存在本机，不会被这次刷新清掉。
         </p>
-        <pre className="mt-3 overflow-auto rounded-ctl border border-line bg-surface-2 p-3 text-meta text-ink-2">{String((e as Error | undefined)?.message ?? e)}</pre>
-        <button onClick={() => location.reload()} className="btn btn-primary mt-4">刷新</button>
+        <pre className="mt-3 overflow-auto rounded-ctl border border-line bg-surface-2 p-3 text-meta text-ink-2">
+          {String((e as Error | undefined)?.message ?? e)}
+        </pre>
+        <button onClick={() => location.reload()} className="btn btn-primary mt-4">
+          刷新
+        </button>
       </div>,
     );
   }

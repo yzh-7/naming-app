@@ -1,7 +1,15 @@
 // 导出/导入与「可分享链接」的编解码。全部是纯函数，便于单测。
 import type { Book, Opts } from '../engine/types';
 import { BOOK_ORDER, cleanSurname } from '../engine/types';
-import { DEFAULT_OPTS, SEARCH_MAX, TITLE_MAX, sanitizeFav, sanitizeOpts, sanitizeReading, type FavRecord } from './local';
+import {
+  DEFAULT_OPTS,
+  SEARCH_MAX,
+  TITLE_MAX,
+  sanitizeFav,
+  sanitizeOpts,
+  sanitizeReading,
+  type FavRecord,
+} from './local';
 
 // 导入文件的条目上限：一份导出文件的实际量级是几百条，超过这个数就不可能是本机导出的
 const FAV_MAX = 5000;
@@ -22,7 +30,13 @@ export type SavedState = {
 // 读音用 local 的 sanitizeReading。三条路径口径相同：非法取值回默认（''/0）。
 const cleanSur = (s: unknown) => (typeof s === 'string' ? cleanSurname(s) : '');
 
-export function buildState(p: { surname: string; reading: number; opts: Opts; favorites: FavRecord[]; blocklist: string[] }): SavedState {
+export function buildState(p: {
+  surname: string;
+  reading: number;
+  opts: Opts;
+  favorites: FavRecord[];
+  blocklist: string[];
+}): SavedState {
   return { app: 'naming-app', version: 1, exportedAt: new Date().toISOString(), ...p };
 }
 export const serialize = (s: SavedState) => JSON.stringify(s, null, 2);
@@ -33,12 +47,17 @@ export type ParseResult = { ok: true; state: SavedState } | { ok: false; error: 
 
 export function parseState(text: string): ParseResult {
   let raw: unknown;
-  try { raw = JSON.parse(text); } catch { return { ok: false, error: 'json' }; }
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return { ok: false, error: 'json' };
+  }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, error: 'json' };
   const r = raw as Record<string, unknown>;
   // 带 app 标记但不是本应用的 → 别人的文件；没有标记但要有一个我们认识的键，否则也当别人的文件
   if (typeof r.app === 'string' && r.app !== 'naming-app') return { ok: false, error: 'foreign' };
-  if (!['favorites', 'blocklist', 'opts', 'surname', 'reading'].some((k) => k in r)) return { ok: false, error: 'foreign' };
+  if (!['favorites', 'blocklist', 'opts', 'surname', 'reading'].some((k) => k in r))
+    return { ok: false, error: 'foreign' };
 
   // 收藏与拉黑逐条消毒（类型、长度、未知 book）、按 id 去重、限量，和读本机时同一套规则
   const favs: FavRecord[] = [];
@@ -112,7 +131,10 @@ export function toQuery(s: Pick<SavedState, 'surname' | 'reading' | 'opts'>): st
 // 典籍位：按 BOOK_ORDER 顺序的 0/1 串。兼容旧链接——书数增加后，短一位一律按「新书默认开」补齐
 function booksFromBits(bits: string): Record<Book, boolean> | null {
   if (!/^[01]{6,}$/.test(bits)) return null;
-  const padded = bits.length < BOOK_ORDER.length ? bits + '1'.repeat(BOOK_ORDER.length - bits.length) : bits.slice(0, BOOK_ORDER.length);
+  const padded =
+    bits.length < BOOK_ORDER.length
+      ? bits + '1'.repeat(BOOK_ORDER.length - bits.length)
+      : bits.slice(0, BOOK_ORDER.length);
   return Object.fromEntries(BOOK_ORDER.map((k, i) => [k, padded[i] === '1'])) as Record<Book, boolean>;
 }
 
@@ -123,7 +145,10 @@ export function fromQuery(qs: string): { surname?: string; reading?: number; opt
   if (![...q.keys()].length) return null;
   const raw: Record<string, unknown> = {};
   const seen = new Set<string>();
-  const take = (key: string, value: unknown) => { raw[key] = value; seen.add(key); };
+  const take = (key: string, value: unknown) => {
+    raw[key] = value;
+    seen.add(key);
+  };
 
   if (q.has('g')) take('gender', q.get('g'));
   if (q.has('gw')) take('genderWeak', q.get('gw') === '1'); // 布尔参数只认 '1'
@@ -147,6 +172,6 @@ export function fromQuery(qs: string): { surname?: string; reading?: number; opt
   for (const key of seen) (opts as Record<string, unknown>)[key] = (full as unknown as Record<string, unknown>)[key];
 
   const surname = q.has('s') ? cleanSur(q.get('s')) : undefined;
-  const reading = q.has('r') ? sanitizeReading(q.get('r')) ?? 0 : undefined;
+  const reading = q.has('r') ? (sanitizeReading(q.get('r')) ?? 0) : undefined;
   return { surname, reading, opts };
 }

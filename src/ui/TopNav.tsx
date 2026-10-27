@@ -20,11 +20,14 @@ const TABS: { tab: Tab; label: string; href: string }[] = [
 ];
 
 export default function TopNav({ current, favCount, blockCount, onNavigate, className }: Props) {
-  const nav = useCallback((tab: Tab) => (e: React.MouseEvent) => {
-    if (!onNavigate) return;
-    e.preventDefault();
-    onNavigate(tab);
-  }, [onNavigate]);
+  const nav = useCallback(
+    (tab: Tab) => (e: React.MouseEvent) => {
+      if (!onNavigate) return;
+      e.preventDefault();
+      onNavigate(tab);
+    },
+    [onNavigate],
+  );
 
   const count = (t: Tab) => (t === 'fav' ? favCount : t === 'block' ? blockCount : null);
 
@@ -34,9 +37,15 @@ export default function TopNav({ current, favCount, blockCount, onNavigate, clas
         const n = count(tab);
         const text = n === null ? label : `${label} ${n}`;
         const cls = `seg-btn flex-1 sm:flex-none ${current === tab ? 'seg-on' : ''}`;
-        return current === tab
-          ? <span key={tab} aria-current="page" className={`${cls} cursor-default`}>{text}</span>
-          : <a key={tab} href={href} onClick={nav(tab)} className={cls}>{text}</a>;
+        return current === tab ? (
+          <span key={tab} aria-current="page" className={`${cls} cursor-default`}>
+            {text}
+          </span>
+        ) : (
+          <a key={tab} href={href} onClick={nav(tab)} className={cls}>
+            {text}
+          </a>
+        );
       })}
     </nav>
   );

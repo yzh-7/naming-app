@@ -5,18 +5,50 @@ import Controls from './Controls';
 import { BOOK_ORDER, type Opts } from '../engine/types';
 
 const base: Opts = {
-  gender: 'any', genderWeak: false, length: 2,
+  gender: 'any',
+  genderWeak: false,
+  length: 2,
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
-  redupOnly: false, exclude: [], count: 12, search: '', title: '', sort: 'score',
-  strokeMax: 0, noMonotone: false, popFloor: 0, mustChar: '', mustPos: 'any', avoidChars: '',
+  redupOnly: false,
+  exclude: [],
+  count: 12,
+  search: '',
+  title: '',
+  sort: 'score',
+  strokeMax: 0,
+  noMonotone: false,
+  popFloor: 0,
+  mustChar: '',
+  mustPos: 'any',
+  avoidChars: '',
 };
 
-function Harness({ initialSurname = '苏', pages = 1, onBatch = () => {}, poolCount = 1505 }: { initialSurname?: string; pages?: number; onBatch?: () => void; poolCount?: number }) {
+function Harness({
+  initialSurname = '苏',
+  pages = 1,
+  onBatch = () => {},
+  poolCount = 1505,
+}: {
+  initialSurname?: string;
+  pages?: number;
+  onBatch?: () => void;
+  poolCount?: number;
+}) {
   const [surname, setSurname] = useState(initialSurname);
   const [opts, setOpts] = useState<Opts>({ ...base });
   return (
-    <Controls surname={surname} setSurname={setSurname} reading={0} setReading={() => {}}
-      opts={opts} setOpts={setOpts} poolCount={poolCount} pageNo={0} pages={pages} onBatch={onBatch} />
+    <Controls
+      surname={surname}
+      setSurname={setSurname}
+      reading={0}
+      setReading={() => {}}
+      opts={opts}
+      setOpts={setOpts}
+      poolCount={poolCount}
+      pageNo={0}
+      pages={pages}
+      onBatch={onBatch}
+    />
   );
 }
 

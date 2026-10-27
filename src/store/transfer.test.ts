@@ -7,7 +7,18 @@ const baseOpts = (): Opts => sanitizeOpts({});
 
 describe('导入解析', () => {
   it('导出→解析 往返一致（含收藏里的名字快照）', () => {
-    const fav: FavRecord[] = [{ id: 'x', note: '喜欢', group: '女', ts: 1, name: '清婉', book: 'shijing', title: '野有死麕', line: '野有死麕，白茅包之' }];
+    const fav: FavRecord[] = [
+      {
+        id: 'x',
+        note: '喜欢',
+        group: '女',
+        ts: 1,
+        name: '清婉',
+        book: 'shijing',
+        title: '野有死麕',
+        line: '野有死麕，白茅包之',
+      },
+    ];
     const st = buildState({ surname: '苏', reading: 1, opts: baseOpts(), favorites: fav, blocklist: ['y'] });
     const res = parseState(serialize(st));
     expect(res.ok).toBe(true);
@@ -32,7 +43,14 @@ describe('导入解析', () => {
       app: 'naming-app',
       favorites: [
         'bare',
-        { id: 'x', note: '长'.repeat(300), group: '组'.repeat(60), name: '名'.repeat(40), title: '篇'.repeat(50), line: '句'.repeat(300) },
+        {
+          id: 'x',
+          note: '长'.repeat(300),
+          group: '组'.repeat(60),
+          name: '名'.repeat(40),
+          title: '篇'.repeat(50),
+          line: '句'.repeat(300),
+        },
         { id: 'x', note: '重复 id 应被丢掉' },
         { id: 'y', book: 'baidu' as never, ts: 'not-number' as never },
         { id: '' },
@@ -93,7 +111,15 @@ describe('可分享链接', () => {
     expect(toQuery({ surname: '', reading: 0, opts: baseOpts() })).toBe('');
   });
   it('URL 往返：姓氏/读音/性别/条数/搜索/排序/典籍位', () => {
-    const opts: Opts = { ...baseOpts(), gender: 'f', length: 1, count: 0, search: '云', sort: 'strokes', redupOnly: false };
+    const opts: Opts = {
+      ...baseOpts(),
+      gender: 'f',
+      length: 1,
+      count: 0,
+      search: '云',
+      sort: 'strokes',
+      redupOnly: false,
+    };
     opts.books = { ...opts.books, shijing: false };
     const q = toQuery({ surname: '欧阳', reading: 2, opts });
     const back = fromQuery(q)!;
@@ -172,13 +198,34 @@ describe('可分享链接', () => {
     expect(fromQuery('g=f&gw=0')!.opts.genderWeak).toBe(false);
   });
   it('三条输入路径口径一致：同一份脏取值，本机存储 / 导入文件 / 链接给出同一个结果', () => {
-    const dirty = { gender: 'other', count: 601, length: 9, popFloor: 123, strokeMax: 999, noMonotone: 1, redupOnly: 1, search: 'x'.repeat(99), title: '篇'.repeat(50), mustChar: '清清', mustPos: 'middle', avoidChars: '月a月', sort: 'name' };
+    const dirty = {
+      gender: 'other',
+      count: 601,
+      length: 9,
+      popFloor: 123,
+      strokeMax: 999,
+      noMonotone: 1,
+      redupOnly: 1,
+      search: 'x'.repeat(99),
+      title: '篇'.repeat(50),
+      mustChar: '清清',
+      mustPos: 'middle',
+      avoidChars: '月a月',
+      sort: 'name',
+    };
     const viaOpts = sanitizeOpts(dirty);
     const viaFile = parseState(JSON.stringify({ opts: dirty }));
     if (!viaFile.ok) throw new Error('should be ok');
     expect(viaFile.state.opts).toEqual(viaOpts);
     // 同一批取值写成链接参数：每一项消毒后的结果必须与上面相同
-    const viaUrl = fromQuery('g=other&n=601&len=9&pf=123&sm=999&o=name&mc=%E6%B8%85%E6%98%8E&mp=middle&ac=' + encodeURIComponent('月a月') + '&t=' + encodeURIComponent('篇'.repeat(50)) + '&q=' + 'x'.repeat(99))!;
+    const viaUrl = fromQuery(
+      'g=other&n=601&len=9&pf=123&sm=999&o=name&mc=%E6%B8%85%E6%98%8E&mp=middle&ac=' +
+        encodeURIComponent('月a月') +
+        '&t=' +
+        encodeURIComponent('篇'.repeat(50)) +
+        '&q=' +
+        'x'.repeat(99),
+    )!;
     expect(viaUrl.opts.gender).toBe(viaOpts.gender);
     expect(viaUrl.opts.count).toBe(viaOpts.count);
     expect(viaUrl.opts.length).toBe(viaOpts.length);
@@ -191,7 +238,20 @@ describe('可分享链接', () => {
     expect(viaUrl.opts.title).toBe(viaOpts.title);
     expect(viaUrl.opts.search).toBe(viaOpts.search);
     // 合法值经「写入 → 链接 → 读回」保持原样（链接只带非默认项，所以按项比对）
-    const clean = sanitizeOpts({ gender: 'm', count: 600, length: 1, popFloor: 2000, strokeMax: 64, noMonotone: true, sort: 'book', mustChar: '清', mustPos: 'first', avoidChars: '月风', title: '篇'.repeat(30), search: '云' });
+    const clean = sanitizeOpts({
+      gender: 'm',
+      count: 600,
+      length: 1,
+      popFloor: 2000,
+      strokeMax: 64,
+      noMonotone: true,
+      sort: 'book',
+      mustChar: '清',
+      mustPos: 'first',
+      avoidChars: '月风',
+      title: '篇'.repeat(30),
+      search: '云',
+    });
     const back = fromQuery(toQuery({ surname: '', reading: 0, opts: clean }))!;
     const merged = { ...baseOpts(), ...back.opts };
     expect(merged).toEqual(clean);

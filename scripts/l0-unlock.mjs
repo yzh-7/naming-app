@@ -11,20 +11,52 @@ const RAW = 'data/raw';
 const NOT_CJK = /[^一-鿿]/g;
 const read = (p) => fs.readFileSync(path.join(RAW, p), 'utf-8');
 const json = (p) => JSON.parse(read(p));
-const loadCharList = (p) => read(p).split('\n').map((l) => l.trim()).filter(Boolean)
-  .map((l) => { const q = l.split(/\s+/); return q.length === 2 && /^\d+$/.test(q[0]) ? q[1] : l; });
+const loadCharList = (p) =>
+  read(p)
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => {
+      const q = l.split(/\s+/);
+      return q.length === 2 && /^\d+$/.test(q[0]) ? q[1] : l;
+    });
 
 const WH1 = new Set(loadCharList('gsc_level_1.txt'));
-const WH123 = new Set([...WH1, ...new Set(loadCharList('gsc_level_2.txt')), ...new Set(loadCharList('gsc_level_3.txt'))]);
+const WH123 = new Set([
+  ...WH1,
+  ...new Set(loadCharList('gsc_level_2.txt')),
+  ...new Set(loadCharList('gsc_level_3.txt')),
+]);
 const XUCI = new Set('兮之以太其于而则且亦何斯夫惟维矣乎焉哉也矣耶欤矣噫只且'.split(''));
-const FUNC = new Set('的了是在有他不这我都还说法把让向对为等与就只很更最些什么样怎么如果但是因为所以而且并且或者被它你们我们他们它们有个之以及然而则即便共'.split(''));
+const FUNC = new Set(
+  '的了是在有他不这我都还说法把让向对为等与就只很更最些什么样怎么如果但是因为所以而且并且或者被它你们我们他们它们有个之以及然而则即便共'.split(
+    '',
+  ),
+);
 const XU = new Set([...XUCI, ...FUNC]);
 const NOISE = new Set(NAME_NOISE);
-const BAD = new Set('胸鬼懒禽鸟鸡我邪罪凶丑仇鼠蟋蟀淫秽妹狐鸭蝇悔鱼肉苦犬吠窥血丧饥搔父母昏狗蟊疾病痛死潦哀痒害蛇牲妇狸鹅穴畜烂兽靡爪氓劫鬣婚姻匪婆羞辱'.split('').filter((c) => WH1.has(c)));
+const BAD = new Set(
+  '胸鬼懒禽鸟鸡我邪罪凶丑仇鼠蟋蟀淫秽妹狐鸭蝇悔鱼肉苦犬吠窥血丧饥搔父母昏狗蟊疾病痛死潦哀痒害蛇牲妇狸鹅穴畜烂兽靡爪氓劫鬣婚姻匪婆羞辱'
+    .split('')
+    .filter((c) => WH1.has(c)),
+);
 const wf = new Map();
-for (const line of read('jieba_dict.txt').split('\n')) { const p = line.split(' '); if (p.length >= 3) wf.set(p[0], Number(p[1])); }
-const ad = json('cnname_attributes.json'); const attrDict = ad.dict ?? ad;
-const SEED = new Set([...new Set(Object.values(attrDict).filter((v) => typeof v === 'string').join('').split(''))].filter((c) => WH123.has(c)));
+for (const line of read('jieba_dict.txt').split('\n')) {
+  const p = line.split(' ');
+  if (p.length >= 3) wf.set(p[0], Number(p[1]));
+}
+const ad = json('cnname_attributes.json');
+const attrDict = ad.dict ?? ad;
+const SEED = new Set(
+  [
+    ...new Set(
+      Object.values(attrDict)
+        .filter((v) => typeof v === 'string')
+        .join('')
+        .split(''),
+    ),
+  ].filter((c) => WH123.has(c)),
+);
 // 与 build-data 同源：当前 L0 还包含人工过字「保留」的字，否则与 meta.pool_B 对不上。
 const VERDICT_FILE = path.join(RAW, 'l0-verdicts.txt');
 if (fs.existsSync(VERDICT_FILE)) {
@@ -33,16 +65,21 @@ if (fs.existsSync(VERDICT_FILE)) {
 }
 
 const BOOKS = [
-  { key: 'shijing', strictMeter: true }, { key: 'chuci', strictMeter: 'chuci' },
-  { key: 'lunyu', strictMeter: false }, { key: 'shuimo', strictMeter: true },
-  { key: 'song300', strictMeter: false }, { key: 'daofa', strictMeter: false },
+  { key: 'shijing', strictMeter: true },
+  { key: 'chuci', strictMeter: 'chuci' },
+  { key: 'lunyu', strictMeter: false },
+  { key: 'shuimo', strictMeter: true },
+  { key: 'song300', strictMeter: false },
+  { key: 'daofa', strictMeter: false },
 ];
 const offsets = (book, n) => {
-  if (book === 'shijing' || book === 'shuimo') return ({ 4: [0, 2], 5: [0, 2], 7: [0, 2, 4] })[n] ?? [...Array(n - 1).keys()];
-  if (book === 'chuci') return ({ 4: [0, 2], 5: [0, 3], 7: [0, 2, 4] })[n] ?? [...Array(n - 1).keys()];
+  if (book === 'shijing' || book === 'shuimo')
+    return { 4: [0, 2], 5: [0, 2], 7: [0, 2, 4] }[n] ?? [...Array(n - 1).keys()];
+  if (book === 'chuci') return { 4: [0, 2], 5: [0, 3], 7: [0, 2, 4] }[n] ?? [...Array(n - 1).keys()];
   return [...Array(n - 1).keys()];
 };
-const SPLIT = /[。！？；]/, COMMA = /[，、：]/;
+const SPLIT = /[。！？；]/,
+  COMMA = /[，、：]/;
 const inRedup = (cs, i) => (i > 0 && cs[i - 1] === cs[i]) || (i < cs.length - 1 && cs[i + 1] === cs[i]);
 function rawText(book) {
   const j = json(`${book}.json`);
@@ -55,13 +92,15 @@ function rawText(book) {
 
 const units = [];
 const charFoot = new Map(); // 典籍里作为音步起点出现的次数
-const charAny = new Map();  // 典籍里任意位置出现次数
+const charAny = new Map(); // 典籍里任意位置出现次数
 for (const { key: book } of BOOKS) {
   for (const text of rawText(book)) {
     for (const line of String(text).split(SPLIT)) {
-      const t = line.trim(); if (!t) continue;
+      const t = line.trim();
+      if (!t) continue;
       for (const u of t.split(COMMA)) {
-        const cleaned = u.replace(/[“”‘’「」《》（）()]/g, '').trim(); if (!cleaned) continue;
+        const cleaned = u.replace(/[“”‘’「」《》（）()]/g, '').trim();
+        if (!cleaned) continue;
         for (const seg of cleaned.replace(NOT_CJK, '').split('兮')) {
           if (seg.length < 2) continue;
           const cs = [...seg];
@@ -78,13 +117,19 @@ for (const { key: book } of BOOKS) {
 }
 
 // 定稿口径下的「干净出现」与「只以粘连/假叠字身份出现」两个集合
-const clean = new Set(), dirty = new Set();
+const clean = new Set(),
+  dirty = new Set();
 for (const u of units) {
   for (const i of u.offs) {
     for (let gap = 1; gap <= 3; gap++) {
-      const j = i + gap; if (j >= u.cs.length) break;
+      const j = i + gap;
+      if (j >= u.cs.length) break;
       const p = u.cs[i] + u.cs[j];
-      const okChars = [...p].every((c) => WH123.has(c)) && ![...p].some((c) => XU.has(c) || BAD.has(c)) && !NOISE.has(p) && (wf.get(p) ?? 0) < 5000;
+      const okChars =
+        [...p].every((c) => WH123.has(c)) &&
+        ![...p].some((c) => XU.has(c) || BAD.has(c)) &&
+        !NOISE.has(p) &&
+        (wf.get(p) ?? 0) < 5000;
       if (!okChars) continue;
       const glue = gap > 1 && (inRedup(u.cs, i) || inRedup(u.cs, j));
       const fake = p[0] === p[1] && gap > 1;
@@ -97,26 +142,50 @@ for (const p of clean) dirty.delete(p);
 const inPool = (L0) => [...clean].filter((p) => [...p].every((c) => L0.has(c)));
 const base = new Set(inPool(SEED));
 const meta = JSON.parse(fs.readFileSync('src/data/meta.json', 'utf8'));
-if (base.size !== meta.pool_B) { console.error(`口径漂移：本脚本算出 ${base.size} 条，build-data 报 ${meta.pool_B} 条——两边规则不一致，表里的解锁数不可用`); process.exit(1); }
-console.log(`六本句读单元 ${units.length}｜clean 配对（通用规范字表内）${clean.size}｜种子 L0 ${SEED.size} 字 → 池 ${base.size} 条（与 build-data 一致 ✓）`);
+if (base.size !== meta.pool_B) {
+  console.error(
+    `口径漂移：本脚本算出 ${base.size} 条，build-data 报 ${meta.pool_B} 条——两边规则不一致，表里的解锁数不可用`,
+  );
+  process.exit(1);
+}
+console.log(
+  `六本句读单元 ${units.length}｜clean 配对（通用规范字表内）${clean.size}｜种子 L0 ${SEED.size} 字 → 池 ${base.size} 条（与 build-data 一致 ✓）`,
+);
 
 // 精确池模型：把每个 clean 配对按「有几个字不在种子表内」分类。
 // 0 个→已在 base；1 个→选中那个字就到手（含两字相同的自配）；2 个→两个字都选中才到手。
 // 之前只算「新字×种子字」，系统性低估——两字皆新的配对有 4 万多条，选了 50 个字就会开始互相配对。
 const onePairs = new Map(); // char -> 该字单独入表即解锁的配对
-const adj = new Map();      // char -> [{d, p}] 两字皆新的边（双向）
+const adj = new Map(); // char -> [{d, p}] 两字皆新的边（双向）
 for (const p of clean) {
-  const a = p[0], b = p[1];
-  const sa = SEED.has(a), sb = SEED.has(b);
+  const a = p[0],
+    b = p[1];
+  const sa = SEED.has(a),
+    sb = SEED.has(b);
   if (sa && sb) continue;
-  const addOne = (c) => { if (!onePairs.has(c)) onePairs.set(c, []); onePairs.get(c).push(p); };
-  const addEdge = (c, d) => { if (!adj.has(c)) adj.set(c, []); adj.get(c).push({ d, p }); };
-  if (a === b) { addOne(a); continue; }
-  if (sa !== sb) { addOne(sa ? b : a); continue; }
-  addEdge(a, b); addEdge(b, a);
+  const addOne = (c) => {
+    if (!onePairs.has(c)) onePairs.set(c, []);
+    onePairs.get(c).push(p);
+  };
+  const addEdge = (c, d) => {
+    if (!adj.has(c)) adj.set(c, []);
+    adj.get(c).push({ d, p });
+  };
+  if (a === b) {
+    addOne(a);
+    continue;
+  }
+  if (sa !== sb) {
+    addOne(sa ? b : a);
+    continue;
+  }
+  addEdge(a, b);
+  addEdge(b, a);
 }
 let bothNew = 0;
-for (const p of clean) { if (!SEED.has(p[0]) && !SEED.has(p[1])) bothNew++; }
+for (const p of clean) {
+  if (!SEED.has(p[0]) && !SEED.has(p[1])) bothNew++;
+}
 const candChars = [...new Set([...onePairs.keys(), ...adj.keys()])].filter((c) => WH1.has(c));
 
 // 贪心：每一步选「真实边际增量最大」的字。增量＝它单独解锁的配对 + 与已选字互相配到的新×新配对。
@@ -130,37 +199,55 @@ for (;;) {
     if (chosen.has(c)) continue;
     const gain = (onePairs.get(c)?.length ?? 0) + (ready.get(c) ?? 0);
     if (gain <= 0) continue;
-    if (!best || gain > best.gain || (gain === best.gain && (charFoot.get(c) ?? 0) > (charFoot.get(best.c) ?? 0))
-      || (gain === best.gain && (charFoot.get(c) ?? 0) === (charFoot.get(best.c) ?? 0) && c < best.c)) best = { c, gain };
+    if (
+      !best ||
+      gain > best.gain ||
+      (gain === best.gain && (charFoot.get(c) ?? 0) > (charFoot.get(best.c) ?? 0)) ||
+      (gain === best.gain && (charFoot.get(c) ?? 0) === (charFoot.get(best.c) ?? 0) && c < best.c)
+    )
+      best = { c, gain };
   }
   if (!best) break;
   chosen.add(best.c);
   const brought = [...(onePairs.get(best.c) ?? [])];
   for (const { d, p } of adj.get(best.c) ?? []) {
-    if (chosen.has(d)) { if (!brought.includes(p)) brought.push(p); }
-    else ready.set(d, (ready.get(d) ?? 0) + 1);
+    if (chosen.has(d)) {
+      if (!brought.includes(p)) brought.push(p);
+    } else ready.set(d, (ready.get(d) ?? 0) + 1);
   }
   pool += best.gain;
   ranked.push({ c: best.c, gain: best.gain, size: pool, brought });
 }
-console.log(`候选字 ${candChars.length} 个（其中 ${ranked.length} 个能带来新增配对）｜两字皆新的配对 ${bothNew} 条（要两个字同时入表才拿得到）\n`);
+console.log(
+  `候选字 ${candChars.length} 个（其中 ${ranked.length} 个能带来新增配对）｜两字皆新的配对 ${bothNew} 条（要两个字同时入表才拿得到）\n`,
+);
 console.log('按「真实边际增量」贪心依次加字后的累计池（＝该前缀全部保留时的双名条数）：');
 for (const n of [5, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100, 150, 200, 300]) {
   const t = ranked[n - 1];
-  if (t) console.log(`  加 ${String(n).padStart(3)} 字 → ${String(t.size).padStart(5)} 条（最后一个字：${t.c}，本字带来 ${t.gain} 条）`);
+  if (t)
+    console.log(
+      `  加 ${String(n).padStart(3)} 字 → ${String(t.size).padStart(5)} 条（最后一个字：${t.c}，本字带来 ${t.gain} 条）`,
+    );
 }
-const need = (target) => { const i = ranked.findIndex((t) => t.size >= target); return i < 0 ? null : i + 1; };
+const need = (target) => {
+  const i = ranked.findIndex((t) => t.size >= target);
+  return i < 0 ? null : i + 1;
+};
 for (const tg of [600, 800, 1000, 1500, 2000, 3000]) {
   const n = need(tg);
   console.log(`过 ${tg} 条需要加 ${n === null ? '—（达不到）' : n} 个字`);
 }
 console.log('\n真实边际 Top 40（字 / 本字增量 / 累计池 / 典籍音步起点次数 / jieba 单字频 / 样例）：');
 for (const r of ranked.slice(0, 40)) {
-  console.log(`  ${r.c}  +${String(r.gain).padStart(4)}｜累计 ${r.size}｜音步 ${charFoot.get(r.c) ?? 0}｜字频 ${wf.get(r.c) ?? 0}｜${r.brought.slice(0, 8).join(' ')}`);
+  console.log(
+    `  ${r.c}  +${String(r.gain).padStart(4)}｜累计 ${r.size}｜音步 ${charFoot.get(r.c) ?? 0}｜字频 ${wf.get(r.c) ?? 0}｜${r.brought.slice(0, 8).join(' ')}`,
+  );
 }
 console.log('\n第 41-120 名：');
 for (const r of ranked.slice(40, 120)) {
-  console.log(`  ${r.c}  +${String(r.gain).padStart(4)}｜累计 ${r.size}｜音步 ${charFoot.get(r.c) ?? 0}｜字频 ${wf.get(r.c) ?? 0}｜${r.brought.slice(0, 6).join(' ')}`);
+  console.log(
+    `  ${r.c}  +${String(r.gain).padStart(4)}｜累计 ${r.size}｜音步 ${charFoot.get(r.c) ?? 0}｜字频 ${wf.get(r.c) ?? 0}｜${r.brought.slice(0, 6).join(' ')}`,
+  );
 }
 
 // ---- 交付物：候选字待审表（人工逐字判定用）。数据全部来自上面的实测，不另立口径。 ----
@@ -168,8 +255,14 @@ const RADICAL = JSON.parse(fs.readFileSync('src/data/radical.json', 'utf8'));
 const TOP = 150;
 const top = ranked.slice(0, TOP);
 const rows = top.map((r) => ({
-  c: r.c, gain: r.gain, one: (onePairs.get(r.c) ?? []).length, pairs: r.brought.slice(0, 20),
-  foot: charFoot.get(r.c) ?? 0, any: charAny.get(r.c) ?? 0, wf: wf.get(r.c) ?? 0, el: RADICAL[r.c] ?? '',
+  c: r.c,
+  gain: r.gain,
+  one: (onePairs.get(r.c) ?? []).length,
+  pairs: r.brought.slice(0, 20),
+  foot: charFoot.get(r.c) ?? 0,
+  any: charAny.get(r.c) ?? 0,
+  wf: wf.get(r.c) ?? 0,
+  el: RADICAL[r.c] ?? '',
 }));
 const cum = top.map((r) => r.size);
 // 表内字两两互相配到的「新×新」边：页面上的实时池要靠它才算准（表外的字这张表给不了，不计）
@@ -180,7 +273,10 @@ top.forEach((r, i) => {
   for (const { d } of adj.get(r.c) ?? []) if (idx.has(d) && idx.get(d) > i) byOther.set(d, (byOther.get(d) ?? 0) + 1);
   for (const [d, n] of byOther) edges.push([i, idx.get(d), n]);
 });
-const needAt = (target) => { const i = cum.findIndex((s) => s >= target); return i < 0 ? null : i + 1; };
+const needAt = (target) => {
+  const i = cum.findIndex((s) => s >= target);
+  return i < 0 ? null : i + 1;
+};
 const need1000 = needAt(1000);
 const need2900 = needAt(2900);
 // 单名层：白名单里能在双名池中出现过的字才有出处（与 build-data 同口径），按前缀规模算给它两个里程碑数
@@ -193,19 +289,48 @@ const poolPairsAt = (n) => {
   for (const [a, b, p] of edgeList) if (W.has(a) && W.has(b)) got.add(p);
   return got;
 };
-const singlesAt = (n) => { const s = new Set(); for (const p of poolPairsAt(n)) { s.add(p[0]); s.add(p[1]); } return s.size; };
+const singlesAt = (n) => {
+  const s = new Set();
+  for (const p of poolPairsAt(n)) {
+    s.add(p[0]);
+    s.add(p[1]);
+  }
+  return s.size;
+};
 const s1000 = need1000 ? singlesAt(need1000) : 0;
 const s2900 = need2900 ? singlesAt(need2900) : 0;
 for (const n of [10, 30, 50, 100, 150]) {
   if (n > top.length) continue;
   const re = poolPairsAt(n).size;
-  if (re !== cum[n - 1]) { console.error(`内部不一致：贪心算到第 ${n} 字是 ${cum[n - 1]} 条，按集合重算是 ${re} 条`); process.exit(1); }
+  if (re !== cum[n - 1]) {
+    console.error(`内部不一致：贪心算到第 ${n} 字是 ${cum[n - 1]} 条，按集合重算是 ${re} 条`);
+    process.exit(1);
+  }
 }
-console.log(`\n里程碑（按本表顺序保留前 N 行）：前 ${need1000} 行→双名 ${cum[need1000 - 1]}＋单名 ${s1000}＝${cum[need1000 - 1] + s1000} 个名；前 ${need2900} 行→双名 ${cum[need2900 - 1]}＋单名 ${s2900}＝${cum[need2900 - 1] + s2900} 个名`);
+console.log(
+  `\n里程碑（按本表顺序保留前 N 行）：前 ${need1000} 行→双名 ${cum[need1000 - 1]}＋单名 ${s1000}＝${cum[need1000 - 1] + s1000} 个名；前 ${need2900} 行→双名 ${cum[need2900 - 1]}＋单名 ${s2900}＝${cum[need2900 - 1] + s2900} 个名`,
+);
 console.log('（贪心累计与按集合重算在两处交叉一致：前 10/30/50/100/150 行 ✓）');
-const topChars = top.slice(0, 8).map((r) => r.c).join(' / ');
-const samplePairs = top.slice(0, 6).map((r) => `<span>${r.brought[0]}</span>`).join('');
-const data = JSON.stringify({ base: base.size, bothNew, need1000, need2900, s1000, s2900, singlesBase: meta.singles, rows, cum, edges });
+const topChars = top
+  .slice(0, 8)
+  .map((r) => r.c)
+  .join(' / ');
+const samplePairs = top
+  .slice(0, 6)
+  .map((r) => `<span>${r.brought[0]}</span>`)
+  .join('');
+const data = JSON.stringify({
+  base: base.size,
+  bothNew,
+  need1000,
+  need2900,
+  s1000,
+  s2900,
+  singlesBase: meta.singles,
+  rows,
+  cum,
+  edges,
+});
 const html = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8"><title>L0 候选字待审表</title>
 <style>

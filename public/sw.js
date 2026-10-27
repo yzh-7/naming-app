@@ -14,7 +14,7 @@ const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './
 
 const shortHash = (s) => {
   let h = 5381;
-  for (let i = 0; i < s.length; i++) h = (h * 33 ^ s.charCodeAt(i)) >>> 0;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
   return h.toString(36);
 };
 
@@ -42,15 +42,23 @@ async function cacheName() {
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    cacheName().then((name) => caches.open(name).then((c) => c.addAll(SHELL))).then(() => self.skipWaiting()),
+    cacheName()
+      .then((name) => caches.open(name).then((c) => c.addAll(SHELL)))
+      .then(() => self.skipWaiting()),
   );
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    cacheName().then((name) =>
-      caches.keys().then((keys) => Promise.all(keys.filter((k) => k.startsWith(PREFIX) && k !== name).map((k) => caches.delete(k))))
-    ).then(() => self.clients.claim()),
+    cacheName()
+      .then((name) =>
+        caches
+          .keys()
+          .then((keys) =>
+            Promise.all(keys.filter((k) => k.startsWith(PREFIX) && k !== name).map((k) => caches.delete(k))),
+          ),
+      )
+      .then(() => self.clients.claim()),
   );
 });
 
@@ -77,12 +85,22 @@ self.addEventListener('fetch', (e) => {
   // 导航请求走 network-first：新版本部署后刷新即可拿到新 index.html，不会被旧缓存顶住。
   // 带哈希的静态资源仍是 cache-first（内容变了文件名就变，不存在陈旧问题）。
   if (req.mode === 'navigate') {
-    e.respondWith(fetch(req).then(put).catch(() => caches.match(req).then((hit) => hit || caches.match('./index.html'))));
+    e.respondWith(
+      fetch(req)
+        .then(put)
+        .catch(() => caches.match(req).then((hit) => hit || caches.match('./index.html'))),
+    );
     return;
   }
   // 资源请求在离线且本地没有缓存时，不能退回 index.html：那等于把一段 HTML 当作 .js/.css 交给浏览器，
   // 换来的是「脚本语法错误」这种看不懂的坏法。这里直接给 504，让资源干净地失败，页面自己的离线提示负责说话。
   e.respondWith(
-    caches.match(req).then((hit) => hit || fetch(req).then(put).catch(() => offlineAsset())),
+    caches.match(req).then(
+      (hit) =>
+        hit ||
+        fetch(req)
+          .then(put)
+          .catch(() => offlineAsset()),
+    ),
   );
 });

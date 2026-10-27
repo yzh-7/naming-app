@@ -61,7 +61,9 @@ test('axe：自选页无 serious/critical 级可访问性问题', async ({ page 
   await page.getByLabel('选择第 1 字').click();
   await page.getByLabel('第 1 字搜索').fill('子');
   await page.locator('div.flex.max-h-56 button').first().click();
-  const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+  const { violations } = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze();
   const serious = violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
   expect(serious, serious.map((v) => `${v.id}: ${v.help}`).join('\n')).toEqual([]);
 });
@@ -70,7 +72,9 @@ test('axe：生成页无 serious/critical 级可访问性问题', async ({ page 
   await page.goto('/');
   await page.getByLabel('姓（可复姓）').fill('苏');
   await expect(page.locator('article').first()).toBeVisible();
-  const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+  const { violations } = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze();
   const serious = violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
   expect(serious, serious.map((v) => `${v.id}: ${v.help}`).join('\n')).toEqual([]);
 });
@@ -104,7 +108,10 @@ test('卡片上的「按拼音看」把这张卡的拼音写进搜索框', async
   await btn.click();
   const value = await page.getByLabel('搜索名字、拼音或篇名').inputValue();
   expect(value).toBeTruthy();
-  expect([...value].every((c) => /[a-z0-9 ]/.test(c)), value).toBe(true);
+  expect(
+    [...value].every((c) => /[a-z0-9 ]/.test(c)),
+    value,
+  ).toBe(true);
   expect(page.getByText(/按拼音「.+」搜索同音写法/)).toBeVisible();
   // 搜索框里的拼音是这张卡的名字去姓后的写法，结果里应当还能看见这张卡
   await expect(page.getByRole('heading', { name: full })).toBeVisible();
@@ -126,9 +133,16 @@ test('收藏页：分组可改名、可解散（解散不删收藏），导出 C
   await page.getByRole('button', { name: '导出 CSV' }).click();
   const dl = await waiting;
   expect(dl.suggestedFilename()).toMatch(/^收藏-终选-\d{4}-\d{2}-\d{2}\.csv$/);
-  const body = await dl.createReadStream().then((rs) => new Promise<string>((res) => {
-    let t = ''; rs.on('data', (c) => { t += c; }); rs.on('end', () => res(t));
-  }));
+  const body = await dl.createReadStream().then(
+    (rs) =>
+      new Promise<string>((res) => {
+        let t = '';
+        rs.on('data', (c) => {
+          t += c;
+        });
+        rs.on('end', () => res(t));
+      }),
+  );
   expect(body).toContain('分组');
   expect(body).toContain('终选');
   await page.getByRole('button', { name: '解散组' }).click();
@@ -185,7 +199,11 @@ test('service worker：缓存名按当前产物算出来（不再写死），且
     // 页面侧的 caches 与 worker 侧看到的是同一份缓存存储，从这里读比 worker 内部 API 稳
     const keys = await caches.keys();
     const mine = keys.find((k) => k.startsWith('naming-app-'));
-    return { scriptURL: sw?.scriptURL ?? '', keys, hasShell: mine ? Boolean(await caches.match('./index.html')) : false };
+    return {
+      scriptURL: sw?.scriptURL ?? '',
+      keys,
+      hasShell: mine ? Boolean(await caches.match('./index.html')) : false,
+    };
   });
   // 注册参数带版本号（pwa.ts 与页脚、构建注入同源）
   expect(info.scriptURL).toMatch(/sw\.js\?v=\d+\.\d+\.\d+$/);

@@ -25,29 +25,46 @@ async function composeFill(page) {
   await page.getByRole('heading', { name: '苏子归' }).waitFor();
 }
 
-const ping = () => new Promise((res) => {
-  const req = http.get(BASE, (r) => { r.resume(); res(true); });
-  req.on('error', () => res(false));
-  req.setTimeout(400, () => { req.destroy(); res(false); });
-});
+const ping = () =>
+  new Promise((res) => {
+    const req = http.get(BASE, (r) => {
+      r.resume();
+      res(true);
+    });
+    req.on('error', () => res(false));
+    req.setTimeout(400, () => {
+      req.destroy();
+      res(false);
+    });
+  });
 
 let server = null;
 if (!(await ping())) {
-  server = spawn('node', ['node_modules/vite/bin/vite.js', 'preview', '--host', '127.0.0.1', '--port', '5180', '--strictPort'], { stdio: 'ignore' });
+  server = spawn(
+    'node',
+    ['node_modules/vite/bin/vite.js', 'preview', '--host', '127.0.0.1', '--port', '5180', '--strictPort'],
+    { stdio: 'ignore' },
+  );
   process.on('exit', () => server?.kill());
   for (let i = 0; i < 60 && !(await ping()); i++) await new Promise((r) => setTimeout(r, 250));
-  if (!(await ping())) { console.error('起不了 vite preview：先 npm run build（dist 要存在）'); process.exit(2); }
+  if (!(await ping())) {
+    console.error('起不了 vite preview：先 npm run build（dist 要存在）');
+    process.exit(2);
+  }
 }
 
 const clean = process.argv.includes('--clean');
 const browser = await chromium.launch();
 for (const s of SHOTS) {
   const page = await browser.newPage({ viewport: s.viewport, deviceScaleFactor: 2 });
-  await page.addInitScript(([theme, surname, wipe]) => {
-    if (wipe) for (const k of Object.keys(localStorage)) localStorage.removeItem(k);
-    localStorage.setItem('naming.theme.v1', theme);
-    if (surname) localStorage.setItem('naming.surname.v1', surname);
-  }, [s.theme, s.surname, clean]);
+  await page.addInitScript(
+    ([theme, surname, wipe]) => {
+      if (wipe) for (const k of Object.keys(localStorage)) localStorage.removeItem(k);
+      localStorage.setItem('naming.theme.v1', theme);
+      if (surname) localStorage.setItem('naming.surname.v1', surname);
+    },
+    [s.theme, s.surname, clean],
+  );
   await page.goto(BASE + s.hash, { waitUntil: 'networkidle' });
   if (s.hash === '#/compose') {
     await composeFill(page);

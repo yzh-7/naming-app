@@ -1,4 +1,16 @@
-import { CHARS, GENDER_FEMALE, GENDER_MALE, GLOSS, HOMO_FULL, HOMO_INIT, LINE_GLOSS, POOL, RADICAL, RISK_HIGH, SINGLES } from './data';
+import {
+  CHARS,
+  GENDER_FEMALE,
+  GENDER_MALE,
+  GLOSS,
+  HOMO_FULL,
+  HOMO_INIT,
+  LINE_GLOSS,
+  POOL,
+  RADICAL,
+  RISK_HIGH,
+  SINGLES,
+} from './data';
 import type { Book, Delta, GenderSide, GenderTag, Named, Opts, PoolItem, Result, SortKey } from './types';
 import { BOOK_ORDER, cleanSurname } from './types';
 
@@ -27,7 +39,8 @@ export const surnameReads = (surname: string) => readings([...surname][0] ?? '')
 
 // phonetics 依赖每个姓字都查得到读音：查不到就整条音韵链静默空转（谐音、声调、生僻全不判，分数白涨）。
 // 引擎不替界面兜这个错，但必须把「查不到」这件事露出来。
-export const isKnownSurname = (surname: string) => [...surname].length > 0 && surnameReadings(surname, 0).every(Boolean);
+export const isKnownSurname = (surname: string) =>
+  [...surname].length > 0 && surnameReadings(surname, 0).every(Boolean);
 
 const MAX_COMBOS = 4096;
 
@@ -37,9 +50,10 @@ function allCombos(charsArr: string[]) {
     const rs = readings(ch);
     if (!rs.length) return [];
     const next: typeof acc = [];
-    for (const p of acc) for (const r of rs) {
-      if (next.length < MAX_COMBOS) next.push([...p, { syl: r.syl, tone: r.tone }]);
-    }
+    for (const p of acc)
+      for (const r of rs) {
+        if (next.length < MAX_COMBOS) next.push([...p, { syl: r.syl, tone: r.tone }]);
+      }
     acc = next;
   }
   return acc;
@@ -56,7 +70,8 @@ function finalOf(syl: string) {
 function staticDeltas(item: Named & { famous?: boolean; tier?: string }): Delta[] {
   const d: Delta[] = [];
   const gap = item.gap ?? 1;
-  if (item.tier !== 'C') d.push({ rule: `${[...item.name].length === 1 ? '单字在' : '两字同在'}名用字表 L0`, delta: 20 });
+  if (item.tier !== 'C')
+    d.push({ rule: `${[...item.name].length === 1 ? '单字在' : '两字同在'}名用字表 L0`, delta: 20 });
   if (item.redup) d.push({ rule: '典籍叠字（依依 燕燕 昭昭）', delta: 3 });
   if (gap === 2) d.push({ rule: '跨一字取词（不成固定词）', delta: -4 });
   else if (gap >= 3) d.push({ rule: '跨两字取词（取自同句读相隔位置）', delta: -8 });
@@ -70,7 +85,8 @@ function phonetics(surname: string, name: string, surReading: number) {
   const flags: string[] = [];
   const sur = surnameReadings(surname, surReading).filter(Boolean) as { syl: string; tone: number; mark: string }[];
   const nm = [...name].map((ch) => readings(ch)[0]).filter(Boolean) as { syl: string; tone: number; mark: string }[];
-  if (sur.length !== [...surname].length || !nm.length) return { deltas, flags, readings: [], toneless: '', initials: '', total: 0 };
+  if (sur.length !== [...surname].length || !nm.length)
+    return { deltas, flags, readings: [], toneless: '', initials: '', total: 0 };
 
   const seq = [...sur, ...nm];
   const tones = seq.map((x) => x.tone);
@@ -108,7 +124,8 @@ function phonetics(surname: string, name: string, surReading: number) {
   }
 
   if (name.length === 2 && RISK_HIGH.has(name)) deltas.push({ rule: `与高频现代词同形：${name}`, delta: -40 });
-  else if (name.length === 2 && RISK_HIGH.has(surname + name)) deltas.push({ rule: `连读与高频词同形：${surname}${name}`, delta: -40 });
+  else if (name.length === 2 && RISK_HIGH.has(surname + name))
+    deltas.push({ rule: `连读与高频词同形：${surname}${name}`, delta: -40 });
 
   for (const ch of name) {
     const info = CHARS[ch];
@@ -118,22 +135,29 @@ function phonetics(surname: string, name: string, surReading: number) {
       break;
     }
   }
-  return { deltas, flags, readings: seq.map((x) => x.mark), toneless: seq.map((x) => x.syl).join(' '), initials: seq.map((x) => x.syl[0]).join(''), total: 0 };
+  return {
+    deltas,
+    flags,
+    readings: seq.map((x) => x.mark),
+    toneless: seq.map((x) => x.syl).join(' '),
+    initials: seq.map((x) => x.syl[0]).join(''),
+    total: 0,
+  };
 }
 
 // 部首提示：只标康熙字典里落在 木/火/水/金/土 五部的字，其余留白。
 // 这是「该字的部首是什么」的可核对事实，不是「该字五行属什么」的命理判断，故不参与筛选与打分。
 export const radicalTags = (name: string) =>
-  [...new Set([...name])].map((ch) => ({ ch, el: RADICAL[ch] })).filter((x): x is { ch: string; el: NonNullable<typeof RADICAL[string]> } => !!x.el);
+  [...new Set([...name])]
+    .map((ch) => ({ ch, el: RADICAL[ch] }))
+    .filter((x): x is { ch: string; el: NonNullable<(typeof RADICAL)[string]> } => !!x.el);
 
 // 字义：名用字逐字短释义（本义优先），查不到返回 null。只用于展示，不参与打分
 export const glossOf = (ch: string): string | null => GLOSS[ch] ?? null;
 
 // 多音字：名字里有多个读音的字（如 乐 lè/yuè、华 huá/huà）。名字读法不止一种，提示看原句与姓氏连读
 export const polyphoneTags = (name: string) =>
-  [...new Set([...name])]
-    .map((ch) => ({ ch, reads: CHARS[ch]?.pm ?? [] }))
-    .filter((x) => x.reads.length > 1);
+  [...new Set([...name])].map((ch) => ({ ch, reads: CHARS[ch]?.pm ?? [] })).filter((x) => x.reads.length > 1);
 
 // 字形/结构：逐字给出笔画与八类结构，并对「整名同结构」这条可核对的单调性给一句提示。
 // 这是字形事实（该字是左右/上下…），不是吉凶判断，不参与筛选与打分。
@@ -170,7 +194,10 @@ const POP_BANDS: { min: number; label: string }[] = [
 export const popBand = (gn: number) => POP_BANDS.find((b) => gn >= b.min)!.label;
 export const popScore = (name: string) => Math.max(0, ...[...name].map((ch) => CHARS[ch]?.gn ?? 0));
 export function popularity(name: string) {
-  const chars = [...new Set([...name])].map((ch) => { const gn = CHARS[ch]?.gn ?? 0; return { ch, gn, band: popBand(gn) }; });
+  const chars = [...new Set([...name])].map((ch) => {
+    const gn = CHARS[ch]?.gn ?? 0;
+    return { ch, gn, band: popBand(gn) };
+  });
   const lead = chars.reduce((a, c) => (c.gn > a.gn ? c : a), chars[0]);
   return { chars, band: lead ? lead.band : '冷僻', lead: lead ?? null };
 }
@@ -210,20 +237,34 @@ export function genderOf(name: string): GenderTag {
   return { side, strong, why: strong ? basis : `${basis} · 其余 ${none.join('')} 无性别信号` };
 }
 
-const SINGLE_ITEMS: (Named & { famous?: boolean; tier?: string })[] = SINGLES.map((s) => ({ ...s, name: s.char, chars: [s.char] } as unknown as Named & { famous?: boolean; tier?: string }));
+const SINGLE_ITEMS: (Named & { famous?: boolean; tier?: string })[] = SINGLES.map(
+  (s) => ({ ...s, name: s.char, chars: [s.char] }) as unknown as Named & { famous?: boolean; tier?: string },
+);
 const ALL_ITEMS: (Named & { famous?: boolean; tier?: string })[] = [...POOL, ...SINGLE_ITEMS];
 
-export function scoreItem(surname: string, it: Named & { famous?: boolean; tier?: string }, opts: Opts, surReading: number): Result {
+export function scoreItem(
+  surname: string,
+  it: Named & { famous?: boolean; tier?: string },
+  opts: Opts,
+  surReading: number,
+): Result {
   const st = staticDeltas(it);
   const ph = phonetics(surname, it.name, surReading);
   const gender = genderOf(it.name);
-  const genderDelta: Delta[] = opts.gender !== 'any' && gender.side === opts.gender
-    ? [{ rule: `${gender.strong ? '性别风格强匹配' : '性别风格疑似匹配'} · ${gender.why}`, delta: gender.strong ? 4 : 2 }]
-    : [];
+  const genderDelta: Delta[] =
+    opts.gender !== 'any' && gender.side === opts.gender
+      ? [
+          {
+            rule: `${gender.strong ? '性别风格强匹配' : '性别风格疑似匹配'} · ${gender.why}`,
+            delta: gender.strong ? 4 : 2,
+          },
+        ]
+      : [];
   const itemRisk = (it as unknown as { risk?: { word: string; freq: number } | null }).risk;
-  const riskDelta: Delta[] = itemRisk && itemRisk.freq < 5000
-    ? [{ rule: `与现代词同形：${itemRisk.word}（freq ${itemRisk.freq}）`, delta: -12 }]
-    : [];
+  const riskDelta: Delta[] =
+    itemRisk && itemRisk.freq < 5000
+      ? [{ rule: `与现代词同形：${itemRisk.word}（freq ${itemRisk.freq}）`, delta: -12 }]
+      : [];
   if (itemRisk && itemRisk.freq < 5000) ph.flags.push(`同形：${itemRisk.word}`);
   const deltas = [...st, ...ph.deltas, ...genderDelta, ...riskDelta];
   return {
@@ -245,7 +286,9 @@ export const findItem = (id: string) => ALL_ITEMS.find((it) => it.id === id);
 export const lineGlossOf = (it: { lg: number }) => LINE_GLOSS[it.lg] ?? '';
 
 // 名用字表（293 字）：自选页的「仅名用字表」筛选与随机自由组合都基于它
-export const L0_CHARS = Object.keys(CHARS).filter((ch) => CHARS[ch].l0).sort();
+export const L0_CHARS = Object.keys(CHARS)
+  .filter((ch) => CHARS[ch].l0)
+  .sort();
 
 // 逐字可核对事实：字义/笔画/结构/用字频次/读音/是否在名用字表。查不到的字 known=false，界面留白
 export function charFacts(ch: string) {
@@ -325,13 +368,26 @@ export function pairCandidates(ch: string): PairHint[] {
     for (const c of POOL) {
       const [a, b] = c.chars;
       if (a === b) continue;
-      for (const [self, other] of [[a, b], [b, a]] as const) {
+      for (const [self, other] of [
+        [a, b],
+        [b, a],
+      ] as const) {
         const inner = m.get(self) ?? new Map<string, PairHint>();
         const prev = inner.get(other);
         if (!prev || c.score > prev.score) {
           inner.set(other, {
-            ch: other, name: c.name, book: c.book, title: c.title, author: c.author,
-            line: c.line, seg: c.seg, foot: c.foot, gap: c.gap, lg: c.lg, id: c.id, score: c.score,
+            ch: other,
+            name: c.name,
+            book: c.book,
+            title: c.title,
+            author: c.author,
+            line: c.line,
+            seg: c.seg,
+            foot: c.foot,
+            gap: c.gap,
+            lg: c.lg,
+            id: c.id,
+            score: c.score,
           });
         }
         m.set(self, inner);
@@ -394,7 +450,11 @@ export const POOL_TITLES: string[] = (() => {
   const seen = new Set<string>();
   for (const it of ALL_ITEMS) seen.add(`${it.book}\u0000${it.title}`);
   return [...seen]
-    .sort((a, b) => BOOK_ORDER.indexOf(a.split('\u0000')[0] as Book) - BOOK_ORDER.indexOf(b.split('\u0000')[0] as Book) || (a < b ? -1 : 1))
+    .sort(
+      (a, b) =>
+        BOOK_ORDER.indexOf(a.split('\u0000')[0] as Book) - BOOK_ORDER.indexOf(b.split('\u0000')[0] as Book) ||
+        (a < b ? -1 : 1),
+    )
     .map((x) => x.split('\u0000')[1]);
 })();
 
@@ -413,7 +473,8 @@ function peersIndex(): Map<string, PoolItem[]> {
       const py = namePinyin(it.name);
       if (!py) continue;
       const list = m.get(py);
-      if (list) list.push(it); else m.set(py, [it]);
+      if (list) list.push(it);
+      else m.set(py, [it]);
     }
     peerIndex = m;
   }
@@ -492,10 +553,10 @@ const strokesOf = (name: string) => [...name].reduce((a, ch) => a + (CHARS[ch]?.
 const idCmp = (a: Result, b: Result) => (a.id < b.id ? -1 : 1);
 // 排序键都把「分数」当稳定次级键，保证同分/同笔画的条目顺序可复现
 const SORTERS: Record<SortKey, (a: Result, b: Result) => number> = {
-  score: (a, b) => (b.total - a.total) || idCmp(a, b),
-  strokes: (a, b) => (strokesOf(a.name) - strokesOf(b.name)) || (b.total - a.total) || idCmp(a, b),
-  popular: (a, b) => (popScore(b.name) - popScore(a.name)) || (b.total - a.total) || idCmp(a, b),
-  book: (a, b) => (BOOK_ORDER.indexOf(a.book) - BOOK_ORDER.indexOf(b.book)) || (b.total - a.total) || idCmp(a, b),
+  score: (a, b) => b.total - a.total || idCmp(a, b),
+  strokes: (a, b) => strokesOf(a.name) - strokesOf(b.name) || b.total - a.total || idCmp(a, b),
+  popular: (a, b) => popScore(b.name) - popScore(a.name) || b.total - a.total || idCmp(a, b),
+  book: (a, b) => BOOK_ORDER.indexOf(a.book) - BOOK_ORDER.indexOf(b.book) || b.total - a.total || idCmp(a, b),
 };
 
 export type Plan = { page: Result[]; pageNo: number; pages: number; pool: number; titleCounts: Map<string, number> };

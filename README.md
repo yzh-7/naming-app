@@ -54,11 +54,11 @@ $ npm run dev
 | `npm test` | Vitest 单元测试 |
 | `npm run test:e2e` | Playwright 端到端测试与 axe 可访问性扫描，需先执行 `npm run build` |
 | `npm run audit:design` | 设计体检，5 视口 × 深浅主题 × 4 页面共 40 组，需先执行 `npm run build` |
-| `npm run build` | 依次执行 `build:data`、`verify`、`tsc --noEmit`、`eslint .`、`vitest`、`vite build`、体积检查。ESLint 覆盖 `public/sw.js`（Service Worker 全局），不检查 `dist/`、`dist-single/` 等产物目录 |
+| `npm run build` | 依次执行 `format:check`、`build:data`、`verify`、`tsc --noEmit`、`eslint .`、`vitest`、`vite build`、体积检查。ESLint 覆盖 `public/sw.js`（Service Worker 全局），不检查 `dist/`、`dist-single/` 等产物目录 |
 | `npm run build:single` | 先跑完 `npm run build`，再执行单文件构建（`SINGLE=1`）到 `dist-single/`，并对该产物再跑一次体积检查 |
 | `npm run single` | 只执行单文件构建与体积检查，用于已经构建过的场合（CI 在 `build` 之后跑这一步） |
 | `npm run serve` | 以 `python3 -m http.server` 静态伺服 `dist/`，端口 5178 |
-| `npm run typecheck` / `npm run lint` / `npm run format` | 类型检查、ESLint、Prettier。Markdown 文档与脚本生成的 JSON 不参与格式化，排除项见 `.prettierignore` |
+| `npm run typecheck` / `npm run lint` / `npm run format` / `npm run format:check` | 类型检查、ESLint、把代码写成 prettier 形态、只判定不改动的形态检查（后者是 `build` 的第一环）。Markdown 文档与脚本生成的 JSON 不参与格式化，排除项见 `.prettierignore` |
 | `npm run check` | `build`、`test:e2e`、`audit:design` 三项连跑 |
 
 ## 功能
@@ -170,11 +170,11 @@ LICENSE            本仓库自撰代码与文档的 MIT 全文
 
 | 产物 | 原文件 | gzip（CI 口径） | gzip（本机口径） | 预算 |
 |---|---:|---:|---:|---:|
-| 站点 `dist/` 非 HTML 资源合计 | — | 388,857 B（379.7 KiB） | 386,961 B（377.9 KiB） | 409,600 B |
-| 站点 `dist/index.html` 页面壳 | 2,921 B | 1,332 B | 1,305 B | 409,600 B |
-| 单文件 `dist-single/index.html` | 1,678,496 B（1.60 MiB） | 414,718 B（405.0 KiB） | 408,954 B（399.4 KiB） | 460,800 B |
+| 站点 `dist/` 非 HTML 资源合计 | — | 388,910 B（379.8 KiB） | 387,016 B（377.9 KiB） | 409,600 B |
+| 站点 `dist/index.html` 页面壳 | 2,921 B | 1,330 B | 1,303 B | 409,600 B |
+| 单文件 `dist-single/index.html` | 1,678,520 B（1.60 MiB） | 414,731 B（405.0 KiB） | 408,967 B（399.4 KiB） | 460,800 B |
 
-gzip 的结果与压缩实现有关：CI 的官方 Node 自带 zlib-ng，同一份单文件产物压出 414,718 B，比本机系统 zlib 的 408,954 B 多 5,764 B（1.4%）。同一份产物在两种实现下都必须过门禁，所以取较大的一侧作准；单文件产物把本体与数据全部装在 HTML 里，400 KiB 这条首屏预算对它过窄，单列为 450 KiB，当前余量 46,082 B（10.0%）。语料或字表扩充会先撞这条线，扩充前先看这一行；`dist-single/` 只用于体积核对，不发布。
+gzip 的结果与压缩实现有关：CI 的官方 Node 自带 zlib-ng，同一份单文件产物压出 414,731 B，比本机系统 zlib 的 408,967 B 多 5,764 B（1.4%）。同一份产物在两种实现下都必须过门禁，所以取较大的一侧作准；单文件产物把本体与数据全部装在 HTML 里，400 KiB 这条首屏预算对它过窄，单列为 450 KiB，当前余量 46,069 B（10.0%）。语料或字表扩充会先撞这条线，扩充前先看这一行；`dist-single/` 只用于体积核对，不发布。
 
 ## 部署
 

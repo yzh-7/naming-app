@@ -24,7 +24,9 @@ const gzOf = (f) => gzipSync(fs.readFileSync(f), { level: 9 }).length;
 const total = assets.reduce((a, f) => a + gzOf(f), 0);
 
 for (const f of assets.sort((a, b) => gzOf(b) - gzOf(a))) {
-  console.log(`${String(gzOf(f)).padStart(7)} gz  ${String(brotliCompressSync(fs.readFileSync(f)).length).padStart(7)} br  ${path.relative(dir, f)}`);
+  console.log(
+    `${String(gzOf(f)).padStart(7)} gz  ${String(brotliCompressSync(fs.readFileSync(f)).length).padStart(7)} br  ${path.relative(dir, f)}`,
+  );
 }
 const ASSET_BUDGET = 400 * 1024; // 站点首屏：JS + CSS + 数据 + 图标，gzip
 const SHELL_BUDGET = 400 * 1024; // 站点 HTML 壳（不含应用本体），gzip

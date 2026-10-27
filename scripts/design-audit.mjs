@@ -17,7 +17,9 @@ const THEMES = ['light', 'dark'];
 // 每个视口×主题里按 生成 → 自选 → 收藏 → 拉黑 的顺序走一遍（同一次会话，id 都是真的）
 
 const inCI = !!process.env.GITHUB_ACTIONS;
-const annotate = (level, msg) => { if (inCI) console.log(`::${level}::${msg}`); };
+const annotate = (level, msg) => {
+  if (inCI) console.log(`::${level}::${msg}`);
+};
 
 const jsonOut = process.argv.includes('--json');
 const verbose = process.argv.includes('--verbose');
@@ -27,10 +29,18 @@ function measure([vw, mobile]) {
   const px = (s) => {
     const m = /rgba?\(([^)]+)\)/.exec(s || '');
     if (!m) return null;
-    const p = m[1].split(/[,\s/]+/).filter(Boolean).map(Number);
+    const p = m[1]
+      .split(/[,\s/]+/)
+      .filter(Boolean)
+      .map(Number);
     return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
   };
-  const mix = (fg, bg) => ({ r: fg.r * fg.a + bg.r * (1 - fg.a), g: fg.g * fg.a + bg.g * (1 - fg.a), b: fg.b * fg.a + bg.b * (1 - fg.a), a: 1 });
+  const mix = (fg, bg) => ({
+    r: fg.r * fg.a + bg.r * (1 - fg.a),
+    g: fg.g * fg.a + bg.g * (1 - fg.a),
+    b: fg.b * fg.a + bg.b * (1 - fg.a),
+    a: 1,
+  });
   const bgOf = (el) => {
     const stack = [];
     for (let e = el; e; e = e.parentElement) {
@@ -44,13 +54,23 @@ function measure([vw, mobile]) {
     return res;
   };
   const lum = (c) => {
-    const f = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+    const f = (v) => {
+      v /= 255;
+      return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    };
     return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
   };
-  const ratio = (a, b) => { const l1 = lum(a), l2 = lum(b); return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); };
+  const ratio = (a, b) => {
+    const l1 = lum(a),
+      l2 = lum(b);
+    return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+  };
   const sel = (el) => {
     const id = el.id ? `#${el.id}` : '';
-    const cls = [...el.classList].filter((c) => !/^(sm|lg|xl|xs|md):/.test(c)).slice(0, 3).join('.');
+    const cls = [...el.classList]
+      .filter((c) => !/^(sm|lg|xl|xs|md):/.test(c))
+      .slice(0, 3)
+      .join('.');
     return `${el.tagName.toLowerCase()}${id}${cls ? `.${cls}` : ''}`;
   };
   const shown = (el, rect) => {
@@ -67,18 +87,25 @@ function measure([vw, mobile]) {
     const r = el.getBoundingClientRect();
     if (!shown(el, r)) continue;
     if (r.right > vw + 1 || r.left < -1) {
-      overflow.push({ sel: sel(el), left: Math.round(r.left), right: Math.round(r.right), w: Math.round(r.width), text: (el.textContent || '').trim().slice(0, 24) });
+      overflow.push({
+        sel: sel(el),
+        left: Math.round(r.left),
+        right: Math.round(r.right),
+        w: Math.round(r.width),
+        text: (el.textContent || '').trim().slice(0, 24),
+      });
     }
   }
 
-  const INTERACTIVE = 'a[href], button, input, select, textarea, summary, [role="button"], [role="link"], [role="checkbox"]';
+  const INTERACTIVE =
+    'a[href], button, input, select, textarea, summary, [role="button"], [role="link"], [role="checkbox"]';
   const targetsSmall = [];
   const targetsShort = [];
   for (const el of document.querySelectorAll(INTERACTIVE)) {
     if (el instanceof HTMLInputElement && (el.type === 'file' || el.type === 'hidden')) continue;
     if (el.getAttribute('aria-hidden') === 'true') continue;
     if (el.closest('[hidden]')) continue;
-    if (el.closest('.sr-only')) continue;   // 只给读屏软件的元素不是触控目标（跳转链接等）
+    if (el.closest('.sr-only')) continue; // 只给读屏软件的元素不是触控目标（跳转链接等）
     const r = el.getBoundingClientRect();
     if (!shown(el, r)) continue;
     if (el instanceof HTMLInputElement && el.type === 'checkbox') {
@@ -86,7 +113,12 @@ function measure([vw, mobile]) {
       const lr = lab ? lab.getBoundingClientRect() : null;
       if (lr && lr.height >= 44 && lr.width >= 24) continue;
     }
-    const rec = { sel: sel(el), w: Math.round(r.width), h: Math.round(r.height), text: (el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 24) };
+    const rec = {
+      sel: sel(el),
+      w: Math.round(r.width),
+      h: Math.round(r.height),
+      text: (el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 24),
+    };
     if (rec.w < 24 || rec.h < 24) targetsSmall.push(rec);
     else if (mobile && rec.h < 44) targetsShort.push(rec);
   }
@@ -108,7 +140,15 @@ function measure([vw, mobile]) {
     const c = ratio(fg, bgOf(el));
     const large = size >= 24 || (size >= 18.66 && weight >= 700);
     if (c < (large ? 3 : 4.5)) {
-      contrastBad.push({ sel: sel(el), ratio: Number(c.toFixed(2)), size, weight, color: cs.color, need: large ? 3 : 4.5, text: (el.textContent || '').trim().slice(0, 24) });
+      contrastBad.push({
+        sel: sel(el),
+        ratio: Number(c.toFixed(2)),
+        size,
+        weight,
+        color: cs.color,
+        need: large ? 3 : 4.5,
+        text: (el.textContent || '').trim().slice(0, 24),
+      });
     }
     const rng = document.createRange();
     rng.selectNodeContents(el);
@@ -148,10 +188,18 @@ function measure([vw, mobile]) {
   })();
 
   return {
-    docScroll, vw, probe,
-    overflow, targetsSmall, targetsShort,
-    contrastBad, longLines,
-    fonts: Object.entries(fonts).sort((a, b) => a[0] - b[0]).map(([k, v]) => `${k}px×${v}`).join(' '),
+    docScroll,
+    vw,
+    probe,
+    overflow,
+    targetsSmall,
+    targetsShort,
+    contrastBad,
+    longLines,
+    fonts: Object.entries(fonts)
+      .sort((a, b) => a[0] - b[0])
+      .map(([k, v]) => `${k}px×${v}`)
+      .join(' '),
     headingSizes: headingSizes.join(' '),
     headerH: hr ? Math.round(hr.height) : 0,
     headerOverlap,
@@ -176,17 +224,32 @@ async function fillCompose(page) {
 // dist 没人在伺服就自己起一个（CI 里直接 `npm run build && npm run audit:design` 就能跑）
 const { spawn } = await import('node:child_process');
 const { get } = await import('node:http');
-const ping = () => new Promise((res) => {
-  const req = get(BASE, (r) => { r.resume(); res(r.statusCode === 200); });
-  req.on('error', () => res(false));
-  req.setTimeout(2000, () => { req.destroy(); res(false); });
-});
+const ping = () =>
+  new Promise((res) => {
+    const req = get(BASE, (r) => {
+      r.resume();
+      res(r.statusCode === 200);
+    });
+    req.on('error', () => res(false));
+    req.setTimeout(2000, () => {
+      req.destroy();
+      res(false);
+    });
+  });
 let server = null;
 if (!(await ping())) {
-  server = spawn('node', ['node_modules/vite/bin/vite.js', 'preview', '--host', '127.0.0.1', '--port', '5180', '--strictPort'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  server = spawn(
+    'node',
+    ['node_modules/vite/bin/vite.js', 'preview', '--host', '127.0.0.1', '--port', '5180', '--strictPort'],
+    { stdio: ['ignore', 'pipe', 'pipe'] },
+  );
   let previewLog = '';
-  server.stderr.on('data', (d) => { previewLog += String(d); });
-  server.stdout.on('data', (d) => { previewLog += String(d); });
+  server.stderr.on('data', (d) => {
+    previewLog += String(d);
+  });
+  server.stdout.on('data', (d) => {
+    previewLog += String(d);
+  });
   process.on('exit', () => server?.kill());
   for (let i = 0; i < 60 && !(await ping()); i++) await new Promise((r) => setTimeout(r, 250));
   if (!(await ping())) {
@@ -202,11 +265,14 @@ const browser = await chromium.launch();
 for (const vp of VIEWPORTS) {
   for (const theme of THEMES) {
     const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: 1 });
-    await ctx.addInitScript(([t]) => {
-      for (const k of Object.keys(localStorage)) localStorage.removeItem(k);
-      localStorage.setItem('naming.theme.v1', t);
-      localStorage.setItem('naming.surname.v1', '林');
-    }, [theme]);
+    await ctx.addInitScript(
+      ([t]) => {
+        for (const k of Object.keys(localStorage)) localStorage.removeItem(k);
+        localStorage.setItem('naming.theme.v1', t);
+        localStorage.setItem('naming.surname.v1', '林');
+      },
+      [theme],
+    );
     const page = await ctx.newPage();
     const m = async (name) => {
       // 「首屏」就是滚到顶之后的那一屏：先把滚动归零，再量页头有没有压住第一张卡片
@@ -248,14 +314,19 @@ for (const r of results) {
   if (r.headerOverlap) flags.push('页头压住卡片');
   const worstContrast = r.contrastBad.length ? Math.min(...r.contrastBad.map((c) => c.ratio)) : null;
   console.log(
-    `${tag.padEnd(22)} scroll=${String(r.docScroll).padStart(5)} 目标小=${String(r.targetsSmall.length).padStart(2)}`
-    + ` 手机偏矮=${String(r.targetsShort.length).padStart(3)} 对比度最差=${worstContrast === null ? 'ok' : worstContrast}`
-    + ` 行长>42字=${String(r.longLines.length).padStart(2)} 页头高=${String(r.headerH).padStart(3)}${flags.length ? `  ⚠ ${flags.join(' / ')}` : ''}`,
+    `${tag.padEnd(22)} scroll=${String(r.docScroll).padStart(5)} 目标小=${String(r.targetsSmall.length).padStart(2)}` +
+      ` 手机偏矮=${String(r.targetsShort.length).padStart(3)} 对比度最差=${worstContrast === null ? 'ok' : worstContrast}` +
+      ` 行长>42字=${String(r.longLines.length).padStart(2)} 页头高=${String(r.headerH).padStart(3)}${flags.length ? `  ⚠ ${flags.join(' / ')}` : ''}`,
   );
-  if (!annotatedProbe) { annotatedProbe = true; annotate('notice', `字体探针 ${r.vp} ${r.theme} ${r.page}: ${JSON.stringify(r.probe)}`); }
-  for (const o of r.overflow) hard.push([tag, '出界', `${o.sel} left=${o.left} right=${o.right} w=${o.w} 「${o.text}」`]);
+  if (!annotatedProbe) {
+    annotatedProbe = true;
+    annotate('notice', `字体探针 ${r.vp} ${r.theme} ${r.page}: ${JSON.stringify(r.probe)}`);
+  }
+  for (const o of r.overflow)
+    hard.push([tag, '出界', `${o.sel} left=${o.left} right=${o.right} w=${o.w} 「${o.text}」`]);
   for (const t of r.targetsSmall) hard.push([tag, '目标<24px', `${t.sel} ${t.w}×${t.h} 「${t.text}」`]);
-  for (const c of r.contrastBad) hard.push([tag, `对比度 ${c.ratio}<${c.need}`, `${c.sel} ${c.size}px/${c.weight} ${c.color} 「${c.text}」`]);
+  for (const c of r.contrastBad)
+    hard.push([tag, `对比度 ${c.ratio}<${c.need}`, `${c.sel} ${c.size}px/${c.weight} ${c.color} 「${c.text}」`]);
   if (r.headerOverlap) hard.push([tag, '页头压卡片', `header高=${r.headerH}`]);
   if (!r.themeCtlVisible) hard.push([tag, '主题切换不可见', '']);
 }
@@ -264,9 +335,11 @@ if (verbose) {
   console.log('\n--- 字号分布（每视口/页）---');
   for (const r of results) console.log(`${r.vp} ${r.theme} ${r.page}: ${r.fonts}`);
   console.log('\n--- 行长>42 字 ---');
-  for (const r of results) for (const l of r.longLines) console.log(`${r.vp} ${r.theme} ${r.page}: ${l.sel} ${l.chars}字 ${l.size}px`);
+  for (const r of results)
+    for (const l of r.longLines) console.log(`${r.vp} ${r.theme} ${r.page}: ${l.sel} ${l.chars}字 ${l.size}px`);
   console.log('\n--- 手机端偏矮目标（<44px，非违规）---');
-  for (const r of results) for (const t of r.targetsShort) console.log(`${r.vp} ${r.theme} ${r.page}: ${t.sel} ${t.w}×${t.h} 「${t.text}」`);
+  for (const r of results)
+    for (const t of r.targetsShort) console.log(`${r.vp} ${r.theme} ${r.page}: ${t.sel} ${t.w}×${t.h} 「${t.text}」`);
 }
 
 if (jsonOut) {

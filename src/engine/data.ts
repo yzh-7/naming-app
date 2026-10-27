@@ -24,9 +24,21 @@ const BOOKS = new Set<string>(BOOK_ORDER);
 
 function asPool(v: unknown, what: string): PoolItem[] {
   for (const it of isArr(v)) {
-    if (!isObj(it) || !isStr(it.id) || !isStr(it.name) || !Array.isArray(it.chars) || !it.chars.every(isStr) ||
-        !isStr(it.book) || !BOOKS.has(it.book) || !isStr(it.title) || !isStr(it.line) ||
-        !isNum(it.foot) || !isNum(it.gap) || typeof it.strict !== 'boolean' || !isNum(it.lg)) {
+    if (
+      !isObj(it) ||
+      !isStr(it.id) ||
+      !isStr(it.name) ||
+      !Array.isArray(it.chars) ||
+      !it.chars.every(isStr) ||
+      !isStr(it.book) ||
+      !BOOKS.has(it.book) ||
+      !isStr(it.title) ||
+      !isStr(it.line) ||
+      !isNum(it.foot) ||
+      !isNum(it.gap) ||
+      typeof it.strict !== 'boolean' ||
+      !isNum(it.lg)
+    ) {
       fail(`${what} 有结构不符的条目`);
     }
   }
@@ -35,8 +47,18 @@ function asPool(v: unknown, what: string): PoolItem[] {
 
 function asSingles(v: unknown): SingleItem[] {
   for (const it of isArr(v)) {
-    if (!isObj(it) || !isStr(it.id) || !isStr(it.char) || !isStr(it.from) || !isStr(it.book) ||
-        !BOOKS.has(it.book) || !isStr(it.line) || !isNum(it.foot) || !isNum(it.gap) || !isNum(it.lg)) {
+    if (
+      !isObj(it) ||
+      !isStr(it.id) ||
+      !isStr(it.char) ||
+      !isStr(it.from) ||
+      !isStr(it.book) ||
+      !BOOKS.has(it.book) ||
+      !isStr(it.line) ||
+      !isNum(it.foot) ||
+      !isNum(it.gap) ||
+      !isNum(it.lg)
+    ) {
       fail('singles 有结构不符的条目');
     }
   }
@@ -46,8 +68,16 @@ function asSingles(v: unknown): SingleItem[] {
 function asChars(v: unknown): Record<string, CharInfo> {
   if (!isObj(v)) fail('chars 不是对象');
   for (const [k, c] of Object.entries(v)) {
-    if (!isObj(c) || !Array.isArray(c.py) || !c.py.every(isStr) || !Array.isArray(c.pm) || !Array.isArray(c.t) ||
-        !isNum(c.lvl) || !isNum(c.cf) || typeof c.l0 !== 'boolean') {
+    if (
+      !isObj(c) ||
+      !Array.isArray(c.py) ||
+      !c.py.every(isStr) ||
+      !Array.isArray(c.pm) ||
+      !Array.isArray(c.t) ||
+      !isNum(c.lvl) ||
+      !isNum(c.cf) ||
+      typeof c.l0 !== 'boolean'
+    ) {
       fail(`chars["${k}"] 结构不符`);
     }
   }
@@ -83,7 +113,18 @@ function asGloss(v: unknown): Record<string, string> {
   return v as Record<string, string>;
 }
 
-const META_KEYS = ['pool_B', 'singles', 'L0_size', 'L0_seed', 'L0_added', 'ship_bytes_total', 'radical_chars', 'radical_named', 'gloss_chars', 'line_gloss'] as const;
+const META_KEYS = [
+  'pool_B',
+  'singles',
+  'L0_size',
+  'L0_seed',
+  'L0_added',
+  'ship_bytes_total',
+  'radical_chars',
+  'radical_named',
+  'gloss_chars',
+  'line_gloss',
+] as const;
 type Meta = {
   pool_B: number;
   by_gap: { gap1: number; gap2: number; gap3: number };
@@ -110,7 +151,8 @@ function asMeta(v: unknown): Meta {
   if (!isObj(v.by_gap) || !isNum(v.by_gap.gap1)) fail('meta.by_gap 结构不符');
   if (!isStr(v.corpus_sha) || !/^[0-9a-f]{12}$/.test(v.corpus_sha)) fail('meta.corpus_sha 不是 12 位十六进制');
   const s = v.id_prefix_stats;
-  if (!isObj(s) || !isNum(s.groups) || !isNum(s.collisions) || !isNum(s.max_group)) fail('meta.id_prefix_stats 结构不符');
+  if (!isObj(s) || !isNum(s.groups) || !isNum(s.collisions) || !isNum(s.max_group))
+    fail('meta.id_prefix_stats 结构不符');
   return v as unknown as Meta;
 }
 

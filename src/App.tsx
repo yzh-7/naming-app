@@ -1,5 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { plan, scoreItem, findItem, poolSize, cleanSurname, isKnownSurname, surnameReads, shapeTags, popularity, glossOf, lineGlossOf, namePinyin, popScore, resolveSaved, titleKey } from './engine/name';
+import {
+  plan,
+  scoreItem,
+  findItem,
+  poolSize,
+  cleanSurname,
+  isKnownSurname,
+  surnameReads,
+  shapeTags,
+  popularity,
+  glossOf,
+  lineGlossOf,
+  namePinyin,
+  popScore,
+  resolveSaved,
+  titleKey,
+} from './engine/name';
 import { APP_VERSION, META } from './engine/data';
 import { BOOK_LABEL, BOOK_ORDER, type Opts, type Result, type ShareName } from './engine/types';
 import Controls from './ui/Controls';
@@ -73,16 +89,26 @@ export default function App() {
   };
 
   // 本机存储不可用（隐私模式、配额写满、站点策略禁用）时写入不再抛出，但必须让人看见「这次没保存」
-  const warnStorage = useCallback(() => { if (store.storageUnavailable()) setStorageBroken(true); }, []);
+  const warnStorage = useCallback(() => {
+    if (store.storageUnavailable()) setStorageBroken(true);
+  }, []);
   // 保存失败由存储层通知，不在 effect 里同步 setState
   useEffect(() => store.subscribeStorageFailure(() => setStorageBroken(true)), []);
 
   // 换页时回到顶部：粘性页头常驻，若沿上一页的滚动位置落下，第一张卡片会被页头压在下面
-  useEffect(() => { if (window.scrollY > 0) window.scrollTo(0, 0); }, [tab]);
+  useEffect(() => {
+    if (window.scrollY > 0) window.scrollTo(0, 0);
+  }, [tab]);
 
-  useEffect(() => { store.saveSurname(sur); }, [sur]);
-  useEffect(() => { store.saveReading(reading); }, [reading]);
-  useEffect(() => { store.saveOpts(opts); }, [opts]);
+  useEffect(() => {
+    store.saveSurname(sur);
+  }, [sur]);
+  useEffect(() => {
+    store.saveReading(reading);
+  }, [reading]);
+  useEffect(() => {
+    store.saveOpts(opts);
+  }, [opts]);
   useEffect(() => {
     const onHash = () => setTab(tabFromHash(window.location.hash));
     window.addEventListener('hashchange', onHash);
@@ -100,14 +126,20 @@ export default function App() {
 
   const effective: Opts = useMemo(() => ({ ...opts, exclude: [...block] }), [opts, block]);
   const paged = useMemo(
-    () => (sur ? plan(sur, effective, batch, reading) : { page: [], pageNo: 0, pages: 0, pool: 0, titleCounts: new Map<string, number>() }),
+    () =>
+      sur
+        ? plan(sur, effective, batch, reading)
+        : { page: [], pageNo: 0, pages: 0, pool: 0, titleCounts: new Map<string, number>() },
     [sur, effective, batch, reading],
   );
   const results = paged.page;
   const poolCount = useMemo(() => poolSize(effective), [effective]);
 
   const scored = useCallback(
-    (id: string) => { const it = findItem(id); return it ? scoreItem(sur, it, effective, reading) : null; },
+    (id: string) => {
+      const it = findItem(id);
+      return it ? scoreItem(sur, it, effective, reading) : null;
+    },
     [sur, effective, reading],
   );
   const favPairs: Pair[] = useMemo(() => {
@@ -129,16 +161,16 @@ export default function App() {
     const ids = new Set(favPairs.map((p) => p.rec.id));
     return fav.filter((rec) => !ids.has(rec.id));
   }, [fav, favPairs]);
-  const blockList = useMemo(
-    () => block.map((id) => scored(id)).filter((x): x is Result => !!x),
-    [block, scored],
-  );
+  const blockList = useMemo(() => block.map((id) => scored(id)).filter((x): x is Result => !!x), [block, scored]);
   const favGroups = useMemo(() => [...new Set(fav.map((f) => f.group).filter(Boolean))] as string[], [fav]);
   const favView = useMemo(() => {
     const q = favQuery.trim().toLowerCase();
     let list = favPairs;
     if (favGroup) list = list.filter((p) => p.rec.group === favGroup);
-    if (q) list = list.filter(({ rec, r }) => `${r.full} ${namePinyin(r.name)} ${r.title} ${rec.note ?? ''} ${rec.group ?? ''}`.toLowerCase().includes(q));
+    if (q)
+      list = list.filter(({ rec, r }) =>
+        `${r.full} ${namePinyin(r.name)} ${r.title} ${rec.note ?? ''} ${rec.group ?? ''}`.toLowerCase().includes(q),
+      );
     const out = [...list];
     if (favSort === 'score') out.sort((a, b) => b.r.total - a.r.total);
     else if (favSort === 'strokes') out.sort((a, b) => shapeTags(a.r.name).strokes - shapeTags(b.r.name).strokes);
@@ -176,13 +208,20 @@ export default function App() {
     warnStorage();
     setNotice(`分组「${g}」已解散，${before} 条收藏回到未分组（收藏本身没删）`);
   };
-  const toggleCompare = (id: string) => setCompare((c) => (c.includes(id) ? c.filter((x) => x !== id) : c.length >= 3 ? c : [...c, id]));
+  const toggleCompare = (id: string) =>
+    setCompare((c) => (c.includes(id) ? c.filter((x) => x !== id) : c.length >= 3 ? c : [...c, id]));
 
   const doExportFavCsv = () => {
     // 收藏的分组与备注存在 rec 上，不在候选条目里：导出时要显式带上，否则这两列会是空的
     const rows = favView.map((p) => ({ r: p.r, group: p.rec.group, note: p.rec.note }));
-    if (!rows.length) { setNotice('当前视图里没有条目可导出'); return; }
-    downloadText(favoritesCsv(rows), `收藏${favGroup ? `-${favGroup}` : ''}-${new Date().toISOString().slice(0, 10)}.csv`);
+    if (!rows.length) {
+      setNotice('当前视图里没有条目可导出');
+      return;
+    }
+    downloadText(
+      favoritesCsv(rows),
+      `收藏${favGroup ? `-${favGroup}` : ''}-${new Date().toISOString().slice(0, 10)}.csv`,
+    );
     setNotice(`已导出 CSV：${rows.length} 条${favGroup ? `（分组「${favGroup}」）` : '（全部）'}`);
   };
   const doExport = () => {
@@ -193,7 +232,10 @@ export default function App() {
   // 候选全量导出：count:0＝一屏全展，paginate 会把整个筛选结果放进同一页，导出的就是「翻不完的池」本身
   const doExportCandidates = (fmt: 'csv' | 'json') => {
     const all = plan(sur, { ...effective, count: 0 }, 0, reading).page;
-    if (!all.length) { setNotice('当前筛选没有候选可导出'); return; }
+    if (!all.length) {
+      setNotice('当前筛选没有候选可导出');
+      return;
+    }
     const stamp = new Date().toISOString().slice(0, 10);
     if (fmt === 'csv') downloadText(candidatesCsv(all), `候选-${sur || '无姓'}-${stamp}.csv`, 'text/csv');
     else downloadText(candidatesJson(all), `候选-${sur || '无姓'}-${stamp}.json`);
@@ -202,7 +244,9 @@ export default function App() {
   const doImportFile = async (file: File) => {
     // 先看体积再读内容：不先挡住的话，一个几十兆的文件会先进内存再交给 JSON.parse
     if (file.size > MAX_IMPORT_BYTES) {
-      setNotice(`导入失败：这个文件 ${(file.size / 1048576).toFixed(1)} MiB，超过 ${MAX_IMPORT_BYTES / 1048576} MiB 的上限。本应用自己导出的一份最大的（全量候选）是 0.6 MiB。`);
+      setNotice(
+        `导入失败：这个文件 ${(file.size / 1048576).toFixed(1)} MiB，超过 ${MAX_IMPORT_BYTES / 1048576} MiB 的上限。本应用自己导出的一份最大的（全量候选）是 0.6 MiB。`,
+      );
       return;
     }
     let text: string;
@@ -216,16 +260,20 @@ export default function App() {
     // 读出来之后按实际字节再判一次
     const bytes = new TextEncoder().encode(text).length;
     if (bytes > MAX_IMPORT_BYTES) {
-      setNotice(`导入失败：这个文件实际 ${(bytes / 1048576).toFixed(1)} MiB，超过 ${MAX_IMPORT_BYTES / 1048576} MiB 的上限。`);
+      setNotice(
+        `导入失败：这个文件实际 ${(bytes / 1048576).toFixed(1)} MiB，超过 ${MAX_IMPORT_BYTES / 1048576} MiB 的上限。`,
+      );
       return;
     }
     const res = parseState(text);
     if (!res.ok) {
-      setNotice(res.error === 'json'
-        ? '导入失败：这个文件不是 JSON，读不出内容。'
-        : res.error === 'foreign'
-          ? '导入失败：这个文件里没有本应用的记录，认不出它是哪里导出的。'
-          : '导入失败：这个文件里没有可导入的东西（收藏、拉黑、筛选设置都是空的）。');
+      setNotice(
+        res.error === 'json'
+          ? '导入失败：这个文件不是 JSON，读不出内容。'
+          : res.error === 'foreign'
+            ? '导入失败：这个文件里没有本应用的记录，认不出它是哪里导出的。'
+            : '导入失败：这个文件里没有可导入的东西（收藏、拉黑、筛选设置都是空的）。',
+      );
       return;
     }
     setPendingImport(res.state);
@@ -234,15 +282,19 @@ export default function App() {
   const confirmImport = (mode: 'merge' | 'replace') => {
     if (!pendingImport) return;
     const st = pendingImport;
-    const nextFav = mode === 'merge'
-      ? [...new Map([...store.loadFavorites(), ...st.favorites].map((r) => [r.id, r])).values()]
-      : st.favorites;
+    const nextFav =
+      mode === 'merge'
+        ? [...new Map([...store.loadFavorites(), ...st.favorites].map((r) => [r.id, r])).values()]
+        : st.favorites;
     const nextBlock = mode === 'merge' ? [...new Set([...store.loadBlocklist(), ...st.blocklist])] : st.blocklist;
     store.saveFavorites(nextFav);
     store.saveBlocklist(nextBlock);
     setFav(store.loadFavorites());
     setBlock(store.loadBlocklist());
-    setSurname(st.surname); setReading(st.reading); setOpts(st.opts); setBatch(0);
+    setSurname(st.surname);
+    setReading(st.reading);
+    setOpts(st.opts);
+    setBatch(0);
     setPendingImport(null);
     warnStorage();
     const parts = [`收藏 ${st.favorites.length}`, `拉黑 ${st.blocklist.length}`];
@@ -255,7 +307,9 @@ export default function App() {
     if (!pendingImport) return;
     const prev = document.activeElement as HTMLElement | null;
     importBoxRef.current?.querySelector<HTMLElement>('button')?.focus();
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPendingImport(null); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPendingImport(null);
+    };
     window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('keydown', onKey);
@@ -277,7 +331,10 @@ export default function App() {
   };
   const doExportList = async () => {
     const entries = favView.filter((p) => p.r).map((p) => ({ r: p.r!, note: p.rec.note }));
-    if (!entries.length) { setNotice('当前视图里没有可画进名单图的条目。'); return; }
+    if (!entries.length) {
+      setNotice('当前视图里没有可画进名单图的条目。');
+      return;
+    }
     const { blob, qr } = await renderListCard(entries, {
       title: sur ? `${sur} · 备选名单` : '取名 · 备选名单',
       url: `${location.origin}${location.pathname}`,
@@ -285,33 +342,60 @@ export default function App() {
     downloadBlob(blob, `名单-${new Date().toISOString().slice(0, 10)}.png`);
     setNotice(`名单图已生成（${entries.length} 条）${qr ? '，含扫码二维码' : '，二维码没画出来（链接过长）'}`);
   };
-  const doPrint = () => { setTab('fav'); setTimeout(() => window.print?.(), 60); };
+  const doPrint = () => {
+    setTab('fav');
+    setTimeout(() => window.print?.(), 60);
+  };
 
   return (
     <div className="min-h-dvh bg-canvas text-ink">
-      <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-ctl focus:bg-accent focus:px-3 focus:py-2 focus:text-accent-btn-ink">跳到内容</a>
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-ctl focus:bg-accent focus:px-3 focus:py-2 focus:text-accent-btn-ink"
+      >
+        跳到内容
+      </a>
       {/* 页头常驻且粘在顶部：四个页都在同一位置看到导航与昼夜切换 */}
       <header className="sticky top-0 z-30 border-b border-line bg-surface/85 backdrop-blur-md no-print">
         {/* 手机两行：第一行 徽标+站名+昼夜切换，第二行整宽页签；≥640px 收回一行 */}
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-1.5 sm:gap-y-2 sm:py-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-ctl bg-accent font-serif text-body text-accent-btn-ink">名</span>
+            <span
+              aria-hidden="true"
+              className="grid size-8 shrink-0 place-items-center rounded-ctl bg-accent font-serif text-body text-accent-btn-ink"
+            >
+              名
+            </span>
             <div className="min-w-0">
-              <h1 className="font-serif text-title leading-tight">取名<span className="hidden xs:inline"> · 典籍取词</span></h1>
-              <p className="mt-0.5 hidden truncate text-meta text-ink-3 xl:block">{BOOK_ORDER.map((b) => BOOK_LABEL[b]).join(' / ')} · 起点落音步、同句读内取两字 + 名用字表 · 完全离线</p>
+              <h1 className="font-serif text-title leading-tight">
+                取名<span className="hidden xs:inline"> · 典籍取词</span>
+              </h1>
+              <p className="mt-0.5 hidden truncate text-meta text-ink-3 xl:block">
+                {BOOK_ORDER.map((b) => BOOK_LABEL[b]).join(' / ')} · 起点落音步、同句读内取两字 + 名用字表 · 完全离线
+              </p>
             </div>
           </div>
           <div className="ml-auto shrink-0 sm:order-3">
             <ThemeControl theme={theme} setTheme={setTheme} />
           </div>
-          <TopNav current={tab} favCount={fav.length} blockCount={block.length} onNavigate={(t) => { goTab(t); setTab(t); }}
-            className="order-last w-full sm:order-2 sm:ml-auto sm:w-auto" />
+          <TopNav
+            current={tab}
+            favCount={fav.length}
+            blockCount={block.length}
+            onNavigate={(t) => {
+              goTab(t);
+              setTab(t);
+            }}
+            className="order-last w-full sm:order-2 sm:ml-auto sm:w-auto"
+          />
         </div>
       </header>
 
       <main id="main" className="anchor-offset mx-auto max-w-6xl space-y-4 px-4 py-4 sm:py-6">
         {offline && (
-          <p className="rounded-card border border-warn-line bg-warn-soft px-3 py-2 text-meta text-warn no-print">离线模式：数据都来自本机缓存，功能正常。</p>
+          <p className="rounded-card border border-warn-line bg-warn-soft px-3 py-2 text-meta text-warn no-print">
+            离线模式：数据都来自本机缓存，功能正常。
+          </p>
         )}
         {storageBroken && (
           <p className="rounded-card border border-warn-line bg-warn-soft px-3 py-2 text-meta text-warn no-print">
@@ -321,68 +405,135 @@ export default function App() {
         {updateReady && (
           <p className="flex flex-wrap items-center gap-2 rounded-card border border-cool-line bg-cool-soft px-3 py-2 text-meta text-cool no-print">
             有新版本可用。
-            <button onClick={applyUpdate} className="btn">刷新</button>
+            <button onClick={applyUpdate} className="btn">
+              刷新
+            </button>
           </p>
         )}
 
         {pendingImport && (
-          <div ref={importBoxRef} role="dialog" aria-modal="true" aria-label="导入方式" className="space-y-3 rounded-card border border-accent-line bg-accent-soft p-4 text-body text-accent-ink no-print">
+          <div
+            ref={importBoxRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="导入方式"
+            className="space-y-3 rounded-card border border-accent-line bg-accent-soft p-4 text-body text-accent-ink no-print"
+          >
             <p>
               这份文件含收藏 {pendingImport.favorites.length} 条 · 拉黑 {pendingImport.blocklist.length} 条
               {!pendingImport.favorites.length && !pendingImport.blocklist.length && '（只有姓氏与筛选设置）'}
               。与现有数据怎么合？按 Esc 取消。
             </p>
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => confirmImport('merge')} className="btn-primary">合并（保留两边）</button>
-              <button onClick={() => confirmImport('replace')} className="btn btn-quiet">覆盖</button>
-              <button onClick={() => setPendingImport(null)} className="btn btn-quiet">取消</button>
+              <button onClick={() => confirmImport('merge')} className="btn-primary">
+                合并（保留两边）
+              </button>
+              <button onClick={() => confirmImport('replace')} className="btn btn-quiet">
+                覆盖
+              </button>
+              <button onClick={() => setPendingImport(null)} className="btn btn-quiet">
+                取消
+              </button>
             </div>
           </div>
         )}
 
         {/* 操作反馈放在屏幕底部，手机上不挤动正文；aria-live 保持不变 */}
-        <div aria-live="polite" className={notice ? 'fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 pt-3 pb-safe no-print' : 'sr-only'}>
-          {notice && <span className="max-w-[min(36rem,100%)] rounded-card border border-line-strong bg-surface px-3 py-2 text-meta text-ink">{notice}</span>}
+        <div
+          aria-live="polite"
+          className={
+            notice ? 'fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 pt-3 pb-safe no-print' : 'sr-only'
+          }
+        >
+          {notice && (
+            <span className="max-w-[min(36rem,100%)] rounded-card border border-line-strong bg-surface px-3 py-2 text-meta text-ink">
+              {notice}
+            </span>
+          )}
         </div>
 
         {tab === 'gen' && (
           /* 宽屏两栏：左边筛选常驻（粘顶），右边结果栅格；窄屏退回单列，筛选在上 */
           <div className="grid items-start gap-4 xl:grid-cols-[minmax(19rem,21.5rem)_minmax(0,1fr)] xl:gap-6">
             <div className="min-w-0 space-y-3 no-print xl:sticky xl:top-[5.25rem] xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto">
-              <Controls surname={surname} setSurname={changeSurname} reading={reading} setReading={setReading}
-                opts={opts} setOpts={setOpts}
-                poolCount={poolCount} pageNo={paged.pageNo} pages={paged.pages}
-                onBatch={() => setBatch(batch + 1)} />
+              <Controls
+                surname={surname}
+                setSurname={changeSurname}
+                reading={reading}
+                setReading={setReading}
+                opts={opts}
+                setOpts={setOpts}
+                poolCount={poolCount}
+                pageNo={paged.pageNo}
+                pages={paged.pages}
+                onBatch={() => setBatch(batch + 1)}
+              />
               <div className="flex flex-wrap gap-2">
-                <button onClick={doExport} className="btn btn-outlined">导出</button>
-                <button onClick={() => doExportCandidates('csv')} disabled={poolCount === 0} title="把当前筛选命中的全部候选（不只这一屏）存成表格，Excel/WPS 可直接打开"
-                  className="btn btn-outlined">候选CSV</button>
-                <button onClick={() => doExportCandidates('json')} disabled={poolCount === 0} title="同一份候选全量清单的 JSON 版，适合程序处理"
-                  className="btn btn-outlined">候选JSON</button>
-                <button onClick={() => fileRef.current?.click()} className="btn btn-outlined">导入</button>
-                <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" aria-hidden="true"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void doImportFile(f); e.target.value = ''; }} />
-                <button onClick={doCopyLink} className="btn btn-outlined">复制链接</button>
+                <button onClick={doExport} className="btn btn-outlined">
+                  导出
+                </button>
+                <button
+                  onClick={() => doExportCandidates('csv')}
+                  disabled={poolCount === 0}
+                  title="把当前筛选命中的全部候选（不只这一屏）存成表格，Excel/WPS 可直接打开"
+                  className="btn btn-outlined"
+                >
+                  候选CSV
+                </button>
+                <button
+                  onClick={() => doExportCandidates('json')}
+                  disabled={poolCount === 0}
+                  title="同一份候选全量清单的 JSON 版，适合程序处理"
+                  className="btn btn-outlined"
+                >
+                  候选JSON
+                </button>
+                <button onClick={() => fileRef.current?.click()} className="btn btn-outlined">
+                  导入
+                </button>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".json,application/json"
+                  className="hidden"
+                  aria-hidden="true"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void doImportFile(f);
+                    e.target.value = '';
+                  }}
+                />
+                <button onClick={doCopyLink} className="btn btn-outlined">
+                  复制链接
+                </button>
               </div>
             </div>
 
             <div className="min-w-0 space-y-4">
               {!sur && (
                 <p className="measure mx-auto rounded-card border border-dashed border-line-strong bg-surface-2 p-6 text-center text-meta leading-6 text-ink-3">
-                  先填姓氏。名字的起点落在典籍原句的音步边界上，第二个字取同句读内隔 0–2 字的位置，两字都须在名用字表内。
+                  先填姓氏。名字的起点落在典籍原句的音步边界上，第二个字取同句读内隔 0–2
+                  字的位置，两字都须在名用字表内。
                 </p>
               )}
               {sur && !knownSur && (
                 <p className="rounded-card border border-warn-line bg-warn-soft p-4 text-body leading-7 text-warn">
-                  「{sur}」有字不在读音表（通用规范汉字表 8105 字）内，声调、谐音、生僻这些音韵检查这次没有跑，卡片上的读音与分数只反映了典籍那一侧。
+                  「{sur}」有字不在读音表（通用规范汉字表 8105
+                  字）内，声调、谐音、生僻这些音韵检查这次没有跑，卡片上的读音与分数只反映了典籍那一侧。
                 </p>
               )}
               {sur && results.length === 0 && (
                 <p className="rounded-card border border-dashed border-line-strong bg-surface-2 p-6 text-center text-meta leading-6 text-ink-3">
-                  这个条件下没有剩余候选。{opts.search ? '试试清空搜索；' : ''}{opts.title ? '当前只在看《' + opts.title + '》，点「不限篇」回到全部；' : ''}{opts.avoidChars ? '禁用字「' + opts.avoidChars + '」也在滤，先点「不限」；' : ''}{opts.strokeMax || opts.popFloor || opts.noMonotone ? '试试放宽笔画/常见度/结构筛选；' : ''}{opts.redupOnly ? '当前开着「只看典籍叠字」，先取消它；' : ''}其余可能是典籍全选关或都已拉黑。
+                  这个条件下没有剩余候选。{opts.search ? '试试清空搜索；' : ''}
+                  {opts.title ? '当前只在看《' + opts.title + '》，点「不限篇」回到全部；' : ''}
+                  {opts.avoidChars ? '禁用字「' + opts.avoidChars + '」也在滤，先点「不限」；' : ''}
+                  {opts.strokeMax || opts.popFloor || opts.noMonotone ? '试试放宽笔画/常见度/结构筛选；' : ''}
+                  {opts.redupOnly ? '当前开着「只看典籍叠字」，先取消它；' : ''}其余可能是典籍全选关或都已拉黑。
                 </p>
               )}
-              <p aria-live="polite" className="sr-only">共 {poolCount} 条候选，第 {paged.pageNo + 1} 页，共 {paged.pages} 页</p>
+              <p aria-live="polite" className="sr-only">
+                共 {poolCount} 条候选，第 {paged.pageNo + 1} 页，共 {paged.pages} 页
+              </p>
               {grouped.map(([book, list]) => (
                 <section key={book} className="space-y-2.5">
                   <h2 className="text-meta text-ink-3">
@@ -391,11 +542,27 @@ export default function App() {
                   </h2>
                   <div className="grid gap-3 sm:grid-cols-2">
                     {list.map((r) => (
-                      <NameCard key={r.id} r={r} fav={favIds.has(r.id)} blocked={block.includes(r.id)}
-                        onFav={() => toggleFav(r)} onBlock={() => toggleBlock(r)} onShare={() => void doShare(r)} onCopy={() => void doCopy(r)}
-                        onTitle={() => { setOpts((o) => ({ ...o, title: r.title, search: '' })); setBatch(0); setNotice(`只看《${r.title}》里的候选`); }}
-                        onSameSound={() => { setOpts((o) => ({ ...o, search: namePinyin(r.name), title: '' })); setBatch(0); setNotice(`按拼音「${namePinyin(r.name)}」搜索同音写法`); }}
-                        sameTitle={paged.titleCounts.get(titleKey(r))} />
+                      <NameCard
+                        key={r.id}
+                        r={r}
+                        fav={favIds.has(r.id)}
+                        blocked={block.includes(r.id)}
+                        onFav={() => toggleFav(r)}
+                        onBlock={() => toggleBlock(r)}
+                        onShare={() => void doShare(r)}
+                        onCopy={() => void doCopy(r)}
+                        onTitle={() => {
+                          setOpts((o) => ({ ...o, title: r.title, search: '' }));
+                          setBatch(0);
+                          setNotice(`只看《${r.title}》里的候选`);
+                        }}
+                        onSameSound={() => {
+                          setOpts((o) => ({ ...o, search: namePinyin(r.name), title: '' }));
+                          setBatch(0);
+                          setNotice(`按拼音「${namePinyin(r.name)}」搜索同音写法`);
+                        }}
+                        sameTitle={paged.titleCounts.get(titleKey(r))}
+                      />
                     ))}
                   </div>
                 </section>
@@ -429,36 +596,71 @@ export default function App() {
         {tab === 'fav' && (
           <div className="max-w-4xl space-y-3">
             <p className="measure text-meta leading-6 text-ink-3 no-print">
-              收藏存在本机浏览器，换设备不同步；分数会随姓氏读音选择重新计算。可加备注/分组，勾选 2–3 个做对比。导出可备份迁移。
+              收藏存在本机浏览器，换设备不同步；分数会随姓氏读音选择重新计算。可加备注/分组，勾选 2–3
+              个做对比。导出可备份迁移。
             </p>
             <div className="flex flex-wrap items-center gap-2 no-print">
-              <input value={favQuery} onChange={(e) => setFavQuery(e.target.value)} aria-label="搜索收藏" placeholder="名字 / 拼音 / 备注 / 分组"
-                className="field w-full sm:w-56" />
-              <select value={favSort} onChange={(e) => setFavSort(e.target.value as FavSort)} aria-label="收藏排序" className="field">
-                {FAV_SORTS.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}
+              <input
+                value={favQuery}
+                onChange={(e) => setFavQuery(e.target.value)}
+                aria-label="搜索收藏"
+                placeholder="名字 / 拼音 / 备注 / 分组"
+                className="field w-full sm:w-56"
+              />
+              <select
+                value={favSort}
+                onChange={(e) => setFavSort(e.target.value as FavSort)}
+                aria-label="收藏排序"
+                className="field"
+              >
+                {FAV_SORTS.map((s) => (
+                  <option key={s.v} value={s.v}>
+                    {s.label}
+                  </option>
+                ))}
               </select>
-              <button onClick={() => void doExportList()} disabled={favView.length === 0} className="btn btn-outlined">导出名单图</button>
-              <button onClick={doExportFavCsv} disabled={favView.length === 0} className="btn btn-outlined" title="按当前搜索与分组视图导出 CSV，含备注与分组两列">导出 CSV</button>
-              <button onClick={doPrint} disabled={favView.length === 0} className="btn btn-outlined">打印名单</button>
+              <button onClick={() => void doExportList()} disabled={favView.length === 0} className="btn btn-outlined">
+                导出名单图
+              </button>
+              <button
+                onClick={doExportFavCsv}
+                disabled={favView.length === 0}
+                className="btn btn-outlined"
+                title="按当前搜索与分组视图导出 CSV，含备注与分组两列"
+              >
+                导出 CSV
+              </button>
+              <button onClick={doPrint} disabled={favView.length === 0} className="btn btn-outlined">
+                打印名单
+              </button>
             </div>
             {favGroups.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5 no-print">
                 <span className="lab">分组</span>
                 {['', ...favGroups].map((g) => (
-                  <button key={g || '__all'} onClick={() => setFavGroup(g)} aria-pressed={favGroup === g}
-                    className={`chip ${favGroup === g ? 'chip-accent' : 'text-ink-3'}`}>
+                  <button
+                    key={g || '__all'}
+                    onClick={() => setFavGroup(g)}
+                    aria-pressed={favGroup === g}
+                    className={`chip ${favGroup === g ? 'chip-accent' : 'text-ink-3'}`}
+                  >
                     {g || '全部'}
                   </button>
                 ))}
               </div>
             )}
             {favGroup && (
-              <GroupTools key={favGroup} group={favGroup}
-                onRename={(to) => doRenameGroup(favGroup, to)} onDelete={() => doDeleteGroup(favGroup)} />
+              <GroupTools
+                key={favGroup}
+                group={favGroup}
+                onRename={(to) => doRenameGroup(favGroup, to)}
+                onDelete={() => doDeleteGroup(favGroup)}
+              />
             )}
             {favAvoidHits > 0 && (
               <p className="text-meta leading-6 text-ink-3 no-print" role="status">
-                禁用字「{opts.avoidChars}」只筛生成页；收藏里含这些字的 {favAvoidHits} 条照旧留在下面，要清掉就逐条取消收藏。
+                禁用字「{opts.avoidChars}」只筛生成页；收藏里含这些字的 {favAvoidHits}{' '}
+                条照旧留在下面，要清掉就逐条取消收藏。
               </p>
             )}
             {compare.length >= 2 && <Compare pairs={favPairs.filter((p) => compare.includes(p.rec.id))} />}
@@ -466,41 +668,72 @@ export default function App() {
               <p className="rounded-card border border-dashed border-line-strong bg-surface-2 p-6 text-center text-meta text-ink-3">
                 {favPairs.length === 0 ? '还没有条目。' : '没有符合搜索/分组的条目。'}
               </p>
-            ) : favView.map(({ rec, r, stale }) => (
-              <div key={rec.id} className="space-y-2">
-                {stale && (
-                  <p className="text-meta leading-6 text-warn no-print">
-                    这条收藏记的编号在当前候选池里找不到了，下面这张卡是按名字与出处对上的；分数可能与当初收藏时不同。
-                  </p>
-                )}
-                <NameCard r={r} fav blocked={false} onFav={() => toggleFav(r)} onBlock={() => toggleBlock(r)} onShare={() => void doShare(r)} onCopy={() => void doCopy(r)} />
-                <div className="flex flex-wrap items-center gap-2 px-1 no-print">
-                  <label className="flex min-h-11 items-center gap-1.5">
-                    <input type="checkbox" checked={compare.includes(rec.id)} onChange={() => toggleCompare(rec.id)}
-                      className="size-6 accent-accent" />
-                    <span className="text-meta text-ink-3">对比</span>
-                  </label>
-                  <label className="flex min-h-11 items-center gap-1.5">
-                    <span className="text-meta text-ink-3">分组</span>
-                    <input list="fav-groups" value={rec.group ?? ''} onChange={(e) => setFav(store.updateFavorite(rec.id, { group: e.target.value }))}
-                      placeholder="如 女孩/备选" className="field w-full min-w-0 basis-32 sm:w-32" />
-                  </label>
-                  <datalist id="fav-groups">{favGroups.map((g) => <option key={g} value={g} />)}</datalist>
-                  <label className="flex min-w-0 flex-1 items-center gap-1.5">
-                    <span className="text-meta text-ink-3">备注</span>
-                    <input value={rec.note ?? ''} onChange={(e) => setFav(store.updateFavorite(rec.id, { note: e.target.value }))}
-                      placeholder="为什么喜欢它" className="field min-w-0 basis-32 flex-1" />
-                  </label>
+            ) : (
+              favView.map(({ rec, r, stale }) => (
+                <div key={rec.id} className="space-y-2">
+                  {stale && (
+                    <p className="text-meta leading-6 text-warn no-print">
+                      这条收藏记的编号在当前候选池里找不到了，下面这张卡是按名字与出处对上的；分数可能与当初收藏时不同。
+                    </p>
+                  )}
+                  <NameCard
+                    r={r}
+                    fav
+                    blocked={false}
+                    onFav={() => toggleFav(r)}
+                    onBlock={() => toggleBlock(r)}
+                    onShare={() => void doShare(r)}
+                    onCopy={() => void doCopy(r)}
+                  />
+                  <div className="flex flex-wrap items-center gap-2 px-1 no-print">
+                    <label className="flex min-h-11 items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={compare.includes(rec.id)}
+                        onChange={() => toggleCompare(rec.id)}
+                        className="size-6 accent-accent"
+                      />
+                      <span className="text-meta text-ink-3">对比</span>
+                    </label>
+                    <label className="flex min-h-11 items-center gap-1.5">
+                      <span className="text-meta text-ink-3">分组</span>
+                      <input
+                        list="fav-groups"
+                        value={rec.group ?? ''}
+                        onChange={(e) => setFav(store.updateFavorite(rec.id, { group: e.target.value }))}
+                        placeholder="如 女孩/备选"
+                        className="field w-full min-w-0 basis-32 sm:w-32"
+                      />
+                    </label>
+                    <datalist id="fav-groups">
+                      {favGroups.map((g) => (
+                        <option key={g} value={g} />
+                      ))}
+                    </datalist>
+                    <label className="flex min-w-0 flex-1 items-center gap-1.5">
+                      <span className="text-meta text-ink-3">备注</span>
+                      <input
+                        value={rec.note ?? ''}
+                        onChange={(e) => setFav(store.updateFavorite(rec.id, { note: e.target.value }))}
+                        placeholder="为什么喜欢它"
+                        className="field min-w-0 basis-32 flex-1"
+                      />
+                    </label>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
             {favLost.length > 0 && (
               <div className="space-y-2">
                 <p className="text-meta leading-6 text-ink-3 no-print">
-                  下面 {favLost.length} 条收藏在当前候选池里已经对不上任何条目（旧版本收录过、或数据换过）。这里只留当时记下的名字与出处，不能重新打分。
+                  下面 {favLost.length}{' '}
+                  条收藏在当前候选池里已经对不上任何条目（旧版本收录过、或数据换过）。这里只留当时记下的名字与出处，不能重新打分。
                 </p>
                 {favLost.map((rec) => (
-                  <div key={rec.id} className="rounded-card border border-dashed border-line-strong bg-surface-2 p-3 space-y-1.5">
+                  <div
+                    key={rec.id}
+                    className="rounded-card border border-dashed border-line-strong bg-surface-2 p-3 space-y-1.5"
+                  >
                     <p className="text-body text-ink-2">
                       {rec.name ? `${sur}${rec.name}` : '一条旧收藏'}
                       {rec.book ? ` · 《${BOOK_LABEL[rec.book]}·${rec.title}》` : ''}
@@ -509,7 +742,15 @@ export default function App() {
                     {rec.line && <p className="text-meta leading-6 text-ink-3">{rec.line}</p>}
                     {rec.note && <p className="text-meta leading-6 text-ink-3">备注：{rec.note}</p>}
                     <div className="no-print">
-                      <button onClick={() => { setFav(store.removeFavorite(rec.id)); warnStorage(); }} className="btn btn-quiet">删除这条</button>
+                      <button
+                        onClick={() => {
+                          setFav(store.removeFavorite(rec.id));
+                          warnStorage();
+                        }}
+                        className="btn btn-quiet"
+                      >
+                        删除这条
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -522,11 +763,20 @@ export default function App() {
           <div className="max-w-4xl space-y-3">
             <p className="text-meta leading-6 text-ink-3">拉黑后的名字不再出现在生成结果里，点卡片按钮可解除。</p>
             {blockList.length === 0 ? (
-              <p className="rounded-card border border-dashed border-line-strong bg-surface-2 p-6 text-center text-meta text-ink-3">还没有条目。</p>
+              <p className="rounded-card border border-dashed border-line-strong bg-surface-2 p-6 text-center text-meta text-ink-3">
+                还没有条目。
+              </p>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
                 {blockList.map((r) => (
-                  <NameCard key={r.id} r={r} fav={favIds.has(r.id)} blocked onFav={() => toggleFav(r)} onBlock={() => toggleBlock(r)} />
+                  <NameCard
+                    key={r.id}
+                    r={r}
+                    fav={favIds.has(r.id)}
+                    blocked
+                    onFav={() => toggleFav(r)}
+                    onBlock={() => toggleBlock(r)}
+                  />
                 ))}
               </div>
             )}
@@ -534,16 +784,37 @@ export default function App() {
         )}
 
         <footer className="max-w-4xl space-y-1.5 border-t border-line pt-4 text-meta leading-6 text-ink-3 no-print">
-          <p className="measure">候选池 {num(META.pool_B)} 条（名用字表 {num(META.L0_size)} 字{META.L0_added > 0 ? `＝种子表 ${num(META.L0_seed)} 字＋人工过字保留 ${num(META.L0_added)} 字` : '（种子版）'}；取词段：同句读相邻 {num(META.by_gap.gap1)} 对 · 跨一字 {num(META.by_gap.gap2)} 对 · 跨两字 {num(META.by_gap.gap3)} 对）· 单字名有对齐出处 {num(META.singles)} 字 ·
-            数据 {Math.round(META.ship_bytes_total / 1024)} KiB（未压缩，全部打进应用包），运行时零网络请求。
-            {sur && surnameReads(sur) > 1 && ' 你的姓首字是多音字，请在上方确认读音。'}</p>
+          <p className="measure">
+            候选池 {num(META.pool_B)} 条（名用字表 {num(META.L0_size)} 字
+            {META.L0_added > 0
+              ? `＝种子表 ${num(META.L0_seed)} 字＋人工过字保留 ${num(META.L0_added)} 字`
+              : '（种子版）'}
+            ；取词段：同句读相邻 {num(META.by_gap.gap1)} 对 · 跨一字 {num(META.by_gap.gap2)} 对 · 跨两字{' '}
+            {num(META.by_gap.gap3)} 对）· 单字名有对齐出处 {num(META.singles)} 字 · 数据{' '}
+            {Math.round(META.ship_bytes_total / 1024)} KiB（未压缩，全部打进应用包），运行时零网络请求。
+            {sur && surnameReads(sur) > 1 && ' 你的姓首字是多音字，请在上方确认读音。'}
+          </p>
           <p className="measure">本应用只给可核对的出处与用字事实，不做五行、八字、五格、吉凶判断。</p>
-          <p className="measure">应用版本 {APP_VERSION} · 语料指纹 {META.corpus_sha}（语料清单变化即变）。</p>
+          <p className="measure">
+            应用版本 {APP_VERSION} · 语料指纹 {META.corpus_sha}（语料清单变化即变）。
+          </p>
           <details>
-            <summary className="flex min-h-11 cursor-pointer select-none items-center text-ink-2 hover:text-ink lg:min-h-8">标注口径与数据来源（点开看）</summary>
-            <p className="measure mt-1.5">卡片上的「部首」只是康熙字典五部（木{num(META.radical_dist.木)}·火{num(META.radical_dist.火)}·水{num(META.radical_dist.水)}·金{num(META.radical_dist.金)}·土{num(META.radical_dist.土)} 共 {num(META.radical_chars)} 字）的事实标注，覆盖 {num(META.radical_named)}/{num(META.pool_B)} 条双名；字义（本义）来自开放词典，用字常见度来自 114 万真实姓名用字频次（估算）。没标部首不代表这个字在康熙字典里不属于这五部之外，也不代表它没有五行；本应用不做五行筛选、不做八字五格、不判吉凶。</p>
-            <p className="measure mt-1.5">语料 chinese-poetry（MIT）＋ 乐府诗集（公共领域，维基文库整理本）＋ 道法 22 行手工录入 · 字表 general_standard_chinese（Apache-2.0）· 名用字种子 cnname（MIT）· 词频 jieba（MIT）· 字义/笔画/结构 chinese-dictionary（MIT）· 用字频次 Chinese-Names-Corpus（Apache-2.0）·
-              部首 Unicode Unihan · 拼音仅构建期使用 pinyin-pro（MIT）。</p>
+            <summary className="flex min-h-11 cursor-pointer select-none items-center text-ink-2 hover:text-ink lg:min-h-8">
+              标注口径与数据来源（点开看）
+            </summary>
+            <p className="measure mt-1.5">
+              卡片上的「部首」只是康熙字典五部（木{num(META.radical_dist.木)}·火{num(META.radical_dist.火)}·水
+              {num(META.radical_dist.水)}·金{num(META.radical_dist.金)}·土{num(META.radical_dist.土)} 共{' '}
+              {num(META.radical_chars)} 字）的事实标注，覆盖 {num(META.radical_named)}/{num(META.pool_B)}{' '}
+              条双名；字义（本义）来自开放词典，用字常见度来自 114
+              万真实姓名用字频次（估算）。没标部首不代表这个字在康熙字典里不属于这五部之外，也不代表它没有五行；本应用不做五行筛选、不做八字五格、不判吉凶。
+            </p>
+            <p className="measure mt-1.5">
+              语料 chinese-poetry（MIT）＋ 乐府诗集（公共领域，维基文库整理本）＋ 道法 22 行手工录入 · 字表
+              general_standard_chinese（Apache-2.0）· 名用字种子 cnname（MIT）· 词频 jieba（MIT）· 字义/笔画/结构
+              chinese-dictionary（MIT）· 用字频次 Chinese-Names-Corpus（Apache-2.0）· 部首 Unicode Unihan ·
+              拼音仅构建期使用 pinyin-pro（MIT）。
+            </p>
           </details>
         </footer>
       </main>
@@ -552,24 +823,60 @@ export default function App() {
 }
 
 // 分组改名 / 删组：只在选中某个分组时出现
-function GroupTools({ group, onRename, onDelete }: { group: string; onRename: (to: string) => void; onDelete: () => void }) {
+function GroupTools({
+  group,
+  onRename,
+  onDelete,
+}: {
+  group: string;
+  onRename: (to: string) => void;
+  onDelete: () => void;
+}) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(group);
   if (editing) {
     return (
-      <form className="flex flex-wrap items-center gap-2 no-print"
-        onSubmit={(e) => { e.preventDefault(); onRename(val.trim()); setEditing(false); }}>
-        <input value={val} onChange={(e) => setVal(e.target.value)} aria-label={`分组「${group}」的新名字`} maxLength={24}
-          placeholder="新组名" className="field w-full min-w-0 sm:w-40" autoFocus />
-        <button type="submit" className="btn btn-outlined">改名</button>
-        <button type="button" onClick={() => { setVal(group); setEditing(false); }} className="btn btn-quiet">取消</button>
+      <form
+        className="flex flex-wrap items-center gap-2 no-print"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onRename(val.trim());
+          setEditing(false);
+        }}
+      >
+        <input
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          aria-label={`分组「${group}」的新名字`}
+          maxLength={24}
+          placeholder="新组名"
+          className="field w-full min-w-0 sm:w-40"
+          autoFocus
+        />
+        <button type="submit" className="btn btn-outlined">
+          改名
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setVal(group);
+            setEditing(false);
+          }}
+          className="btn btn-quiet"
+        >
+          取消
+        </button>
       </form>
     );
   }
   return (
     <div className="flex flex-wrap items-center gap-2 no-print">
-      <button onClick={() => setEditing(true)} className="btn btn-quiet">改组名</button>
-      <button onClick={onDelete} className="btn btn-quiet" title="解散这个分组；组里的收藏不删，回到未分组">解散组</button>
+      <button onClick={() => setEditing(true)} className="btn btn-quiet">
+        改组名
+      </button>
+      <button onClick={onDelete} className="btn btn-quiet" title="解散这个分组；组里的收藏不删，回到未分组">
+        解散组
+      </button>
       <span className="text-meta text-ink-3">组名最长 24 字；解散组只删组名，不删收藏</span>
     </div>
   );
@@ -580,9 +887,28 @@ function Compare({ pairs }: { pairs: Pair[] }) {
     ['名字', (p) => p.r.full],
     ['读音', (p) => p.r.readings.join(' ')],
     ['分数', (p) => `${p.r.total}`],
-    ['性别风格', (p) => (p.r.gender.side === 'n' ? '中性' : `${p.r.gender.strong ? '' : '疑似'}${p.r.gender.side === 'f' ? '偏女' : '偏男'}`)],
-    ['字义', (p) => [...new Set([...p.r.name])].map((ch) => (glossOf(ch) ? `${ch}·${glossOf(ch)}` : '')).filter(Boolean).join('；')],
-    ['字形', (p) => { const s = shapeTags(p.r.name); return `${s.strokesTotal != null ? `共 ${s.strokesTotal} 画` : '笔画未收录全'} · ${s.chars.map((c) => `${c.ch}${c.sx ?? '结构未收录'}`).join(' ')}`; }],
+    [
+      '性别风格',
+      (p) =>
+        p.r.gender.side === 'n'
+          ? '中性'
+          : `${p.r.gender.strong ? '' : '疑似'}${p.r.gender.side === 'f' ? '偏女' : '偏男'}`,
+    ],
+    [
+      '字义',
+      (p) =>
+        [...new Set([...p.r.name])]
+          .map((ch) => (glossOf(ch) ? `${ch}·${glossOf(ch)}` : ''))
+          .filter(Boolean)
+          .join('；'),
+    ],
+    [
+      '字形',
+      (p) => {
+        const s = shapeTags(p.r.name);
+        return `${s.strokesTotal != null ? `共 ${s.strokesTotal} 画` : '笔画未收录全'} · ${s.chars.map((c) => `${c.ch}${c.sx ?? '结构未收录'}`).join(' ')}`;
+      },
+    ],
     ['用字常见度', (p) => popularity(p.r.name).band],
     ['出处', (p) => `《${BOOK_LABEL[p.r.book]}·${p.r.title}》`],
     ['原句', (p) => p.r.line],
@@ -595,15 +921,27 @@ function Compare({ pairs }: { pairs: Pair[] }) {
         <caption className="sr-only">收藏对比</caption>
         <thead>
           <tr>
-            <th scope="col" className="px-3 py-2 text-left text-meta text-ink-3">对比</th>
-            {pairs.map((p) => <th key={p.rec.id} scope="col" className="px-3 py-2 text-left font-serif text-title">{p.r.full}</th>)}
+            <th scope="col" className="px-3 py-2 text-left text-meta text-ink-3">
+              对比
+            </th>
+            {pairs.map((p) => (
+              <th key={p.rec.id} scope="col" className="px-3 py-2 text-left font-serif text-title">
+                {p.r.full}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
           {rows.map(([label, f]) => (
             <tr key={label} className="border-t border-line">
-              <th scope="row" className="whitespace-nowrap px-3 py-2 text-left align-top text-meta text-ink-3">{label}</th>
-              {pairs.map((p) => (<td key={p.rec.id} className="px-3 py-2 align-top text-ink-2">{f(p)}</td>))}
+              <th scope="row" className="whitespace-nowrap px-3 py-2 text-left align-top text-meta text-ink-3">
+                {label}
+              </th>
+              {pairs.map((p) => (
+                <td key={p.rec.id} className="px-3 py-2 align-top text-ink-2">
+                  {f(p)}
+                </td>
+              ))}
             </tr>
           ))}
         </tbody>

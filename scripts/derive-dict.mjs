@@ -12,13 +12,24 @@ const OUT = 'data/raw';
 const readUp = (f) => fs.readFileSync(path.join(UP, f), 'utf8');
 
 // 一份 JSONL（每行一个对象，行尾可能带逗号）
-const parseJsonl = (f) => readUp(f).trim().split('\n')
-  .map((l) => l.replace(/,\s*$/, '')).filter(Boolean).map(JSON.parse);
+const parseJsonl = (f) =>
+  readUp(f)
+    .trim()
+    .split('\n')
+    .map((l) => l.replace(/,\s*$/, ''))
+    .filter(Boolean)
+    .map(JSON.parse);
 
 // 结构代码首字母 → 中文结构名（《汉字结构表》，见上游 README）
 const STRUCT = {
-  D: '独体', A: '品字', B: '上下', E: '上中下',
-  H: '左右', M: '左中右', Q: '全包围', R: '半包围',
+  D: '独体',
+  A: '品字',
+  B: '上下',
+  E: '上中下',
+  H: '左右',
+  M: '左中右',
+  Q: '全包围',
+  R: '半包围',
 };
 const structLabel = (code) => STRUCT[String(code || '')[0]] ?? null;
 
@@ -65,16 +76,25 @@ for (const raw of readUp('names120w.txt').split('\n')) {
   const name = raw.trim();
   if (name.length < 2 || name.length > 4) continue;
   if (/[^\u4e00-\u9fff]/.test(name)) continue;
-  for (const ch of [...name].slice(1)) { freq[ch] = (freq[ch] ?? 0) + 1; total += 1; }
+  for (const ch of [...name].slice(1)) {
+    freq[ch] = (freq[ch] ?? 0) + 1;
+    total += 1;
+  }
 }
 
 const sortObj = (o) => Object.fromEntries(Object.entries(o).sort((a, b) => (a[0] < b[0] ? -1 : 1)));
 fs.writeFileSync(path.join(OUT, 'dict_shape.json'), JSON.stringify(sortObj(shape)) + '\n');
 fs.writeFileSync(path.join(OUT, 'dict_gloss.json'), JSON.stringify(sortObj(gloss)) + '\n');
 fs.writeFileSync(path.join(OUT, 'name_given_freq.json'), JSON.stringify(sortObj(freq)) + '\n');
-console.log(JSON.stringify({
-  shape: Object.keys(shape).length,
-  gloss: Object.keys(gloss).length,
-  freq_chars: Object.keys(freq).length,
-  given_total: total,
-}, null, 1));
+console.log(
+  JSON.stringify(
+    {
+      shape: Object.keys(shape).length,
+      gloss: Object.keys(gloss).length,
+      freq_chars: Object.keys(freq).length,
+      given_total: total,
+    },
+    null,
+    1,
+  ),
+);

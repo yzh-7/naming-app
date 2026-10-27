@@ -9,7 +9,7 @@ updates:
     schedule:
       interval: weekly
       day: saturday
-      time: "09:00"
+      time: '09:00'
       timezone: Asia/Shanghai
     open-pull-requests-limit: 5
     commit-message:
@@ -26,9 +26,9 @@ updates:
       # 主版本升级不自动提：Vitest 5、React 20 这类要人工过一遍（本项目的缓存名与数据口径经不起静默换版）。
       # applies-to 只挡「版本更新」这一类：安全更新（哪怕带主版本）照旧提 PR，
       # 否则门禁里的 npm audit --audit-level=high 会在「公告有补丁但机器人不许提」之间卡死。
-      - dependency-name: "*"
+      - dependency-name: '*'
         applies-to: version-updates
-        update-types: ["version-update:semver-major"]
+        update-types: ['version-update:semver-major']
 
   # Actions 也算依赖：checkout/setup-node/upload-pages-artifact 的版号同样需要有人维护
   - package-ecosystem: github-actions
@@ -36,7 +36,7 @@ updates:
     schedule:
       interval: weekly
       day: saturday
-      time: "09:00"
+      time: '09:00'
       timezone: Asia/Shanghai
     commit-message:
       prefix: chore(ci)

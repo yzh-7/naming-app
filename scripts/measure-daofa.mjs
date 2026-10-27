@@ -20,25 +20,55 @@ const SRC = '/tmp/daofa';
 const NOT_CJK = /[^一-鿿]/g;
 const read = (p) => fs.readFileSync(path.join(RAW, p), 'utf-8');
 const json = (p) => JSON.parse(read(p));
-const loadCharList = (p) => read(p).split('\n').map((l) => l.trim()).filter(Boolean)
-  .map((l) => { const q = l.split(/\s+/); return q.length === 2 && /^\d+$/.test(q[0]) ? q[1] : l; });
+const loadCharList = (p) =>
+  read(p)
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => {
+      const q = l.split(/\s+/);
+      return q.length === 2 && /^\d+$/.test(q[0]) ? q[1] : l;
+    });
 
 const WH1 = new Set(loadCharList('gsc_level_1.txt'));
 const WH2 = new Set(loadCharList('gsc_level_2.txt'));
 const WH3 = new Set(loadCharList('gsc_level_3.txt'));
 const WH123 = new Set([...WH1, ...WH2, ...WH3]);
 const XUCI = new Set('兮之以太其于而则且亦何斯夫惟维矣乎焉哉也矣耶欤矣噫只且'.split(''));
-const FUNC = new Set('的了是在有他不这我都还说法把让向对为等与就只很更最些什么样怎么如果但是因为所以而且并且或者被它你们我们他们它们有个之以及然而则即便共'.split(''));
+const FUNC = new Set(
+  '的了是在有他不这我都还说法把让向对为等与就只很更最些什么样怎么如果但是因为所以而且并且或者被它你们我们他们它们有个之以及然而则即便共'.split(
+    '',
+  ),
+);
 const XU = new Set([...XUCI, ...FUNC]);
-const BAD = new Set('胸鬼懒禽鸟鸡我邪罪凶丑仇鼠蟋蟀淫秽妹狐鸭蝇悔鱼肉苦犬吠窥血丧饥搔父母昏狗蟊疾病痛死潦哀痒害蛇牲妇狸鹅穴畜烂兽靡爪氓劫鬣婚姻匪婆羞辱'.split('').filter((c) => WH1.has(c)));
+const BAD = new Set(
+  '胸鬼懒禽鸟鸡我邪罪凶丑仇鼠蟋蟀淫秽妹狐鸭蝇悔鱼肉苦犬吠窥血丧饥搔父母昏狗蟊疾病痛死潦哀痒害蛇牲妇狸鹅穴畜烂兽靡爪氓劫鬣婚姻匪婆羞辱'
+    .split('')
+    .filter((c) => WH1.has(c)),
+);
 const wf = new Map();
-for (const line of read('jieba_dict.txt').split('\n')) { const p = line.split(' '); if (p.length >= 3) wf.set(p[0], Number(p[1])); }
-const ad = json('cnname_attributes.json'); const attrDict = ad.dict ?? ad;
-const L0 = buildL0([...new Set(Object.values(attrDict).filter((v) => typeof v === 'string').join('').split(''))].filter((c) => WH123.has(c)));
+for (const line of read('jieba_dict.txt').split('\n')) {
+  const p = line.split(' ');
+  if (p.length >= 3) wf.set(p[0], Number(p[1]));
+}
+const ad = json('cnname_attributes.json');
+const attrDict = ad.dict ?? ad;
+const L0 = buildL0(
+  [
+    ...new Set(
+      Object.values(attrDict)
+        .filter((v) => typeof v === 'string')
+        .join('')
+        .split(''),
+    ),
+  ].filter((c) => WH123.has(c)),
+);
 
-const SPLIT = /[。！？；]/, COMMA = /[，、：]/;
+const SPLIT = /[。！？；]/,
+  COMMA = /[，、：]/;
 const inRedup = (cs, i) => (i > 0 && cs[i - 1] === cs[i]) || (i < cs.length - 1 && cs[i + 1] === cs[i]);
-const legal = (p) => [...p].every((ch) => L0.has(ch)) && ![...p].some((ch) => XU.has(ch) || BAD.has(ch)) && (wf.get(p) ?? 0) < 5000;
+const legal = (p) =>
+  [...p].every((ch) => L0.has(ch)) && ![...p].some((ch) => XU.has(ch) || BAD.has(ch)) && (wf.get(p) ?? 0) < 5000;
 
 // 与 build-data 一致的两种音步口径
 const METER = (n) => ({ 4: [0, 2], 5: [0, 2], 7: [0, 2, 4] })[n] ?? [...Array(Math.max(n - 1, 1)).keys()];
@@ -50,9 +80,13 @@ const shipped = new Set(JSON.parse(fs.readFileSync('src/data/candidates.json', '
 function unitsFrom(text, mode) {
   const out = [];
   for (const line of String(text).split(SPLIT)) {
-    const t = line.trim(); if (!t) continue;
+    const t = line.trim();
+    if (!t) continue;
     for (const u of t.split(COMMA)) {
-      const cleaned = u.replace(/[“”‘’「」『』《》（）()【■】\s]/g, '').replace(NOT_CJK, '').trim();
+      const cleaned = u
+        .replace(/[“”‘’「」『』《》（）()【■】\s]/g, '')
+        .replace(NOT_CJK, '')
+        .trim();
       if (!cleaned) continue;
       for (const seg of cleaned.split('兮')) {
         if (seg.length < 2) continue;
@@ -64,12 +98,16 @@ function unitsFrom(text, mode) {
 }
 
 function pairs(units) {
-  const clean = new Set(), dirty = new Set(), src = new Map();
+  const clean = new Set(),
+    dirty = new Set(),
+    src = new Map();
   for (const u of units) {
     for (const i of u.offs) {
       for (let gap = 1; gap <= 3; gap++) {
-        const j = i + gap; if (j >= u.cs.length) break;
-        const p = u.cs[i] + u.cs[j]; if (!legal(p)) continue;
+        const j = i + gap;
+        if (j >= u.cs.length) break;
+        const p = u.cs[i] + u.cs[j];
+        if (!legal(p)) continue;
         const glue = gap > 1 && (inRedup(u.cs, i) || inRedup(u.cs, j));
         const fake = p[0] === p[1] && gap > 1;
         (glue || fake ? dirty : clean).add(p);
@@ -83,32 +121,41 @@ function pairs(units) {
 
 // 只收整本判据干净的三本；庄子 / 列子 / 黄帝阴符经 已在头部注释里判为不可用
 const CLEAN = {
-  '道德经': '老子_道德经_原文.md',
-  '周易': '周易.md',
-  '清静经': '清静经.md',
+  道德经: '老子_道德经_原文.md',
+  周易: '周易.md',
+  清静经: '清静经.md',
 };
 const REJECTED = ['庄子.md', '列子.md', '黄帝阴符经.md'];
 
 const pad = (s, n) => String(s).padStart(n);
 console.log(`L0 种子 ${L0.size} 字｜现有 Pool-B ${shipped.size} 条｜口径＝音步起点 × 同句读内间隔 ≤3`);
-console.log(`${'书名'.padEnd(5)} ${pad('原文汉字', 9)} ${pad('句读段', 8)} ${pad('产双名', 8)} ${pad('音步口径', 9)}  新增`);
+console.log(
+  `${'书名'.padEnd(5)} ${pad('原文汉字', 9)} ${pad('句读段', 8)} ${pad('产双名', 8)} ${pad('音步口径', 9)}  新增`,
+);
 
 const perBook = {};
 for (const [name, file] of Object.entries(CLEAN)) {
   const p = path.join(SRC, file);
-  if (!fs.existsSync(p)) { console.log(`${name}：文件缺失 ${p}`); continue; }
+  if (!fs.existsSync(p)) {
+    console.log(`${name}：文件缺失 ${p}`);
+    continue;
+  }
   const text = fs.readFileSync(p, 'utf8').replace(/^#.*$/gm, '');
   const han = [...text].filter((c) => /[一-鿿]/.test(c)).length;
   const uProse = unitsFrom(text, 'prose');
   const uMeter = unitsFrom(text, 'meter');
-  const rP = pairs(uProse), rM = pairs(uMeter);
+  const rP = pairs(uProse),
+    rM = pairs(uMeter);
   const newP = [...rP.clean].filter((x) => !shipped.has(x));
   const newM = [...rM.clean].filter((x) => !shipped.has(x));
   perBook[name] = { prose: rP, meter: rM };
-  console.log(`${name.padEnd(4)} ${pad(han, 9)} ${pad(uProse.length, 8)} ${pad(rP.clean.size, 8)} ${pad(rM.clean.size, 9)}  ${pad(newP.length, 5)} / ${newM.length}（音步）`);
+  console.log(
+    `${name.padEnd(4)} ${pad(han, 9)} ${pad(uProse.length, 8)} ${pad(rP.clean.size, 8)} ${pad(rM.clean.size, 9)}  ${pad(newP.length, 5)} / ${newM.length}（音步）`,
+  );
 }
 
-const unionNew = new Set(), srcOf = new Map();
+const unionNew = new Set(),
+  srcOf = new Map();
 for (const [name, r] of Object.entries(perBook)) {
   for (const p of r.prose.clean) {
     if (shipped.has(p) || unionNew.has(p)) continue;
@@ -119,13 +166,18 @@ for (const [name, r] of Object.entries(perBook)) {
 const unionMeter = new Set();
 for (const r of Object.values(perBook)) for (const p of r.meter.clean) if (!shipped.has(p)) unionMeter.add(p);
 
-console.log(`\n三书合并 新增：散文口径 ${unionNew.size} 条（现有 Pool-B 的 ${(unionNew.size / shipped.size * 100).toFixed(0)}%）｜音步口径 ${unionMeter.size} 条（${(unionMeter.size / shipped.size * 100).toFixed(0)}%）`);
+console.log(
+  `\n三书合并 新增：散文口径 ${unionNew.size} 条（现有 Pool-B 的 ${((unionNew.size / shipped.size) * 100).toFixed(0)}%）｜音步口径 ${unionMeter.size} 条（${((unionMeter.size / shipped.size) * 100).toFixed(0)}%）`,
+);
 
 const list = [...unionNew].sort();
 for (let i = 0; i < list.length; i += 2) {
-  const a = list[i], b = list[i + 1];
+  const a = list[i],
+    b = list[i + 1];
   console.log(`${a} ← ${srcOf.get(a)}${b ? `   ｜${b} ← ${srcOf.get(b)}` : ''}`);
 }
 
 console.log(`\n整本剔除：${REJECTED.join(' / ')}（白话改写/夹注本，取词等于引现代书）`);
-console.log('许可：数据集 wobure/zhuzi-baijia-books 上游标注 license 未知、内容为劝学网录入本，未清许可前不能 vendoring 进包。');
+console.log(
+  '许可：数据集 wobure/zhuzi-baijia-books 上游标注 license 未知、内容为劝学网录入本，未清许可前不能 vendoring 进包。',
+);
