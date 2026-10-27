@@ -183,7 +183,7 @@ Tailwind 4 的 CSS-first 写法：`@theme` 定义刻度，`@utility` 定义可�
 
 1. `fetch('./index.html', { cache: 'no-store' })`。不能用缓存里的那一份，它可能属于旧版本。
 2. 取其中的 `assets/*.js`、`assets/*.css` 文件名排序后哈希，得到 `naming-app-<hash>`。产物内容变了文件名就变，缓存名跟着变，旧缓存由 `activate` 删除。
-3. 没有分包产物（单文件版）时退回 meta 中的版本号，得到 `naming-app-0.3.0` 这样的名字。
+3. 没有分包产物（单文件版）时退回 meta 中的版本号，得到 `naming-app-0.3.1` 这样的名字。
 4. 连 `index.html` 都取不到（离线安装）时退回注册参数 `?v=`；都没有则 `naming-app-unreleased`。
 
 同一个 worker 实例只解析一次（`cacheName()` 记忆结果），`install` 预取、`activate` 清理、`fetch` 回填用的是同一个名字；`activate` 只删除带 `naming-app-` 前缀且与当前名字不同的缓存，不碰其它缓存。导航请求走 network-first，带哈希的静态资源走 cache-first。`tests/e2e/app.spec.ts` 中有一条用例直接从浏览器读缓存，验证名字形态以及应用壳确实写进了这个缓存。
@@ -201,19 +201,20 @@ Tailwind 4 的 CSS-first 写法：`@theme` 定义刻度，`@utility` 定义可�
 | 门禁 | 断言 |
 |---|---|
 | `verify.mjs` | 原始数据指纹、白名单账目、候选出处自洽、单字名覆盖、出处今译覆盖率（唯一原句数等于释义条数、一句一译）、五部标注只落在 L0 字上、性别表规模、候选 id 前缀冲突统计与 `meta.id_prefix_stats` 对账。种子版（无 `l0-verdicts.txt`）与扩表版走不同断言分支（`SEED_MODE = !meta.L0_added`） |
+| `tsc --noEmit` | 类型检查走 `strict` 加 `noUncheckedIndexedAccess` 与 `noUnusedLocals`。后者要求代码里没有没用的局部变量与导入，前者要求按下标取值时先确认它存在——`CHARS`、`GLOSS`、`RADICAL` 这类 `Record<string, …>` 取出来的值在类型上是 `T \| undefined`，直接当 `T` 用会报错。生产代码的修法是一处判空、走已有的兜底分支（判空后走的路径必须与原先一致，不允许借判空改变判定），并且不新增 `!`、`as` 与 `@ts-ignore`；`charAt(i)` 用于逐字符访问（它对越界返回空串）。测试里「这条数据必须存在」的前提改用 `src/testing.ts` 的 `at`/`one`：`expect` 不收窄类型，所以断言之后仍要确认，取不到就抛「用例前提不成立」，比原来写 `!` 更能指明是哪一条数据缺了 |
 | `eslint .` | 覆盖 `src/`、`scripts/`、`tests/` 与 `public/sw.js`（后者按 Service Worker 全局检查：它没有单元测试，写错了原本只能靠浏览器运行暴露）。`dist/`、`dist-single/` 与测试产物目录不检查——之前 `dist-single/` 没列入，那份产物被当作源码送去 lint |
 | `prettier --check .` | 代码、脚本、CSS、YAML 与 JS／JSON 配置必须已是 prettier 形态（`.prettierrc.json`：单引号、保留分号、行宽 120、尾逗号、箭头参数必带括号），不在形态上就构建失败。排除项见 `.prettierignore`：Markdown 文档与 `index.html`、`ANDROID.html`（文档表格保持紧凑写法，否则改一个单元格会得到整张表的 diff）、`data/raw/`（第三方语料与字表）、`data/measured/`、`src/data/*.json`、`design-audit.json`（脚本产物）与三类测试产物目录。`eslint.config.js` 的最后一项是 `eslint-config-prettier`，关掉与形态规则冲突的 lint 规则，两条门禁不会互相判错 |
 | `size-check.mjs` | 非 HTML 资源的 gzip 合计不超过 400 KiB；HTML 自身的 gzip 按产物形态取预算（页面壳 400 KiB、单文件产物 450 KiB）。两条判定都进退出码，同时打印原文件大小与压缩实现版本 |
 
-当前实测（gzip level 9，版本 0.3.0）。「CI 口径」指 GitHub Actions 上官方 Node 构建（自带 zlib-ng），「本机口径」指系统 zlib；同一份文件的 gzip 结果不同，门禁按较大的一侧算：
+当前实测（gzip level 9，版本 0.3.1）。「CI 口径」指 GitHub Actions 上官方 Node 构建（自带 zlib-ng），「本机口径」指系统 zlib；同一份文件的 gzip 结果不同，门禁按较大的一侧算：
 
 | 产物 | 原文件 | gzip（CI 口径） | gzip（本机口径） | 预算 |
 |---|---:|---:|---:|---:|
-| `dist/` 非 HTML 资源合计 | — | 388,910 B（379.8 KiB） | 387,016 B（377.9 KiB） | 409,600 B |
-| `dist/index.html` 页面壳 | 2,921 B | 1,330 B | 1,303 B | 409,600 B |
-| `dist-single/index.html` | 1,678,520 B（1.60 MiB） | 414,731 B（405.0 KiB） | 408,967 B（399.4 KiB） | 460,800 B |
+| `dist/` 非 HTML 资源合计 | — | 389,059 B（379.9 KiB） | 387,155 B（378.1 KiB） | 409,600 B |
+| `dist/index.html` 页面壳 | 2,921 B | 1,330 B | 1,302 B | 409,600 B |
+| `dist-single/index.html` | 1,678,890 B（1.60 MiB） | 414,892 B（405.2 KiB） | 409,115 B（399.5 KiB） | 460,800 B |
 
-同一份单文件产物在 zlib-ng 下压出 414,731 B，比系统 zlib 的 408,967 B 多 5,764 B（1.4%）。0.2.0 第一次把这条判定接进 CI 时就是被这个差值撞挂的：当时产物 413,537 B，400 KiB 预算在 CI 口径下过不去（超 3,937 B），在本机口径下刚好通过。因此单文件产物单列 450 KiB 预算——它把本体与数据全部装进一个 HTML，首屏的 400 KiB 对它过窄；当前余量 46,069 B（10.0%），语料或字表扩充会先撞这条线。0.3.0 的禁用字与随后的修正让这份产物在 CI 口径下增加 1,181 B；0.3.1 把代码统一成 prettier 形态后只增加 13 B（构建时源码里的换行与缩进已被压掉，剩下的差别来自 JSX 文本节点前后的空白）。原先文档写的「单文件目标 ≤1.5 MB」既没有脚本执行、口径也没说清是原文件还是 gzip：按原文件算当时就已经超过（1.57 MB），按 gzip 算又过于宽松。现在两条判定统一到 gzip，原文件大小只报出、不作判定。
+同一份单文件产物在 zlib-ng 下压出 414,892 B，比系统 zlib 的 409,115 B 多 5,777 B（1.4%）。0.2.0 第一次把这条判定接进 CI 时就是被这个差值撞挂的：当时产物 413,537 B，400 KiB 预算在 CI 口径下过不去（超 3,937 B），在本机口径下刚好通过。因此单文件产物单列 450 KiB 预算——它把本体与数据全部装进一个 HTML，首屏的 400 KiB 对它过窄；当前余量 45,908 B（10.0%），语料或字表扩充会先撞这条线。0.3.0 的禁用字与随后的修正让这份产物在 CI 口径下增加 1,181 B；0.3.1 把代码统一成 prettier 形态后只增加 13 B（构建时源码里的换行与缩进已被压掉，剩下的差别来自 JSX 文本节点前后的空白），打开 `noUncheckedIndexedAccess` 并逐处补上下标取值确认后增加 161 B（多出来的是判空分支本身），本版累计 174 B。原先文档写的「单文件目标 ≤1.5 MB」既没有脚本执行、口径也没说清是原文件还是 gzip：按原文件算当时就已经超过（1.57 MB），按 gzip 算又过于宽松。现在两条判定统一到 gzip，原文件大小只报出、不作判定。
 
 ## 7. 诊断脚本的口径一致性
 
