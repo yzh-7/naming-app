@@ -122,6 +122,8 @@ $ npm run dev
 
 ## 数据来源与许可
 
+本仓库自己写的代码与文档按 MIT 许可，全文见 [LICENSE](LICENSE)。`data/raw/` 下的上游语料、字表与派生输入按各自上游许可，本仓库不重新授权它们；构建期用到的第三方库同样按上游许可，两者都不在 MIT 范围内。
+
 原始语料、字表与派生输入位于 `data/raw/`，逐项上游、许可与用途见 [data/raw/LICENSES.md](data/raw/LICENSES.md)，许可全文副本位于 `data/raw/licenses/`。`data/raw/SHA256SUMS` 记录输入指纹，`npm run verify` 在构建期校验；改动原始数据必须同步更新指纹。
 
 构建产物位于 `src/data/`，由 `scripts/build-data.mjs` 生成，不要手工编辑。出处今译（`data/raw/line_gloss.tsv`）由本项目撰写，只解释句意。
@@ -147,6 +149,7 @@ src/
 public/            manifest、图标、service worker
 tests/e2e/         Playwright 端到端与 axe 扫描
 docs/screenshots/  文档截图
+LICENSE            本仓库自撰代码与文档的 MIT 全文
 ```
 
 ## 测试
