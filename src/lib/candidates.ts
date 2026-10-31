@@ -50,6 +50,8 @@ export const candidatesJson = (results: Result[]) =>
     2,
   );
 
+export const FAV_GENDER_LABEL: Record<'f' | 'm' | 'n', string> = { f: '偏女', m: '偏男', n: '中性' };
+
 export const CSV_HEADER = [
   '全名',
   '名字',
@@ -84,10 +86,13 @@ export function candidatesCsv(results: Result[]): string {
   return '\ufeff' + [CSV_HEADER.join(','), ...rows].join('\r\n');
 }
 
-// 收藏名单 CSV：候选的列全部保留，再加「分组」「备注」两列（这两列只在收藏里有意义）
-export const FAV_CSV_HEADER = [...CSV_HEADER, '分组', '备注'];
+// 收藏名单 CSV：候选的列全部保留，再加「分组」「备注」「收藏来源」「性别档」四列
+// 来源与性别档是收藏当时按下的入口与当时所属的档，老记录没存过这两项就留空
+export const FAV_CSV_HEADER = [...CSV_HEADER, '分组', '备注', '收藏来源', '性别档'];
 
-export function favoritesCsv(entries: { r: Result; note?: string; group?: string }[]): string {
+export function favoritesCsv(
+  entries: { r: Result; note?: string; group?: string; from?: 'gen' | 'compose'; gender?: 'f' | 'm' | 'n' }[],
+): string {
   const rows = entries.map((e) => {
     const x = candidateRow(e.r);
     return [
@@ -105,6 +110,8 @@ export function favoritesCsv(entries: { r: Result; note?: string; group?: string
       x.gender,
       e.group ?? '',
       e.note ?? '',
+      e.from === 'gen' ? '生成页' : e.from === 'compose' ? '自选页' : '未记录',
+      FAV_GENDER_LABEL[e.gender ?? e.r.gender.side],
     ]
       .map(esc)
       .join(',');

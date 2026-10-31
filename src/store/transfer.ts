@@ -107,8 +107,6 @@ export function toQuery(s: Pick<SavedState, 'surname' | 'reading' | 'opts'>): st
   if (s.reading) q.set('r', String(s.reading));
   const o = s.opts;
   if (o.gender !== 'any') q.set('g', o.gender);
-  // genderWeak 只在性别筛选开着时才起作用，不起作用就不占链接长度
-  if (o.genderWeak && o.gender !== 'any') q.set('gw', '1');
   if (o.length !== 2) q.set('len', '1');
   if (o.count !== DEFAULT_OPTS.count) q.set('n', o.count === 0 ? 'all' : String(o.count));
   if (o.search) q.set('q', o.search.slice(0, SEARCH_MAX));
@@ -151,7 +149,6 @@ export function fromQuery(qs: string): { surname?: string; reading?: number; opt
   };
 
   if (q.has('g')) take('gender', q.get('g'));
-  if (q.has('gw')) take('genderWeak', q.get('gw') === '1'); // 布尔参数只认 '1'
   if (q.has('len')) take('length', Number(q.get('len')));
   const n = q.get('n');
   if (n !== null) take('count', n === 'all' ? 0 : Number(n));

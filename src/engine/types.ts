@@ -39,7 +39,7 @@ export type SingleItem = Omit<PoolItem, 'name' | 'chars' | 'tier' | 'redup' | 'r
 
 export type Homophone = { py: string; w: string }[];
 
-export type Gender = 'any' | 'f' | 'm';
+export type Gender = 'any' | 'f' | 'm' | 'n';
 export type GenderSide = 'f' | 'm' | 'n';
 // strong＝名字每个字都指向同一侧；weak＝只有一个字命中、其余字在两表之外（旧实现就是靠这种一票定性的）
 export type GenderTag = { side: GenderSide; strong: boolean; why: string };
@@ -69,7 +69,6 @@ export const cleanAvoid = (s: string) => {
 
 export type Opts = {
   gender: Gender;
-  genderWeak: boolean;
   length: 1 | 2;
   books: Record<Book, boolean>;
   redupOnly: boolean;

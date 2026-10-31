@@ -114,24 +114,36 @@ export default function Compose({
     setQ('');
   };
 
+  // 随机组合的「换一批」以前每次从零开始抽，连着按几次就会看到同一个名字第二次出现。
+  // 现在按过的名字在本机记着，抽过的不再抽；剩下的不够一批时清空重来（重新开始一轮，界面 title 里写明白）。
+  const randomShown = useRef(new Set<string>());
+  const takeRandom = (all: string[]): string[] => {
+    const unseen = all.filter((nm) => !randomShown.current.has(nm));
+    const src = unseen.length >= RANDOM_COUNT ? unseen : (randomShown.current.clear(), all);
+    const got = pickRandom(src, RANDOM_COUNT);
+    got.forEach((nm) => randomShown.current.add(nm));
+    return got;
+  };
+
   const fillRandom = () => {
     if (!freeRandom) {
       const pool = (want === 2 ? POOL_NAMES : SINGLE_NAMES).filter((nm) => {
         const hit = findCombo(nm);
         return hit && !blocked.has(hit.id);
       });
-      setRandoms(pickRandom(pool, RANDOM_COUNT));
+      setRandoms(takeRandom(pool));
       return;
     }
     const out: string[] = [];
     const used = new Set<string>();
     let guard = 0;
-    while (out.length < RANDOM_COUNT && guard++ < 500) {
+    while (out.length < RANDOM_COUNT && guard++ < 2000) {
       const picked = pickRandom(L0_CHARS, want).join('');
-      if (used.has(picked)) continue;
+      if (used.has(picked) || randomShown.current.has(picked)) continue;
       used.add(picked);
       out.push(picked);
     }
+    out.forEach((nm) => randomShown.current.add(nm));
     setRandoms(out);
   };
 

@@ -27,18 +27,40 @@ import Compose from './ui/Compose';
 import * as store from './store/local';
 import { buildState, serialize, parseState, toQuery, fromQuery, type SavedState } from './store/transfer';
 import { copyText, downloadText, downloadBlob, renderShareCard, renderListCard, resultSummary } from './lib/share';
-import { candidatesCsv, candidatesJson, favoritesCsv } from './lib/candidates';
+import { candidatesCsv, candidatesJson, favoritesCsv, FAV_GENDER_LABEL } from './lib/candidates';
 import { usePwa } from './lib/pwa';
 
 type Pair = { rec: store.FavRecord; r: Result; stale: boolean };
 // 收藏里的 id 查不到时按卡片记下的名字＋出处回退找；两条路都走不通就是「找不回来」的旧条目
-const favSnap = (r: Result) => ({ name: r.name, book: r.book, title: r.title, line: r.line });
+const favSnap = (r: Result, from: 'gen' | 'compose') => ({
+  name: r.name,
+  book: r.book,
+  title: r.title,
+  line: r.line,
+  from,
+  gender: r.gender.side,
+});
+const FAV_SOURCE_LABEL: Record<FavFilterSource, string> = {
+  '': '全部',
+  gen: '生成页',
+  compose: '自选页',
+  none: '未记录',
+};
+const FAV_GENDER_FILTERS: { v: FavFilterGender; label: string }[] = [
+  { v: '', label: '性别不限' },
+  { v: 'm', label: '偏男' },
+  { v: 'n', label: '中性' },
+  { v: 'f', label: '偏女' },
+];
 const num = (n: number) => n.toLocaleString('en-US');
 type FavSort = 'recent' | 'score' | 'strokes' | 'popular';
 
 // 导入的体积上限：8 MiB。实测本应用最大的一份导出（全量候选 JSON，1,525 条）是 618,163 B（0.59 MiB），
 // 收藏/拉黑/设置那份更小；上限只用来在 JSON.parse 之前把几十兆的文件挡住，不去解析它。
 const MAX_IMPORT_BYTES = 8 * 1024 * 1024;
+
+type FavFilterSource = '' | 'gen' | 'compose' | 'none';
+type FavFilterGender = '' | 'f' | 'm' | 'n';
 
 const FAV_SORTS: { v: FavSort; label: string }[] = [
   { v: 'recent', label: '最近收藏' },
@@ -77,6 +99,9 @@ export default function App() {
   const [favQuery, setFavQuery] = useState('');
   const [favSort, setFavSort] = useState<FavSort>('recent');
   const [favGroup, setFavGroup] = useState('');
+  // 收藏的两个快速筛选：按下的入口（生成页／自选页）与当时所属的性别档
+  const [favFrom, setFavFrom] = useState<FavFilterSource>('');
+  const [favGender, setFavGender] = useState<FavFilterGender>('');
   const fileRef = useRef<HTMLInputElement>(null);
   const { offline, updateReady, applyUpdate } = usePwa();
 
@@ -167,6 +192,9 @@ export default function App() {
     const q = favQuery.trim().toLowerCase();
     let list = favPairs;
     if (favGroup) list = list.filter((p) => p.rec.group === favGroup);
+    if (favFrom) list = list.filter((p) => (p.rec.from ?? 'none') === favFrom);
+    // 老记录没存性别档时按当前条目重算：性别档只由用字决定，与筛选无关，重算不会变来变去
+    if (favGender) list = list.filter((p) => (p.rec.gender ?? p.r.gender.side) === favGender);
     if (q)
       list = list.filter(({ rec, r }) =>
         `${r.full} ${namePinyin(r.name)} ${r.title} ${rec.note ?? ''} ${rec.group ?? ''}`.toLowerCase().includes(q),
@@ -176,7 +204,7 @@ export default function App() {
     else if (favSort === 'strokes') out.sort((a, b) => shapeTags(a.r.name).strokes - shapeTags(b.r.name).strokes);
     else if (favSort === 'popular') out.sort((a, b) => popScore(b.r.name) - popScore(a.r.name));
     return out;
-  }, [favPairs, favQuery, favGroup, favSort]);
+  }, [favPairs, favQuery, favGroup, favSort, favFrom, favGender]);
 
   const grouped = useMemo(() => {
     const m = new Map<string, Result[]>();
@@ -186,7 +214,7 @@ export default function App() {
 
   const favIds = useMemo(() => new Set(fav.map((f) => f.id)), [fav]);
   const toggleFav = (r: Result) => {
-    setFav(favIds.has(r.id) ? store.removeFavorite(r.id) : store.addFavorite(r.id, favSnap(r)));
+    setFav(favIds.has(r.id) ? store.removeFavorite(r.id) : store.addFavorite(r.id, favSnap(r, 'gen')));
     warnStorage();
   };
   const toggleBlock = (r: Result) => {
@@ -213,7 +241,13 @@ export default function App() {
 
   const doExportFavCsv = () => {
     // 收藏的分组与备注存在 rec 上，不在候选条目里：导出时要显式带上，否则这两列会是空的
-    const rows = favView.map((p) => ({ r: p.r, group: p.rec.group, note: p.rec.note }));
+    const rows = favView.map((p) => ({
+      r: p.r,
+      group: p.rec.group,
+      note: p.rec.note,
+      from: p.rec.from,
+      gender: p.rec.gender ?? p.r.gender.side,
+    }));
     if (!rows.length) {
       setNotice('当前视图里没有条目可导出');
       return;
@@ -584,7 +618,7 @@ export default function App() {
                 setFav(store.removeFavorite(r.id));
                 setNotice(`已取消收藏 ${r.full}`);
               } else {
-                setFav(store.addFavorite(r.id, favSnap(r)));
+                setFav(store.addFavorite(r.id, favSnap(r, 'compose')));
                 setNotice(`已收藏 ${r.full}`);
               }
             }}
@@ -626,13 +660,37 @@ export default function App() {
                 onClick={doExportFavCsv}
                 disabled={favView.length === 0}
                 className="btn btn-outlined"
-                title="按当前搜索与分组视图导出 CSV，含备注与分组两列"
+                title="按当前搜索、来源、性别档与分组视图导出 CSV，含备注、分组、收藏来源、性别档四列"
               >
                 导出 CSV
               </button>
               <button onClick={doPrint} disabled={favView.length === 0} className="btn btn-outlined">
                 打印名单
               </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 no-print">
+              <span className="lab">收藏来源</span>
+              {(['', 'gen', 'compose', 'none'] as FavFilterSource[]).map((v) => (
+                <button
+                  key={v || '__all'}
+                  onClick={() => setFavFrom(v)}
+                  aria-pressed={favFrom === v}
+                  className={`chip ${favFrom === v ? 'chip-accent' : 'text-ink-3'}`}
+                >
+                  {FAV_SOURCE_LABEL[v]}
+                </button>
+              ))}
+              <span className="lab ml-2">性别档</span>
+              {FAV_GENDER_FILTERS.map(({ v, label }) => (
+                <button
+                  key={v || '__any'}
+                  onClick={() => setFavGender(v)}
+                  aria-pressed={favGender === v}
+                  className={`chip ${favGender === v ? 'chip-accent' : 'text-ink-3'}`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
             {favGroups.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5 no-print">
@@ -666,7 +724,7 @@ export default function App() {
             {compare.length >= 2 && <Compare pairs={favPairs.filter((p) => compare.includes(p.rec.id))} />}
             {favView.length === 0 ? (
               <p className="rounded-card border border-dashed border-line-strong bg-surface-2 p-6 text-center text-meta text-ink-3">
-                {favPairs.length === 0 ? '还没有条目。' : '没有符合搜索/分组的条目。'}
+                {favPairs.length === 0 ? '还没有条目。' : '没有符合搜索／来源／性别档／分组的条目。'}
               </p>
             ) : (
               favView.map(({ rec, r, stale }) => (
@@ -676,6 +734,9 @@ export default function App() {
                       这条收藏记的编号在当前候选池里找不到了，下面这张卡是按名字与出处对上的；分数可能与当初收藏时不同。
                     </p>
                   )}
+                  <p className="text-meta text-ink-3 no-print">
+                    来自{FAV_SOURCE_LABEL[rec.from ?? 'none']} · {FAV_GENDER_LABEL[rec.gender ?? r.gender.side]}档
+                  </p>
                   <NameCard
                     r={r}
                     fav

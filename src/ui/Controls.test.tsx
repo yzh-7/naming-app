@@ -1,12 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { useState } from 'react';
 import Controls from './Controls';
 import { BOOK_ORDER, type Opts } from '../engine/types';
 
 const base: Opts = {
   gender: 'any',
-  genderWeak: false,
   length: 2,
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
   redupOnly: false,
@@ -90,11 +89,16 @@ describe('Controls：输入与条件渲染', () => {
     expect(screen.queryByRole('button', { name: '只看典籍叠字' })).not.toBeInTheDocument();
   });
 
-  it('只在选了性别风格后才出现「含疑似」开关', () => {
+  it('性别筛选是互斥三档＋不限，按下去只有一档是按下态', () => {
     render(<Harness />);
+    const seg = within(screen.getByRole('group', { name: '性别风格' })).getAllByRole('button');
+    expect(seg.map((b) => b.textContent)).toEqual(['不限', '偏男', '中性', '偏女']);
     expect(screen.queryByRole('button', { name: /疑似/ })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '偏女' }));
-    expect(screen.getByRole('button', { name: /含「疑似偏女」/ })).toBeInTheDocument();
+    for (const btn of seg) {
+      fireEvent.click(btn);
+      const pressed = seg.filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent);
+      expect(pressed).toEqual([btn.textContent]);
+    }
   });
 
   it('典籍标签点击即切换选中态', () => {

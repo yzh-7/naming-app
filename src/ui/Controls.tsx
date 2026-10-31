@@ -19,6 +19,7 @@ import {
 const GENDERS: { v: Gender; label: string; on: string }[] = [
   { v: 'any', label: '不限', on: 'seg-on' },
   { v: 'm', label: '偏男', on: 'seg-cool' } /* 选中态：冷色，与卡片上的偏男同色 */,
+  { v: 'n', label: '中性', on: 'seg-on' } /* 选中态：中性档，三档互斥，选它就不会看到偏男/偏女名 */,
   { v: 'f', label: '偏女', on: 'seg-warm' } /* 选中态：暖色，与卡片上的偏女同色 */,
 ];
 const PRESETS = [12, 24, 48];
@@ -192,16 +193,6 @@ export default function Controls({
             ))}
           </div>
         </label>
-        {opts.gender !== 'any' && (
-          <button
-            onClick={() => patch({ genderWeak: !opts.genderWeak })}
-            aria-pressed={opts.genderWeak}
-            title="疑似＝只有一个字在性别字表里，其余字两侧都不在"
-            className={`chip self-start ${opts.genderWeak ? 'chip-warm' : ''}`}
-          >
-            含「疑似{opts.gender === 'f' ? '偏女' : '偏男'}」
-          </button>
-        )}
         <button onClick={onBatch} className="btn-primary col-span-full sm:ml-auto">
           换一批{pages > 1 ? ` · ${pageNo + 1}/${pages}` : ''}
         </button>
@@ -429,7 +420,7 @@ function AdvancedFilters({
           </div>
 
           <p className="measure text-meta text-ink-3">
-            「含疑似」＝只有一个字在性别字表里；「避开同结构」＝两字结构相同（都左右、都上下）时字形偏单调。
+            三档互斥：偏男＝每个字都只在男性风格字表或只有一个字在该表；中性＝两表都有字或两表都没有；偏女同偏男反方向。卡片上的「疑似」＝只有一个字在性别字表里；「避开同结构」＝两字结构相同（都左右、都上下）时字形偏单调。
           </p>
 
           {/* Books */}

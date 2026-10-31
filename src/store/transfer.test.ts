@@ -190,16 +190,17 @@ describe('可分享链接', () => {
     expect(fromQuery('ac=' + encodeURIComponent('月a月'))!.opts.avoidChars).toBe('月');
     expect(fromQuery('ac=')!.opts.avoidChars).toBe('');
   });
-  it('genderWeak（gw）进链接并可还原；性别不限时不写 gw', () => {
-    const o = { ...baseOpts(), gender: 'f' as const, genderWeak: true };
-    const q = toQuery({ surname: '苏', reading: 0, opts: o });
-    expect(q).toContain('gw=1');
-    const back = fromQuery(q)!;
-    expect(back.opts.genderWeak).toBe(true);
-    expect(back.opts.gender).toBe('f');
-    expect(toQuery({ surname: '', reading: 0, opts: { ...baseOpts(), genderWeak: true } })).not.toContain('gw=');
-    // 关掉 weak 的链接显式写 gw=0，不会把本机的开着的值留着
-    expect(fromQuery('g=f&gw=0')!.opts.genderWeak).toBe(false);
+  it('性别三档都进链接并可还原；不限时不写 g；老链接里的 gw 直接忽略', () => {
+    for (const g of ['m', 'n', 'f'] as const) {
+      const q = toQuery({ surname: '苏', reading: 0, opts: { ...baseOpts(), gender: g } });
+      expect(q).toContain(`g=${g}`);
+      expect(fromQuery(q)!.opts.gender).toBe(g);
+    }
+    expect(toQuery({ surname: '', reading: 0, opts: baseOpts() })).not.toContain('g=');
+    // 0.3.1 及更早的链接带 gw=1：那个开关没了，参数按未知忽略，不能把性别档改回不限
+    const old = fromQuery('g=n&gw=1')!;
+    expect(old.opts.gender).toBe('n');
+    expect('genderWeak' in old.opts).toBe(false);
   });
   it('三条输入路径口径一致：同一份脏取值，本机存储 / 导入文件 / 链接给出同一个结果', () => {
     const dirty = {

@@ -4,8 +4,12 @@ import { BOOK_ORDER, POP_FLOORS, cleanAvoid, cleanSurname, isHan } from '../engi
 const SORTS: SortKey[] = ['score', 'strokes', 'popular', 'book'];
 
 // 除 id 外还存一份出处快照：语料更新后 id 尾号可能指向别的名字，靠快照还能找回原来那一条
+export type FavSource = 'gen' | 'compose';
 export type FavRecord = {
   id: string;
+  // 收藏是从哪儿按的：生成页还是自选页。0.4.0 之前存的老记录没有这两个字段，界面标「未记录」
+  from?: FavSource;
+  gender?: 'f' | 'm' | 'n';
   note?: string;
   group?: string;
   ts: number;
@@ -108,6 +112,8 @@ export function sanitizeFav(raw: unknown, index: number): FavRecord | null {
   if (note) rec.note = note;
   const group = str(r.group, 24);
   if (group) rec.group = group;
+  if (r.from === 'gen' || r.from === 'compose') rec.from = r.from;
+  if (r.gender === 'f' || r.gender === 'm' || r.gender === 'n') rec.gender = r.gender;
   const name = str(r.name, SNAP.name);
   if (name) rec.name = name;
   const title = str(r.title, SNAP.title);
@@ -216,7 +222,6 @@ const POP_VALUES = POP_FLOORS.map((p) => p.v);
 
 const DEFAULT: Opts = {
   gender: 'any',
-  genderWeak: false,
   length: 2,
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
   redupOnly: false,
@@ -236,7 +241,7 @@ export { DEFAULT as DEFAULT_OPTS };
 
 // 越界＝不可信，整项回默认（不是夹到边界）；枚举值只认白名单。
 // 本机存储、导入文件、分享链接三条输入路径共用这一个函数（transfer.ts 从这里导入）。
-const GENDERS: Gender[] = ['any', 'f', 'm'];
+const GENDERS: Gender[] = ['any', 'f', 'm', 'n'];
 const MUST_POS = ['any', 'first', 'last'] as const;
 const intIn = (n: unknown, min: number, max: number) =>
   typeof n === 'number' && Number.isInteger(n) && n >= min && n <= max ? n : undefined;
@@ -256,7 +261,7 @@ export function sanitizeOpts(raw: unknown): Opts {
   return {
     ...DEFAULT,
     gender: pickOne<Gender>(o.gender, GENDERS) ?? DEFAULT.gender,
-    genderWeak: !!o.genderWeak,
+
     length,
     redupOnly: length === 2 && !!o.redupOnly,
     books,
@@ -288,7 +293,6 @@ export const saveOpts = (o: Opts) =>
     K.opts,
     JSON.stringify({
       gender: o.gender,
-      genderWeak: o.genderWeak,
       length: o.length,
       redupOnly: o.redupOnly,
       books: o.books,

@@ -38,7 +38,6 @@ const gen = (sur: string, o: Opts, b: number) => plan(sur, o, b).page;
 const ALL_BOOKS = Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Record<Book, boolean>;
 const opts = (p: Partial<Opts> = {}): Opts => ({
   gender: 'any',
-  genderWeak: false,
   length: 2,
   books: { ...ALL_BOOKS },
   redupOnly: false,
@@ -157,7 +156,7 @@ describe('名用字与部首标注', () => {
   });
 });
 
-describe('性别判定：强弱两级', () => {
+describe('性别判定：三档互斥（偏男／中性／偏女）', () => {
   it('两侧都有字＝中性，不靠一票定性', () => {
     const both = POOL.find((p) => {
       const f = p.chars.some((c) => genderOf(c).side === 'f');
@@ -168,7 +167,8 @@ describe('性别判定：强弱两级', () => {
     const g = genderOf(both!.name);
     expect(g.side).toBe('n');
     expect(g.why).toContain('两表都有字');
-    expect(genderPass(both!.name, opts({ gender: 'f' }))).toBe(true);
+    expect(genderPass(both!.name, opts({ gender: 'f' }))).toBe(false);
+    expect(genderPass(both!.name, opts({ gender: 'n' }))).toBe(true);
   });
   it('单侧命中但其余字无信号＝疑似；每字同侧＝强', () => {
     const weak = [...POOL]
@@ -186,7 +186,7 @@ describe('性别判定：强弱两级', () => {
     expect(genderOf(weak!).strong).toBe(false);
     expect(genderOf(strong!).strong).toBe(true);
   });
-  it('筛选：反向名排除、中性保留、疑似默认排除', () => {
+  it('筛选：三档互斥——反向名与中性名都不进偏男/偏女，疑似名留在自己那一档', () => {
     const f = (name: string) => genderOf(name).side === 'f';
     const m = (name: string) => genderOf(name).side === 'm';
     const femName = POOL.find((p) => f(p.name))!.name;
@@ -198,8 +198,20 @@ describe('性别判定：强弱两级', () => {
       const g = genderOf(p.name);
       return g.side === 'f' && !g.strong;
     })!;
-    expect(genderPass(weakFem.name, opts({ gender: 'f' }))).toBe(false);
-    expect(genderPass(weakFem.name, opts({ gender: 'f', genderWeak: true }))).toBe(true);
+    expect(genderPass(weakFem.name, opts({ gender: 'f' }))).toBe(true);
+    expect(genderPass(weakFem.name, opts({ gender: 'm' }))).toBe(false);
+    expect(genderPass(weakFem.name, opts({ gender: 'n' }))).toBe(false);
+  });
+  it('三档条数之和＝候选池总数，一档不多一条不少', () => {
+    const each = (['m', 'n', 'f'] as const).map((g) => poolSize(opts({ gender: g })));
+    expect(each.reduce((a, b) => a + b, 0)).toBe(META.pool_B);
+    // 同一批名字不会同时出现在两档里：任取一条名字，它只落在其中一档
+    const sample = POOL.filter((_, i) => i % 37 === 0).map((p) => p.name);
+    expect(sample.length).toBeGreaterThan(30);
+    for (const name of sample) {
+      const hits = (['m', 'n', 'f'] as const).filter((g) => genderPass(name, opts({ gender: g })));
+      expect(hits.length, `${name} 落在 ${hits.join('/')}`).toBe(1);
+    }
   });
   it('poolSize 与 genderStats 同一口径', () => {
     const o = opts({ gender: 'f' });

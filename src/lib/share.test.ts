@@ -7,7 +7,6 @@ import { one } from '../testing';
 
 const opts: Opts = {
   gender: 'any',
-  genderWeak: false,
   length: 2,
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
   redupOnly: false,

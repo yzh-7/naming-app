@@ -277,6 +277,15 @@ for (const s of singles) {
 ok(bad.length === 0, `全池 ${cand.length} 条 + ${singles.length} 条单字出处结构合法`, bad.slice(0, 6).join(' | '));
 const dupIds = cand.length - new Set(cand.map((c) => c.id)).size;
 ok(dupIds === 0, `id 唯一（重复 ${dupIds}）`);
+// 名字本身也要唯一：同一个双名不得既在《诗经》又在《楚辞》里出现一遍，也不得在同一部典籍里出现两遍。
+// 这条断言是 0.4.0 加的用户要求（"结果里不要有重复的名字"）。今天的主池 1,525 条名字互不相同，
+// 以后扩表／换语料时若引入同名，这里先红，由构建阶段决定保留哪一条出处（其余并入 alternates）。
+const dupNames = cand.length - new Set(cand.map((c) => c.name)).size;
+ok(dupNames === 0, `双名名字唯一（重复 ${dupNames} 条）`);
+const dupWithin = cand.filter((c, i) => cand.findIndex((o) => o.name === c.name && o.id !== c.id) >= 0);
+ok(dupWithin.length === 0, `同一名字不跨典籍重复（涉及 ${dupWithin.length} 条）`, dupWithin.slice(0, 6).map((c) => c.name).join(' '));
+const dupSingles = singles.length - new Set(singles.map((s) => s.char)).size;
+ok(dupSingles === 0, `单名用字唯一（重复 ${dupSingles} 条）`);
 const sameShape = cand
   .filter((c) => c.risk)
   .map((c) => c.name)

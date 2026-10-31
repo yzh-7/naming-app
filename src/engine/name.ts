@@ -267,15 +267,12 @@ export function scoreItem(
   const st = staticDeltas(it);
   const ph = phonetics(surname, it.name, surReading);
   const gender = genderOf(it.name);
+  // 加分口径与三档一致：偏男/偏女 命中看强弱（每字同侧 +4，靠一个字 +2）；
+  // 中性命中时，「两表都有字」是中性档的正证给 +3，「无性别信号」只是没有证据，不加分。
+  const bonus = gender.side === 'n' ? (gender.why.startsWith('两表') ? 3 : 0) : gender.strong ? 4 : 2;
+  const label = gender.side === 'n' ? '中性匹配' : gender.strong ? '性别风格强匹配' : '性别风格疑似匹配';
   const genderDelta: Delta[] =
-    opts.gender !== 'any' && gender.side === opts.gender
-      ? [
-          {
-            rule: `${gender.strong ? '性别风格强匹配' : '性别风格疑似匹配'} · ${gender.why}`,
-            delta: gender.strong ? 4 : 2,
-          },
-        ]
-      : [];
+    opts.gender !== 'any' && gender.side === opts.gender ? [{ rule: `${label} · ${gender.why}`, delta: bonus }] : [];
   const itemRisk = (it as unknown as { risk?: { word: string; freq: number } | null }).risk;
   const riskDelta: Delta[] =
     itemRisk && itemRisk.freq < 5000
@@ -421,13 +418,12 @@ function bookUniverse(opts: Opts): (Named & { famous?: boolean; tier?: string })
 }
 
 // 控件写「偏女」却只加 4 分是错的：那样偏男名照样进结果。改成真筛选。
-// 中性名保留（它不构成反证）；反向名一律排除；同侧但只是「疑似」（靠一个字）默认也排除，勾「含疑似」才放进来。
+// 0.4.0 起三档互斥：每条名字按 genderOf 只落一档（偏男 327 / 中性 669 / 偏女 529，合计 1525），
+// 选「偏男」就不给中性与偏女名，选「中性」就不给偏男与偏女名。旧版中性名在偏男与偏女里都出现（669 条重叠），
+// 用户看到的「同一个名字在男生女生里都有」就是这么来的。
 export function genderPass(name: string, opts: Opts): boolean {
   if (opts.gender === 'any') return true;
-  const g = genderOf(name);
-  if (g.side === 'n') return true;
-  if (g.side !== opts.gender) return false;
-  return g.strong || opts.genderWeak;
+  return genderOf(name).side === opts.gender;
 }
 
 // 指定用字：双名查原句配对（这个字与谁在同句读内成对），单名就是该字本身。

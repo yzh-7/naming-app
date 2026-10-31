@@ -15,6 +15,9 @@ test('收藏一个名字后能在收藏页搜到', async ({ page }) => {
   await card.getByRole('button', { name: '收藏' }).click();
   await expect(card.getByRole('button', { name: '已收藏' })).toBeVisible();
   await page.getByRole('link', { name: /收藏 1/ }).click();
+  // 收藏记下它是从生成页存下来的，收藏页每张卡上面写着来源与当时所属的性别档
+  await expect(page.getByText(/^来自生成页 · /)).not.toHaveCount(0);
+  await expect(page.getByRole('button', { name: '生成页' })).toBeVisible();
   await expect(page.getByLabel('搜索收藏')).toBeVisible();
   await page.getByLabel('搜索收藏').fill('zzz-不存在');
   await expect(page.getByText(/没有符合搜索/)).toBeVisible();
@@ -172,15 +175,23 @@ test('页脚给出应用版本与语料指纹，版本号与页面 meta 同源',
   expect(meta, 'index.html 的 meta 应当被构建注入真实版本，不能留占位符').toMatch(/^\d+\.\d+\.\d+$/);
 });
 
-test('分享链接里的性别微调（gw）会带过来：带 gw=1 打开时「含疑似」是按下态', async ({ page }) => {
+test('性别三档互斥：选「中性」只见中性名，选「偏男」不见中性与偏女名；老链接里的 gw 被忽略', async ({ page }) => {
+  await page.goto('/?s=袁&g=n');
+  await expect(page.getByRole('button', { name: '中性' })).toHaveAttribute('aria-pressed', 'true');
+  const neutral = page.locator('article.card:has-text("中性")');
+  await expect(neutral).not.toHaveCount(0);
+  await expect(page.locator('article.card:not(:has-text("中性"))')).toHaveCount(0);
+
+  await page.goto('/?s=袁&g=m');
+  await expect(page.getByRole('button', { name: '偏男' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('article.card')).not.toHaveCount(0);
+  await expect(page.locator('article.card:has-text("中性")')).toHaveCount(0);
+  await expect(page.locator('article.card:has-text("偏女")')).toHaveCount(0);
+
+  // 0.3.1 的链接带 gw=1（那时还有「含疑似」开关）：参数按未知忽略，性别档仍按 g 生效
   await page.goto('/?s=苏&g=f&gw=1');
-  const chip = page.getByRole('button', { name: '含「疑似偏女」' });
-  await expect(chip).toHaveCount(1);
-  await expect(chip).toHaveAttribute('aria-pressed', 'true');
-  // 链接只覆盖它出现的项，没出现的沿用本机已存值；要看「链接里没带 gw」的默认态，得先清掉本机存储
-  await page.evaluate(() => localStorage.clear());
-  await page.goto('/?s=苏&g=f');
-  await expect(page.getByRole('button', { name: '含「疑似偏女」' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByRole('button', { name: '含「疑似偏女」' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '偏女' })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('链接里的越界参数回默认值（不是夹到边界、也不是忽略）', async ({ page }) => {

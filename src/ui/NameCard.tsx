@@ -161,7 +161,8 @@ export default function NameCard({
 
   // 性别标签：偏女=暖色、偏男=冷色（浅色/深色各有一套对比度达标的取值）
   const gBadge = useMemo(() => {
-    if (g.side === 'n') return null;
+    // 三档都有标签：中性也标出来，否则用户分不清「没标」是「未判定」还是「中性」
+    if (g.side === 'n') return { text: '中性', cls: 'chip' };
     const weak = g.strong ? '' : '疑似';
     const side = g.side === 'f' ? '偏女' : '偏男';
     return { text: `${weak}${side}`, cls: g.side === 'f' ? 'chip-warm' : 'chip-cool' };
