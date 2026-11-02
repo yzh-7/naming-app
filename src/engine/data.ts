@@ -22,14 +22,19 @@ const isArr = (v: unknown): unknown[] => (Array.isArray(v) ? v : fail('期望数
 
 const BOOKS = new Set<string>(BOOK_ORDER);
 
+// 产物里不存 chars：双名条目的 chars 恒等于 name 拆字，1,525 条存下来要多花 7,951 B gzip
+// （实测同一份数据，删掉这个字段 91,428 → 83,478 B）。加载时由 name 展开，运行时的 PoolItem
+// 形状不变，取词、打分、界面都不用改。自检仍然逐条校验 name 是两个字——存不出 chars 不等于
+// 可以少一个校验：字数的口径在这里守着。
 function asPool(v: unknown, what: string): PoolItem[] {
+  const out: PoolItem[] = [];
   for (const it of isArr(v)) {
     if (
       !isObj(it) ||
       !isStr(it.id) ||
       !isStr(it.name) ||
-      !Array.isArray(it.chars) ||
-      !it.chars.every(isStr) ||
+      [...it.name].length !== 2 ||
+      'chars' in it ||
       !isStr(it.book) ||
       !BOOKS.has(it.book) ||
       !isStr(it.title) ||
@@ -41,8 +46,9 @@ function asPool(v: unknown, what: string): PoolItem[] {
     ) {
       fail(`${what} 有结构不符的条目`);
     }
+    out.push({ ...(it as unknown as PoolItem), chars: [...(it as unknown as { name: string }).name] });
   }
-  return v as PoolItem[];
+  return out;
 }
 
 function asSingles(v: unknown): SingleItem[] {

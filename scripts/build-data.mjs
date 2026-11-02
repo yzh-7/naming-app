@@ -343,7 +343,7 @@ function makeList(entries, tier) {
     return {
       id: `${base}_${String(seq[base]).padStart(3, '0')}`,
       name,
-      chars: name.split(''),
+      chars: name.split(''), // 只在构建期用（单名出处对齐、门禁统计）；写产物时剥掉，见下方 write
       tier,
       book: v.book,
       title: v.title,
@@ -652,7 +652,13 @@ const meta = {
   pool_split: candidates.filter((c) => c.spl).length,
 };
 const write = (name, data) => fs.writeFileSync(path.join(OUT, name), JSON.stringify(data) + '\n');
-write('candidates.json', candidates);
+// 产物里不存 chars：双名的 chars 恒等于 name 拆字，1,525 条存下来实测多花 7,951 B gzip
+// （91,428 → 83,478 B）。运行时由 src/engine/data.ts 从 name 展开，形状不变。
+write(
+  'candidates.json',
+  // JSON.stringify 会丢掉值为 undefined 的键，所以置空就等于不存这个字段
+  candidates.map((c) => ({ ...c, chars: undefined })),
+);
 write('singles.json', singles);
 write('chars.json', chars);
 write('homophone.json', homophone);

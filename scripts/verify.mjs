@@ -303,7 +303,7 @@ ok(
   seedShape.every((p) => sameShapeSet.has(p)),
   `同形标注：种子版那 8 条仍在表内并带 risk（实际全池标注 ${sameShape.length} 条：${sameShape.join(' ')}）`,
 );
-const poolCharsSeen = new Set(cand.flatMap((c) => c.chars));
+const poolCharsSeen = new Set(cand.flatMap((c) => [...c.name]));
 ok(
   singles.length === [...L0].filter((ch) => poolCharsSeen.has(ch)).length &&
     singles.length + meta.singles_without_source === L0.size,
@@ -555,7 +555,7 @@ console.log('6) 部首提示：由 raw 独立重算，且只是提示、不进�
   ok(krs.size === 8105, `raw 部首表覆盖 8,105 字（实际 ${krs.size}）`);
   const radical = JSON.parse(fs.readFileSync(`${OUT}/radical.json`, 'utf8'));
   const seen = new Set();
-  for (const c of cand) for (const ch of c.chars) seen.add(ch);
+  for (const c of cand) for (const ch of c.name) seen.add(ch);
   for (const s of singles) seen.add(s.char);
   const expectMap = {};
   for (const ch of [...seen].sort()) if (EL[krs.get(ch)]) expectMap[ch] = EL[krs.get(ch)];
@@ -572,7 +572,7 @@ console.log('6) 部首提示：由 raw 独立重算，且只是提示、不进�
     meta.radical_chars === Object.keys(radical).length,
     `meta.radical_chars = ${Object.keys(radical).length}（实际 ${meta.radical_chars}）`,
   );
-  const named = cand.filter((c) => c.chars.some((ch) => radical[ch])).length;
+  const named = cand.filter((c) => [...c.name].some((ch) => radical[ch])).length;
   ok(
     meta.radical_named === named,
     `meta.radical_named = ${named}/${cand.length} 条双名至少一字可标（实际 ${meta.radical_named}）`,
