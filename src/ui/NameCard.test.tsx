@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import NameCard, { Source } from './NameCard';
-import { scoreItem, findItem, glossOf, lineGlossOf, sameSoundPeers, shapeTags } from '../engine/name';
+import { genderOf, scoreItem, findItem, glossOf, lineGlossOf, sameSoundPeers, shapeTags } from '../engine/name';
 import { POOL } from '../engine/data';
 import { BOOK_LABEL, BOOK_ORDER, type Opts } from '../engine/types';
 import { one } from '../testing';
@@ -283,5 +283,36 @@ describe('成词依据：卡片直接把「是不是硬凑」的证据写出来'
     const single = { ...one(POOL, '主池首条'), name: '东', char: '东' } as unknown as (typeof POOL)[number];
     card(single);
     expect(screen.queryByText(/成词/)).not.toBeInTheDocument();
+  });
+});
+
+describe('真实用名标签', () => {
+  it('语料里有记录的写明多少人用过；没有记录的不挂标签', () => {
+    const named = one(
+      POOL.filter((p) => (p.rn ?? 0) >= 10),
+      '池内应有真实语料里多人用过的名字',
+    );
+    const bare = one(
+      POOL.filter((p) => !p.rn),
+      '池内应有真实语料里没记录的名字',
+    );
+    const first = render(
+      <NameCard r={scoreItem('袁', named, opts, 0)} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />,
+    );
+    expect(first.getByText(`真名 · ${named.rn ?? 0} 人用过`)).toBeInTheDocument();
+    first.unmount();
+    const second = render(
+      <NameCard r={scoreItem('袁', bare, opts, 0)} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />,
+    );
+    expect(second.queryByText(/真名 · /)).not.toBeInTheDocument();
+  });
+  it('两条证据打架时不在归属上偷偷改口径，而是在标签提示里说明', () => {
+    const conflicting = POOL.find((p) => genderOf(p.name, { n: p.rn, side: p.rs }).conflict);
+    const it = one(conflicting ? [conflicting] : [], '池内应有字表与真实语料判定不一致的名字');
+    const tag = genderOf(it.name, { n: it.rn, side: it.rs });
+    render(
+      <NameCard r={scoreItem('袁', it, opts, 0)} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />,
+    );
+    expect(screen.getAllByTitle(new RegExp(tag.conflict as string)).length).toBeGreaterThan(0);
   });
 });

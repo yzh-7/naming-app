@@ -175,6 +175,15 @@ test('页脚给出应用版本与语料指纹，版本号与页面 meta 同源',
   expect(meta, 'index.html 的 meta 应当被构建注入真实版本，不能留占位符').toMatch(/^\d+\.\d+\.\d+$/);
 });
 
+test('真实用名标签：卡片写明这名字在 120 万真实姓名语料里出现过多少次', async ({ page }) => {
+  await page.goto('/?s=袁&q=明明');
+  const card = page.locator('article.card').first();
+  await expect(card).toContainText('明明');
+  await expect(card.locator('.chip', { hasText: '真名 · 314 人用过' })).toHaveCount(1);
+  await expect(card.getByTitle(/真实姓名语料里这个名字出现过 314 次/)).toHaveCount(1);
+  await expect(card.getByText(/真实用名 · 语料里 314 人用过/)).toHaveCount(1);
+});
+
 test('成词门槛：默认只给「典籍里本来就挨着」的名字；拼出来的「清婉」要关掉门槛才出现', async ({ page }) => {
   await page.goto('/?s=袁&q=清婉');
   const chip = page.getByRole('button', { name: '只看成词的名字' });

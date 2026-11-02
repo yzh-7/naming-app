@@ -236,7 +236,7 @@ export const searchText = (it: Named) => `${it.name}|${namePinyin(it.name)}|${it
 
 // 旧实现「一个字命中就定性」，于是 尧圣/雪松/清洁 全被判偏女（183 条里 113 条只靠一票）。
 // 现在：两侧都命中或都不命中＝中性；单侧命中时，只有每个字都指向同侧才算强命中，其余字在两表之外的标「疑似」。
-export function genderOf(name: string): GenderTag {
+export function genderOf(name: string, real?: { n?: number; side?: 'm' | 'f' | 'n' }): GenderTag {
   const chars = [...new Set([...name])];
   const fem = chars.filter((c) => GENDER_FEMALE.has(c));
   const male = chars.filter((c) => GENDER_MALE.has(c));
@@ -246,11 +246,31 @@ export function genderOf(name: string): GenderTag {
     return { side: 'n', strong: false, why: `两表都有字（女：${fem.join('')}／男：${male.join('')}），不定性` };
   }
   const side: GenderSide = fem.length ? 'f' : male.length ? 'm' : 'n';
-  if (side === 'n') return { side: 'n', strong: false, why: '用字不在性别风格字表内' };
+  // 字表完全没有信号时，让真实姓名语料的标注顶上：这比「两个字都不在表里就一律中性」有依据得多
+  if (side === 'n') {
+    if (real?.side === 'm' || real?.side === 'f')
+      return {
+        side: real.side,
+        strong: false,
+        why: `用字不在性别风格字表内，按真实姓名语料归入${real.side === 'f' ? '偏女' : '偏男'}（${real.n ?? 0} 人用过）`,
+      };
+    if (real?.side === 'n')
+      return { side: 'n', strong: false, why: `真实语料里男女都用（${real.n ?? 0} 人用过），用字也不在性别字表内` };
+    return { side: 'n', strong: false, why: '用字不在性别风格字表内' };
+  }
   const hit = side === 'f' ? fem : male;
   const strong = none.length === 0;
   const basis = `${label[side]}：${hit.join('')}（${side === 'f' ? '女' : '男'}表字）`;
-  return { side, strong, why: strong ? basis : `${basis} · 其余 ${none.join('')} 无性别信号` };
+  const conflict =
+    (real?.side === 'm' || real?.side === 'f') && real.side !== side
+      ? `性别风格字表判${label[side]}，真实姓名语料里 ${real.n ?? 0} 人却把它标成${label[real.side]}`
+      : undefined;
+  return {
+    side,
+    strong,
+    why: strong ? basis : `${basis} · 其余 ${none.join('')} 无性别信号`,
+    ...(conflict ? { conflict } : {}),
+  };
 }
 
 const SINGLE_ITEMS: (Named & { famous?: boolean; tier?: string })[] = SINGLES.map(
@@ -266,7 +286,7 @@ export function scoreItem(
 ): Result {
   const st = staticDeltas(it);
   const ph = phonetics(surname, it.name, surReading);
-  const gender = genderOf(it.name);
+  const gender = genderOf(it.name, { n: it.rn, side: it.rs });
   // 加分口径与三档一致：偏男/偏女 命中看强弱（每字同侧 +4，靠一个字 +2）；
   // 中性命中时，「两表都有字」是中性档的正证给 +3，「无性别信号」只是没有证据，不加分。
   const bonus = gender.side === 'n' ? (gender.why.startsWith('两表') ? 3 : 0) : gender.strong ? 4 : 2;
@@ -284,7 +304,16 @@ export function scoreItem(
   const wordScore = wordBonus(ev);
   if (wordScore) wordDelta.push({ rule: `${wordScore > 0 ? '成词' : '未见成词依据'} · ${ev.why}`, delta: wordScore });
   if (ev.spl) wordDelta.push({ rule: `拆词 · 原句里相邻的「${ev.spl}」被剪开，只取了它两边的字`, delta: -10 });
-  const deltas = [...st, ...ph.deltas, ...genderDelta, ...wordDelta, ...riskDelta];
+  // 真实用名证据：真有人这么叫过是加分项，但没记录不等于不好，所以缺字段一分不扣
+  const usageDelta: Delta[] =
+    (it.rn ?? 0) >= 50
+      ? [{ rule: `真实用名 · 语料里 ${it.rn} 人用过`, delta: 4 }]
+      : (it.rn ?? 0) >= 10
+        ? [{ rule: `真实用名 · 语料里 ${it.rn} 人用过`, delta: 2 }]
+        : (it.rn ?? 0) >= 2
+          ? [{ rule: `真实用名 · 语料里 ${it.rn} 人用过（次数少，不加分）`, delta: 0 }]
+          : [];
+  const deltas = [...st, ...ph.deltas, ...genderDelta, ...wordDelta, ...usageDelta, ...riskDelta];
   return {
     ...it,
     full: surname + it.name,
@@ -426,9 +455,11 @@ function bookUniverse(opts: Opts): (Named & { famous?: boolean; tier?: string })
 // 0.4.0 起三档互斥：每条名字按 genderOf 只落一档（偏男 327 / 中性 669 / 偏女 529，合计 1525），
 // 选「偏男」就不给中性与偏女名，选「中性」就不给偏男与偏女名。旧版中性名在偏男与偏女里都出现（669 条重叠），
 // 用户看到的「同一个名字在男生女生里都有」就是这么来的。
-export function genderPass(name: string, opts: Opts): boolean {
+// 筛选必须和卡片上的档位用同一份证据：只传名字会让筛选按字表、卡片按「字表＋真实语料」，
+// 结果是筛「中性」却列出偏男名。所以这里收整条条目，不许只传名字。
+export function genderPass(it: Named, opts: Opts): boolean {
   if (opts.gender === 'any') return true;
-  return genderOf(name).side === opts.gender;
+  return genderOf(it.name, { n: it.rn, side: it.rs }).side === opts.gender;
 }
 
 // 指定用字：双名查原句配对（这个字与谁在同句读内成对），单名就是该字本身。
@@ -494,7 +525,7 @@ function universe(opts: Opts): (Named & { famous?: boolean; tier?: string })[] {
   const q = (opts.search ?? '').trim().toLowerCase();
   const t = (opts.title ?? '').trim();
   return bookUniverse(opts)
-    .filter((it) => genderPass(it.name, opts))
+    .filter((it) => genderPass(it as unknown as Named, opts))
     .filter((it) => wordPass(it, opts))
     .filter((it) => passesShape(it.name, opts))
     .filter((it) => mustPass(it.name, opts))

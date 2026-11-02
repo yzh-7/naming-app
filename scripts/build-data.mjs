@@ -82,6 +82,9 @@ const radicalOf = (ch) => ELEMENT[KRS.get(ch)] ?? null;
 
 // L0 名用字种子：cnname 属性表 ∩ 通用规范汉字表（一至三级，268 字）。五行/性别列只取性别风格，不用五行。
 const attrs = json('cnname_attributes.json');
+// 真实姓名语料里「这两个字的组合真有人用过多少次、上游标男还是标女」（派生自 wainshine 120 万姓名，
+// 见 scripts/derive-cnname-given.mjs）。构建期查表挂到候选上，运行时只读不算。
+const GIVEN_NAMES = json('cnname_given.json');
 const attrDict = attrs.dict ?? attrs;
 const femaleSet = new Set((attrDict.female ?? '').split(''));
 const maleSet = new Set((attrDict.male ?? '').split(''));
@@ -408,6 +411,32 @@ for (const c of candidates) {
   if (sp) c.spl = sp;
 }
 // 成词判定：语料里相邻出现过至少两次（不只这一条出处），或现代汉语词表收录，或是典籍里的叠字
+// 真实用名证据：次数原样带上（卡片要写「N 人用过」），性别只在「≥5 次且 80% 单侧」时才算有向
+const realSide = (rec) => {
+  const t = rec[1] + rec[2];
+  if (t < 5) return undefined;
+  return rec[1] / t >= 0.8 ? 'm' : rec[2] / t >= 0.8 ? 'f' : 'n';
+};
+const GMALE = new Set([...attrs.male]);
+const GFEMALE = new Set([...attrs.female]);
+let realNamed = 0;
+let realResolved = 0;
+const realSideCount = { m: 0, f: 0, n: 0 };
+for (const c of candidates) {
+  const rec = GIVEN_NAMES[c.name];
+  if (!rec) continue;
+  c.rn = rec[0];
+  realNamed += 1;
+  const s = realSide(rec);
+  if (!s) continue;
+  c.rs = s;
+  realSideCount[s] += 1;
+  // 与 src/engine/name.ts 的 genderOf 同一条规则：只有「两个字都不在性别风格字表内」时，真实语料的标注才补档。
+  // 「两表都有字」是字表给出的正面中性证据，不用一条逐名标注去推翻它。
+  const cs = [...new Set([...c.name])];
+  if (!cs.some((x) => GMALE.has(x) || GFEMALE.has(x)) && (s === 'm' || s === 'f')) realResolved += 1;
+}
+
 const isWordCand = (c) => (c.a ?? 0) >= 2 || (c.w ?? 0) > 0 || c.redup;
 
 // 单字名：每个 L0 字取一个音步对齐的双字词做出处（分数最高、再按 id 最小），无对齐出处则不收录
@@ -644,6 +673,12 @@ const meta = {
   gloss_chars: Object.keys(gloss).length,
   line_gloss: lineGloss.length,
   given_freq_chars: Object.keys(GIVEN_FREQ).length,
+  // 真实用名证据（口径见上面 realSide 那段）
+  pool_real_named: realNamed,
+  pool_real_side_m: realSideCount.m,
+  pool_real_side_f: realSideCount.f,
+  pool_real_side_n: realSideCount.n,
+  pool_real_resolved: realResolved,
   // 成词层（口径见上面 adjacent 那段）
   pool_word: candidates.filter(isWordCand).length,
   pool_attested: candidates.filter((c) => (c.a ?? 0) >= 2).length,

@@ -17,6 +17,7 @@ export type CandidateRow = {
   gender: string;
   word: string; // 成词依据（语料内相邻次数 / 现代词表收录 / 典籍叠字 / 未见依据）
   split: string; // 跨字取词时被剪开的原词，没有就留空
+  usage: string; // 真实用名次数：120 万真实姓名语料里出现过多少次，没记录就留空
 };
 
 export function candidateRow(r: Result): CandidateRow {
@@ -39,7 +40,7 @@ export function candidateRow(r: Result): CandidateRow {
 }
 
 // 成词依据与拆词：卡片上那两个标签的同一套口径写进导出，用户在表格里也能只留「有依据的」那一档
-export function candidateQuality(r: Result): { word: string; split: string } {
+export function candidateQuality(r: Result): { word: string; split: string; usage: string } {
   const ev = wordEvidence(r as unknown as { a?: number; w?: number; redup?: boolean; spl?: string; char?: string });
   const word =
     ev.tier === 'attested'
@@ -51,7 +52,7 @@ export function candidateQuality(r: Result): { word: string; split: string } {
           : ev.tier === 'single'
             ? '单字名不适用'
             : '未见依据';
-  return { word, split: ev.spl };
+  return { word, split: ev.spl, usage: (r.rn ?? 0) >= 2 ? String(r.rn) : '' };
 }
 
 export const candidateRows = (results: Result[]): CandidateRow[] => results.map((r) => candidateRow(r));
@@ -86,6 +87,7 @@ export const CSV_HEADER = [
   '性别风格',
   '成词依据',
   '拆词',
+  '真实用名次数',
 ];
 
 // 单元格转义。除了 CSV 本身的引号/逗号规则，还要防 Excel/WPS 的公式执行：
@@ -115,6 +117,7 @@ export function candidatesCsv(results: Result[]): string {
       x.gender,
       x.word,
       x.split,
+      x.usage,
     ]
       .map(esc)
       .join(','),
@@ -146,6 +149,7 @@ export function favoritesCsv(
       x.gender,
       x.word,
       x.split,
+      x.usage,
       e.group ?? '',
       e.note ?? '',
       e.from === 'gen' ? '生成页' : e.from === 'compose' ? '自选页' : '未记录',

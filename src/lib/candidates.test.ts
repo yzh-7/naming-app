@@ -107,7 +107,7 @@ describe('候选全量导出', () => {
     expect(csv).toContain("'-@危险备注");
   });
   it('成词依据与拆词两列有值：有依据的写出次数，跨字取词被剪开的写出原词', () => {
-    expect(CSV_HEADER.slice(-2)).toEqual(['成词依据', '拆词']);
+    expect(CSV_HEADER.slice(-3)).toEqual(['成词依据', '拆词', '真实用名次数']);
     const rows = candidateRows(plan('袁', { ...opts, count: 0 }, 0).page);
     const attested = rows.find((x) => x.word.startsWith('语料内相邻'));
     const modern = rows.find((x) => x.word.startsWith('现代词表收录'));

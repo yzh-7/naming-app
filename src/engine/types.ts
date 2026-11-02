@@ -32,6 +32,8 @@ export type PoolItem = {
   lg: number; // 出处今译在 LINE_GLOSS 里的下标
   a?: number; // 成词证据：这两个字在七部典籍正文里作为相邻两字出现的次数（构建期算好，缺＝0）
   w?: number; // 成词证据：jieba 现代汉语词表里该双字的词频（缺＝未收录）
+  rn?: number; // 真实用名证据：120 万真实姓名语料里出现过多少次（构建期从 data/raw/cnname_given.json 取，缺＝没记录）
+  rs?: 'm' | 'f' | 'n'; // 该语料对这个名字的性别标注（≥5 次且 80% 单侧才算有向，缺＝未知）
   spl?: string; // 跨字取词时被剪开的那个原词（只在 gap≥2 且那一处本来成词时才有）
 };
 
@@ -45,7 +47,13 @@ export type Homophone = { py: string; w: string }[];
 export type Gender = 'any' | 'f' | 'm' | 'n';
 export type GenderSide = 'f' | 'm' | 'n';
 // strong＝名字每个字都指向同一侧；weak＝只有一个字命中、其余字在两表之外（旧实现就是靠这种一票定性的）
-export type GenderTag = { side: GenderSide; strong: boolean; why: string };
+export type GenderTag = {
+  side: GenderSide;
+  strong: boolean;
+  why: string;
+  // 两条证据打架时写在这里（性别风格字表说的与真实姓名语料标的不同）：不改变归属，只如实说明
+  conflict?: string;
+};
 
 export type SortKey = 'score' | 'strokes' | 'popular' | 'book';
 
@@ -130,6 +138,8 @@ export type Named = {
   lg: number; // 出处今译在 LINE_GLOSS 里的下标
   a?: number; // 成词证据，见 PoolItem
   w?: number;
+  rn?: number; // 真实用名证据：120 万真实姓名语料里这个名字出现过多少次（缺＝没记录）
+  rs?: 'm' | 'f' | 'n'; // 上游对这个名字的性别标注（≥5 次且 80% 单侧才算有向；缺＝未知）
   spl?: string;
 };
 

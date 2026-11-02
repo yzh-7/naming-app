@@ -130,6 +130,11 @@ const META_KEYS = [
   'radical_named',
   'gloss_chars',
   'line_gloss',
+  'pool_real_named',
+  'pool_real_side_m',
+  'pool_real_side_f',
+  'pool_real_side_n',
+  'pool_real_resolved',
   'pool_word',
   'pool_no_evidence',
   'pool_split',
@@ -151,6 +156,12 @@ type Meta = {
   gloss_chars: number;
   line_gloss: number;
   given_freq_chars: number;
+  // 真实用名证据：这名字在 120 万真实姓名语料里出现过多少次、上游标什么性别（口径见 derive-cnname-given.mjs）
+  pool_real_named: number;
+  pool_real_side_m: number;
+  pool_real_side_f: number;
+  pool_real_side_n: number;
+  pool_real_resolved: number;
   // 成词层：默认只给「这两个字在典籍里本来就挨着」的名字，三个计数在构建期算好（口径见 build-data）
   pool_word: number;
   pool_attested: number;

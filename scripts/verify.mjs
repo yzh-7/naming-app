@@ -432,6 +432,46 @@ console.log('4d) 成词证据：a / w / spl 由 data/raw 与 jieba 词典独立�
   ok(word.length >= 400, `成词层不能小到没得挑（现 ${word.length} / 全池 ${cand.length}）`);
 }
 
+console.log('4e) 真实用名证据：rn / rs 由 data/raw/cnname_given.json 独立重算核对');
+{
+  const T = JSON.parse(fs.readFileSync('data/raw/cnname_given.json', 'utf8'));
+  const attrs = JSON.parse(fs.readFileSync('data/raw/cnname_attributes.json', 'utf8'));
+  const MALE = new Set([...attrs.male]);
+  const FEMALE = new Set([...attrs.female]);
+  const sideOf = (rec) => {
+    const t = rec[1] + rec[2];
+    if (t < 5) return undefined;
+    return rec[1] / t >= 0.8 ? 'm' : rec[2] / t >= 0.8 ? 'f' : 'n';
+  };
+  const bad = [];
+  let named = 0;
+  let resolved = 0;
+  const cnt = { m: 0, f: 0, n: 0 };
+  for (const c of cand) {
+    const rec = T[c.name];
+    const wantN = rec ? rec[0] : undefined;
+    if ((c.rn ?? undefined) !== wantN) bad.push(`${c.name}: rn 记 ${c.rn ?? '无'} 应为 ${wantN ?? '无'}`);
+    const s = rec ? sideOf(rec) : undefined;
+    if ((c.rs ?? undefined) !== s) bad.push(`${c.name}: rs 记 ${c.rs ?? '无'} 应为 ${s ?? '无'}`);
+    if (rec) {
+      named += 1;
+      if (s) cnt[s] += 1;
+    }
+    if ((s === 'm' || s === 'f') && ![...new Set([...c.name])].some((x) => MALE.has(x) || FEMALE.has(x))) resolved += 1;
+  }
+  ok(bad.length === 0, `真实用名次数与性别标注同派生表一致（不符 ${bad.length} 条）`, bad.slice(0, 4).join(' | '));
+  ok(named === meta.pool_real_named, `有真实用名记录的候选 ${named} 条与 meta 一致`);
+  ok(
+    cnt.m === meta.pool_real_side_m && cnt.f === meta.pool_real_side_f && cnt.n === meta.pool_real_side_n,
+    `真实语料的性别标注分布 ${JSON.stringify(cnt)} 与 meta 一致`,
+  );
+  ok(
+    resolved === meta.pool_real_resolved,
+    `字表给不出侧、由真实语料补档的 ${resolved} 条与 meta 一致（「两表都有字」不推翻）`,
+  );
+  ok(named >= 500, `真实用名记录不能太稀（现 ${named} / ${cand.length} 条）`);
+}
+
 console.log('5) 性别风格：字表未漂移 + 强弱两级 + 真筛选不变量');
 {
   const rawAttr = JSON.parse(fs.readFileSync('data/raw/cnname_attributes.json', 'utf8'));

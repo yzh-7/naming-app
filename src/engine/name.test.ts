@@ -173,8 +173,8 @@ describe('性别判定：三档互斥（偏男／中性／偏女）', () => {
     const g = genderOf(both!.name);
     expect(g.side).toBe('n');
     expect(g.why).toContain('两表都有字');
-    expect(genderPass(both!.name, opts({ gender: 'f' }))).toBe(false);
-    expect(genderPass(both!.name, opts({ gender: 'n' }))).toBe(true);
+    expect(genderPass(both!, opts({ gender: 'f' }))).toBe(false);
+    expect(genderPass(both!, opts({ gender: 'n' }))).toBe(true);
   });
   it('单侧命中但其余字无信号＝疑似；每字同侧＝强', () => {
     const weak = [...POOL]
@@ -195,8 +195,8 @@ describe('性别判定：三档互斥（偏男／中性／偏女）', () => {
   it('筛选：三档互斥——反向名与中性名都不进偏男/偏女，疑似名留在自己那一档', () => {
     const f = (name: string) => genderOf(name).side === 'f';
     const m = (name: string) => genderOf(name).side === 'm';
-    const femName = POOL.find((p) => f(p.name))!.name;
-    const maleName = POOL.find((p) => m(p.name))!.name;
+    const femName = POOL.find((p) => f(p.name))!;
+    const maleName = POOL.find((p) => m(p.name))!;
     expect(genderPass(femName, opts({ gender: 'm' }))).toBe(false);
     expect(genderPass(maleName, opts({ gender: 'f' }))).toBe(false);
     expect(genderPass(maleName, opts({ gender: 'any' }))).toBe(true);
@@ -204,9 +204,9 @@ describe('性别判定：三档互斥（偏男／中性／偏女）', () => {
       const g = genderOf(p.name);
       return g.side === 'f' && !g.strong;
     })!;
-    expect(genderPass(weakFem.name, opts({ gender: 'f' }))).toBe(true);
-    expect(genderPass(weakFem.name, opts({ gender: 'm' }))).toBe(false);
-    expect(genderPass(weakFem.name, opts({ gender: 'n' }))).toBe(false);
+    expect(genderPass(weakFem, opts({ gender: 'f' }))).toBe(true);
+    expect(genderPass(weakFem, opts({ gender: 'm' }))).toBe(false);
+    expect(genderPass(weakFem, opts({ gender: 'n' }))).toBe(false);
   });
   it('三档条数之和＝候选池总数，一档不多一条不少（开着成词门槛也成立）', () => {
     for (const wordOnly of [false, true]) {
@@ -219,11 +219,11 @@ describe('性别判定：三档互斥（偏男／中性／偏女）', () => {
     }
     expect(poolSize(opts({ wordOnly: false }))).toBe(META.pool_B);
     // 同一批名字不会同时出现在两档里：任取一条名字，它只落在其中一档
-    const sample = POOL.filter((_, i) => i % 37 === 0).map((p) => p.name);
+    const sample = POOL.filter((_, i) => i % 37 === 0);
     expect(sample.length).toBeGreaterThan(30);
-    for (const name of sample) {
-      const hits = (['m', 'n', 'f'] as const).filter((g) => genderPass(name, opts({ gender: g })));
-      expect(hits.length, `${name} 落在 ${hits.join('/')}`).toBe(1);
+    for (const it of sample) {
+      const hits = (['m', 'n', 'f'] as const).filter((g) => genderPass(it, opts({ gender: g })));
+      expect(hits.length, `${it.name} 落在 ${hits.join('/')}`).toBe(1);
     }
   });
   it('poolSize 与 genderStats 同一口径', () => {
@@ -746,5 +746,76 @@ describe('成词门槛：默认只给「典籍里本来就挨着的」名字（�
     const o = opts({ length: 1, wordOnly: true });
     expect(poolSize(o)).toBe(poolSize(opts({ length: 1, wordOnly: false })));
     expect(wordEvidence({ char: '东' }).tier).toBe('single');
+  });
+});
+describe('真实用名证据（120 万条真实姓名语料）', () => {
+  it('字表没有信号时由真实语料补档，补出来的档仍是互斥三档之一', () => {
+    const noSignal = (n: string) => genderOf(n).why === '用字不在性别风格字表内';
+    const resolved = POOL.filter((it) => (it.rs === 'm' || it.rs === 'f') && noSignal(it.name));
+    expect(resolved.length, '池内应有「字表无信号、真实语料有标注」的名字').toBeGreaterThan(50);
+    expect(resolved.length).toBe(META.pool_real_resolved);
+    for (const it of resolved.slice(0, 8)) {
+      const tag = genderOf(it.name, { n: it.rn, side: it.rs });
+      expect(tag.side).toBe(it.rs);
+      expect(tag.why).toContain('真实姓名语料');
+    }
+    const sides = (['m', 'f', 'n'] as const).map(
+      (g) => POOL.filter((it) => genderOf(it.name, { n: it.rn, side: it.rs }).side === g).length,
+    );
+    expect(at(sides, 0, '偏男档计数')).toBeGreaterThan(0);
+    expect(at(sides, 1, '偏女档计数')).toBeGreaterThan(0);
+    expect(
+      at(sides, 0, '偏男档计数') + at(sides, 1, '偏女档计数') + at(sides, 2, '中性档计数'),
+      '补档后三档之和必须仍等于全池',
+    ).toBe(POOL.length);
+  });
+  it('真实用名加分分两档，次数少的只说明不加分，没记录的一分不扣', () => {
+    const many = one(
+      POOL.filter((it) => (it.rn ?? 0) >= 50),
+      '池内应有语料里多人用过的名字',
+    );
+    const mid = one(
+      POOL.filter((it) => (it.rn ?? 0) >= 10 && (it.rn ?? 0) < 50),
+      '池内应有语料里十来个人用过的名字',
+    );
+    const few = one(
+      POOL.filter((it) => (it.rn ?? 0) >= 2 && (it.rn ?? 0) < 10),
+      '池内应有语料里只有几次记录的名字',
+    );
+    const none = one(
+      POOL.filter((it) => !it.rn),
+      '池内应有语料里没有记录的名字',
+    );
+    const d = (it: (typeof POOL)[number]) =>
+      scoreItem('袁', it, opts({ wordOnly: false }), 0).deltas.find((x) => x.rule.startsWith('真实用名'));
+    expect(d(many)?.delta).toBe(4);
+    expect(d(mid)?.delta).toBe(2);
+    expect(d(few)?.delta).toBe(0);
+    expect(d(few)?.rule).toContain('次数少');
+    expect(d(none), '没记录不该出现扣分项').toBeUndefined();
+  });
+  it('两条证据不一致时记在 conflict 里，名字归属跟着性别风格字表不动', () => {
+    const it = one(
+      POOL.filter((p) => p.rs && genderOf(p.name).side !== 'n' && genderOf(p.name).side !== p.rs),
+      '池内应有两条证据不一致的名字',
+    );
+    const tag = genderOf(it.name, { n: it.rn, side: it.rs });
+    expect(tag.side).toBe(genderOf(it.name).side);
+    expect(tag.conflict).toContain('真实姓名语料');
+  });
+  it('meta 的真实用名计数与池内实况一致', () => {
+    expect(POOL.filter((it) => it.rn).length).toBe(META.pool_real_named);
+    expect(POOL.filter((it) => it.rs === 'm').length).toBe(META.pool_real_side_m);
+    expect(POOL.filter((it) => it.rs === 'f').length).toBe(META.pool_real_side_f);
+  });
+});
+describe('筛选与卡片必须同一套证据', () => {
+  it('任一性别档下的每一条结果，卡片上的档就是那一档（真实语料补的档也算）', () => {
+    for (const side of ['m', 'f', 'n'] as const) {
+      const all = plan('袁', opts({ gender: side, wordOnly: false, count: 0 }), 0, 0).page;
+      expect(all.length, `${side} 档不该筛空`).toBeGreaterThan(0);
+      const wrong = all.filter((r) => r.gender.side !== side);
+      expect(wrong.map((r) => `${r.name}:${r.gender.side}`).slice(0, 5), '结果里出现了别的档').toEqual([]);
+    }
   });
 });

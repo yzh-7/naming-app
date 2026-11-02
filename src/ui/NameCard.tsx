@@ -185,6 +185,17 @@ export default function NameCard({
     return { text, title, cls: ev.tier === 'none' ? 'text-ink-3' : 'chip-ok' };
   }, [r]);
 
+  // 真实用名证据：只在语料里有记录时挂标签，没记录不挂（缺证据不等于名字不好）
+  const useChip = useMemo(() => {
+    const rn = r.rn ?? 0;
+    if (rn < 2) return null;
+    const sideLabel = r.rs === 'f' ? '偏女' : r.rs === 'm' ? '偏男' : r.rs === 'n' ? '男女都用' : '未知';
+    const title = `120 万条真实姓名语料里这个名字出现过 ${rn} 次；上游性别标注：${sideLabel}。${
+      r.gender.conflict ? `${r.gender.conflict}。` : ''
+    }上游是逐名标注而非用量分布，这条只证明有人这么叫过`;
+    return { text: `真名 · ${rn} 人用过`, title, cls: rn >= 10 ? 'chip-ok' : 'chip' };
+  }, [r]);
+
   const shapeShown = shape.chars.length > 0 || !!shape.note;
 
   return (
@@ -194,8 +205,13 @@ export default function NameCard({
         <h3 className="font-serif text-name text-ink sm:text-name-lg">{r.full}</h3>
         <span className="flex flex-wrap items-center gap-1.5">
           {gBadge && (
-            <span className={`chip ${gBadge.cls}`} title={g.why}>
+            <span className={`chip ${gBadge.cls}`} title={g.conflict ? `${g.why}。${g.conflict}` : g.why}>
               {gBadge.text}
+            </span>
+          )}
+          {useChip && (
+            <span className={`chip ${useChip.cls}`} title={useChip.title}>
+              {useChip.text}
             </span>
           )}
           {evChip && (

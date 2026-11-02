@@ -18,6 +18,7 @@
 | `unihan_krs_gsc.txt` | Unicode Unihan `kRSUnicode`（unicode.org） | Unicode License V3 | 从 Unihan.zip 抽取的派生子集：一二三级字表 8,105 字对应康熙字典部首编号，每条取第一个编号 | 否，构建期只把部首属木（75）、火（86）、水（85）、金（167）、土（32）五部的字推成卡片上的「部首」提示 |
 | `dict_shape.json` `dict_gloss.json` | mapull/chinese-dictionary 的 `char_base.json` 与 `char_detail.json`，经 `scripts/derive-dict.mjs` 裁剪 | MIT | 派生数据：笔画、八类结构名、字义（优先取「本义」，去训诂括号并截断）。字义只对 L0 字进包，笔画与结构对全部 8,105 字进包 | 是，字义进 `gloss.json`，笔画与结构进 `chars.json` 的 `st`、`sx` |
 | `line_gloss.tsv` | 本项目自撰，1,140 行，与候选及单字名的原句逐条对应 | 本项目原创，随本仓库发布 | 出处今译：每个唯一原句配一句白话释义，只解释句意，不增补典故与命理判断 | 是，进 `line_gloss.json`，按原句首次出现顺序的字符串数组 |
+| `cnname_given.json` | 同上游的 `Chinese_Names_Corpus_Gender（120W）.txt`，经 `scripts/derive-cnname-given.mjs` 裁剪 | Apache-2.0 | 派生聚合数据：真实姓名去掉首字（姓）后的**双字名**，每个名字记［出现次数, 标男次数, 标女次数］，只留出现≥2 次且两字都在通用规范汉字表内的 69,919 条（覆盖 90.7 万行）。构建期查表给候选挂「真有人用过 N 次」与性别标注，**运行时不打包这张表**，只发每条自己的两个字段。上游是网络语料，性别是逐名标注而非用量分布（全表只有一条名字同时出现男女两种标注），所以它证明的是"有人这么叫过、且被归为某性别"，不证明男女都用 | 是，进 `candidates.json` 的 `rn` / `rs` |
 | `name_given_freq.json` | wainshine/Chinese-Names-Corpus 的 `Chinese_Names_Corpus（120W）.txt`，经 `scripts/derive-dict.mjs` 裁剪 | Apache-2.0 | 派生数据：对 114 万条真实姓名去掉首字后的用字计数（共 211 万次用字），用作字在真实姓名中常见程度的估算 | 是，进 `chars.json` 的 `gn` 字段，运行时换算为档位 |
 
 ## 语料与字表的更新链
