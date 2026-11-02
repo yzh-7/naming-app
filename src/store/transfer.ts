@@ -107,6 +107,8 @@ export function toQuery(s: Pick<SavedState, 'surname' | 'reading' | 'opts'>): st
   if (s.reading) q.set('r', String(s.reading));
   const o = s.opts;
   if (o.gender !== 'any') q.set('g', o.gender);
+  // 只看成词是默认门槛，只有关掉它才写进链接（wd=0），链接短一点是一点
+  if (!o.wordOnly) q.set('wd', '0');
   if (o.length !== 2) q.set('len', '1');
   if (o.count !== DEFAULT_OPTS.count) q.set('n', o.count === 0 ? 'all' : String(o.count));
   if (o.search) q.set('q', o.search.slice(0, SEARCH_MAX));
@@ -149,6 +151,7 @@ export function fromQuery(qs: string): { surname?: string; reading?: number; opt
   };
 
   if (q.has('g')) take('gender', q.get('g'));
+  if (q.has('wd')) take('wordOnly', q.get('wd') !== '0');
   if (q.has('len')) take('length', Number(q.get('len')));
   const n = q.get('n');
   if (n !== null) take('count', n === 'all' ? 0 : Number(n));

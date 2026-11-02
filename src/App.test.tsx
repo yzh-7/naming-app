@@ -67,6 +67,27 @@ describe('App 集成冒烟', () => {
     expect(note.value).toBe('喜欢它的意思');
   });
 
+  it('收藏记下来源与性别档：收藏页写着它是从哪儿存的，两组快速筛选各自有效', () => {
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '袁' } });
+    fireEvent.click(one(screen.getAllByRole('button', { name: '收藏' }), '「收藏」按钮列表'));
+    fireEvent.click(screen.getByRole('link', { name: /收藏 1/ }));
+    const line = one(screen.getAllByText(/^来自生成页 · /), '收藏卡上面的来源行');
+    const text = String(line.textContent);
+    expect(text).toMatch(/^来自生成页 · (偏男|中性|偏女)档$/);
+    const dang = text.slice(-3, -1);
+    // 按来源筛：这条不是自选页存的，筛「自选页」应当筛空
+    fireEvent.click(screen.getByRole('button', { name: '自选页' }));
+    expect(screen.getByText(/没有符合搜索／来源／性别档／分组的条目/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '生成页' }));
+    // 按性别档筛：选中它所属的那一档，条目还在；选另外两档，筛空
+    const others = ['偏男', '中性', '偏女'].filter((g) => g !== dang);
+    fireEvent.click(screen.getByRole('button', { name: others[0] ?? '偏男' }));
+    expect(screen.getByText(/没有符合搜索／来源／性别档／分组的条目/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: dang }));
+    expect(screen.getAllByText(/^来自生成页 · /).length).toBe(1);
+  });
+
   it('hash 路由：#/compose 进自选页，#fav 进收藏页，清空回生成页', () => {
     window.location.hash = '#/compose';
     render(<App />);

@@ -282,8 +282,15 @@ ok(dupIds === 0, `id 唯一（重复 ${dupIds}）`);
 // 以后扩表／换语料时若引入同名，这里先红，由构建阶段决定保留哪一条出处（其余并入 alternates）。
 const dupNames = cand.length - new Set(cand.map((c) => c.name)).size;
 ok(dupNames === 0, `双名名字唯一（重复 ${dupNames} 条）`);
-const dupWithin = cand.filter((c, i) => cand.findIndex((o) => o.name === c.name && o.id !== c.id) >= 0);
-ok(dupWithin.length === 0, `同一名字不跨典籍重复（涉及 ${dupWithin.length} 条）`, dupWithin.slice(0, 6).map((c) => c.name).join(' '));
+const dupWithin = cand.filter((c) => cand.some((o) => o.name === c.name && o.id !== c.id));
+ok(
+  dupWithin.length === 0,
+  `同一名字不跨典籍重复（涉及 ${dupWithin.length} 条）`,
+  dupWithin
+    .slice(0, 6)
+    .map((c) => c.name)
+    .join(' '),
+);
 const dupSingles = singles.length - new Set(singles.map((s) => s.char)).size;
 ok(dupSingles === 0, `单名用字唯一（重复 ${dupSingles} 条）`);
 const sameShape = cand
@@ -362,6 +369,67 @@ console.log('4c) 编号前缀碰撞：计数键是去声调拼音，同篇同音
       stats.max_group === meta.id_prefix_stats.max_group,
     `前缀 ${stats.groups} 组，其中 ${stats.collisions} 组 2 条以上，最大组 ${stats.max_group} 条（与 meta 一致）：${colliding.map(([b, n]) => `${b}×${n}`).join(' ')}`,
   );
+}
+
+console.log('4d) 成词证据：a / w / spl 由 data/raw 与 jieba 词典独立重算核对（默认只给成词层的名字）');
+{
+  const books = ['shijing', 'chuci', 'lunyu', 'shuimo', 'song300', 'daofa', 'yuefu'];
+  const adj = new Map();
+  for (const b of books) {
+    const raw = JSON.parse(fs.readFileSync(`data/raw/${b}.json`, 'utf8'));
+    for (const unit of raw) {
+      const body = Array.isArray(unit.paragraphs)
+        ? unit.paragraphs
+        : Array.isArray(unit.content)
+          ? unit.content
+          : [typeof unit.content === 'string' ? unit.content : ''];
+      for (const t of body) {
+        if (typeof t !== 'string') continue;
+        for (const seg of t.split(/[^\u4e00-\u9fff]+/)) {
+          for (let i = 0; i + 1 < seg.length; i++) {
+            const k = seg.slice(i, i + 2);
+            adj.set(k, (adj.get(k) ?? 0) + 1);
+          }
+        }
+      }
+    }
+  }
+  const jieba = new Map();
+  for (const line of fs.readFileSync('data/raw/jieba_dict.txt', 'utf8').split('\n')) {
+    const p = line.split(' ');
+    if (p.length >= 3) jieba.set(p[0], Number(p[1]));
+  }
+  const badA = [];
+  const badW = [];
+  const badSpl = [];
+  for (const c of cand) {
+    const a = adj.get(c.name) ?? 0;
+    if ((c.a ?? 0) !== a) badA.push(`${c.name}: 记 ${c.a ?? 0} 实算 ${a}`);
+    const w = jieba.get(c.name) ?? 0;
+    if ((c.w ?? 0) !== w) badW.push(`${c.name}: 记 ${c.w ?? 0} 实算 ${w}`);
+    if (c.gap < 2 && c.spl) badSpl.push(`${c.name}: gap ${c.gap} 却带拆词标记`);
+    if (
+      c.spl &&
+      ![...c.seg]
+        .slice(c.foot, c.foot + 3)
+        .join('')
+        .includes(c.spl)
+    )
+      badSpl.push(`${c.name}: 拆词标记的「${c.spl}」不在取词窗口内`);
+  }
+  ok(badA.length === 0, `成词次数 a 与语料重算一致（不符 ${badA.length} 条）`, badA.slice(0, 4).join(' | '));
+  ok(badW.length === 0, `现代词频 w 与 jieba 词典一致（不符 ${badW.length} 条）`, badW.slice(0, 4).join(' | '));
+  ok(
+    badSpl.length === 0,
+    `拆词标记只落在跨字取词上、写的确实是取词窗口里那一对字（违规 ${badSpl.length} 条）`,
+    badSpl.slice(0, 4).join(' | '),
+  );
+  const word = cand.filter((c) => (c.a ?? 0) >= 2 || (c.w ?? 0) > 0 || c.redup);
+  ok(word.length === meta.pool_word, `成词层 ${word.length} 条与 meta 记的一致`);
+  ok(cand.length - word.length === meta.pool_no_evidence, `无成词依据 ${cand.length - word.length} 条与 meta 一致`);
+  ok(meta.pool_word + meta.pool_no_evidence === meta.pool_B, `成词层 + 无依据 = 全池 ${meta.pool_B}`);
+  ok(cand.filter((c) => c.spl).length === meta.pool_split, `拆词标记 ${meta.pool_split} 条与池内实况一致`);
+  ok(word.length >= 400, `成词层不能小到没得挑（现 ${word.length} / 全池 ${cand.length}）`);
 }
 
 console.log('5) 性别风格：字表未漂移 + 强弱两级 + 真筛选不变量');

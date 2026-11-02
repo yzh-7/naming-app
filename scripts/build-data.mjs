@@ -364,6 +364,52 @@ function makeList(entries, tier) {
 const candidates = makeList(sortPairs(pB), 'B');
 const poolMix = makeList(sortPairs(pMix), 'C');
 
+// 成词证据（0.4.0 新增）：这两个字在七部典籍正文里作为「相邻两字」出现过几次。
+// 口径写死在这里：每篇正文单独取（不跨篇拼接）→ 按句读（句号的标点、逗号、顿号、冒号一类非汉字字符）切成段
+// → 只在段内做长度 2 的滑动窗计数，允许重叠（所以「依依」在「依依依依」里算 3 次）。
+// 切段这一步是有意的：「X，Y」这种跨句读的相邻不算成词，否则逗号两侧的字会被误当成一个词。
+// 算出来的数进候选条目，运行时只读不算。
+// 为什么要它：用户反馈「名字像硬凑」。跨字取词（gap 2/3）本来就是从一句里挑两个字，
+// 如果这两个字在语料里从没挨在一起过，那它就是纯粹拼出来的，而不是典籍里现成的词。
+const adjacent = new Map();
+for (const { key } of BOOKS) {
+  for (const text of rawText(key)) {
+    for (const seg of text.split(/[^\u4e00-\u9fff]+/)) {
+      for (let i = 0; i + 1 < seg.length; i++) {
+        const k = seg.slice(i, i + 2);
+        adjacent.set(k, (adjacent.get(k) ?? 0) + 1);
+      }
+    }
+  }
+}
+// 拆词标记：跨字取词时，被跳过的那个中间字与两端在原句里本来就挨着，而那一处在语料里是成词的——
+// 说明我们把一个现成的词剪开了（清扬婉兮 → 取「清婉」）。存下被拆开的原词，卡片上说得清是哪一处。
+function splitPair(c) {
+  if (c.gap < 2) return null;
+  const s = [...c.seg];
+  for (const [x, y] of [
+    [c.foot, c.foot + 1],
+    [c.foot + 1, c.foot + 2],
+  ]) {
+    const a = s[x];
+    const b = s[y];
+    if (!a || !b) continue;
+    const pair = a + b;
+    if ((adjacent.get(pair) ?? 0) >= 2 || wf.has(pair)) return pair;
+  }
+  return null;
+}
+for (const c of candidates) {
+  const a = adjacent.get(c.name) ?? 0;
+  const w = wf.get(c.name) ?? 0;
+  if (a) c.a = a;
+  if (w) c.w = w;
+  const sp = splitPair(c);
+  if (sp) c.spl = sp;
+}
+// 成词判定：语料里相邻出现过至少两次（不只这一条出处），或现代汉语词表收录，或是典籍里的叠字
+const isWordCand = (c) => (c.a ?? 0) >= 2 || (c.w ?? 0) > 0 || c.redup;
+
 // 单字名：每个 L0 字取一个音步对齐的双字词做出处（分数最高、再按 id 最小），无对齐出处则不收录
 const singles = [];
 for (const ch of [...L0].sort()) {
@@ -598,6 +644,12 @@ const meta = {
   gloss_chars: Object.keys(gloss).length,
   line_gloss: lineGloss.length,
   given_freq_chars: Object.keys(GIVEN_FREQ).length,
+  // 成词层（口径见上面 adjacent 那段）
+  pool_word: candidates.filter(isWordCand).length,
+  pool_attested: candidates.filter((c) => (c.a ?? 0) >= 2).length,
+  pool_modern_word: candidates.filter((c) => (c.w ?? 0) > 0).length,
+  pool_no_evidence: candidates.filter((c) => !isWordCand(c)).length,
+  pool_split: candidates.filter((c) => c.spl).length,
 };
 const write = (name, data) => fs.writeFileSync(path.join(OUT, name), JSON.stringify(data) + '\n');
 write('candidates.json', candidates);

@@ -8,6 +8,7 @@ import { one } from '../testing';
 
 const opts: Opts = {
   gender: 'any',
+  wordOnly: true,
   length: 2,
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
   redupOnly: false,
@@ -246,5 +247,41 @@ describe('NameCard 同音与同篇', () => {
       />,
     );
     expect(screen.queryByRole('button', { name: /^同篇还有/ })).not.toBeInTheDocument();
+  });
+});
+describe('成词依据：卡片直接把「是不是硬凑」的证据写出来', () => {
+  const card = (it: (typeof POOL)[number]) =>
+    render(
+      <NameCard r={scoreItem('苏', it, opts, 0)} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />,
+    );
+
+  it('语料里挨着出现过的，标签写明出现次数', () => {
+    const it = one(
+      POOL.filter((p) => (p.a ?? 0) >= 3),
+      '池内应有语料内多次相邻的名字',
+    );
+    card(it);
+    expect(screen.getByText(`成词 · 语料内相邻 ${it.a ?? 0} 次`)).toBeInTheDocument();
+  });
+  it('没有任何依据的，标签直说「未见成词依据」，不含糊过去', () => {
+    const it = one(
+      POOL.filter((p) => !(p.a ?? 0) && !p.w && !p.redup),
+      '池内应有无成词依据的名字',
+    );
+    card(it);
+    expect(screen.getByText('未见成词依据')).toBeInTheDocument();
+  });
+  it('跨字取词把原句里相邻的词剪开了，提示里写出被剪开的是哪个词', () => {
+    const it = one(
+      POOL.filter((p) => p.spl),
+      '池内应有被剪开原词的条目',
+    );
+    card(it);
+    expect(screen.getByTitle(new RegExp(`拆词：原句里相邻的「${it.spl}」被剪开`))).toBeInTheDocument();
+  });
+  it('单名不提成词这件事（单字谈不上成词）', () => {
+    const single = { ...one(POOL, '主池首条'), name: '东', char: '东' } as unknown as (typeof POOL)[number];
+    card(single);
+    expect(screen.queryByText(/成词/)).not.toBeInTheDocument();
   });
 });

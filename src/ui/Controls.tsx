@@ -193,6 +193,14 @@ export default function Controls({
             ))}
           </div>
         </label>
+        <button
+          onClick={() => patch({ wordOnly: !opts.wordOnly })}
+          aria-pressed={opts.wordOnly}
+          title="成词＝这两个字在七部典籍正文里本来就挨着（相邻出现过两次以上），或现代汉语词表收录这个词，或是典籍里的叠字。关掉它就把手没挨着的拼字也放进来"
+          className={`chip self-start ${opts.wordOnly ? 'chip-ok' : 'text-ink-3'}`}
+        >
+          只看成词的名字
+        </button>
         <button onClick={onBatch} className="btn-primary col-span-full sm:ml-auto">
           换一批{pages > 1 ? ` · ${pageNo + 1}/${pages}` : ''}
         </button>

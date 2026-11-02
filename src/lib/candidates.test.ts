@@ -15,6 +15,7 @@ import { at, one } from '../testing';
 
 const opts: Opts = {
   gender: 'any',
+  wordOnly: true,
   length: 2,
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
   redupOnly: false,
@@ -105,6 +106,19 @@ describe('候选全量导出', () => {
     expect(csv).toContain('"\'=HYPERLINK(""x"")"');
     expect(csv).toContain("'-@危险备注");
   });
+  it('成词依据与拆词两列有值：有依据的写出次数，跨字取词被剪开的写出原词', () => {
+    expect(CSV_HEADER.slice(-2)).toEqual(['成词依据', '拆词']);
+    const rows = candidateRows(plan('袁', { ...opts, count: 0 }, 0).page);
+    const attested = rows.find((x) => x.word.startsWith('语料内相邻'));
+    const modern = rows.find((x) => x.word.startsWith('现代词表收录'));
+    const split = rows.find((x) => x.split);
+    expect(attested, '应有语料内相邻多次的名字').toBeTruthy();
+    expect(modern, '应有现代词表收录的名字').toBeTruthy();
+    expect(split, '应有被剪开原词的名字').toBeTruthy();
+    expect(attested!.word).toMatch(/^语料内相邻 \d+ 次$/);
+    expect(split!.split.length).toBe(2);
+  });
+
   it('字段完整：出处今译与笔画、常见度都在行里', () => {
     const row = one(candidateRows(plan('苏', { ...opts, search: '清馨' }, 0).page), 'candidateRows 导出的行');
     expect(row.name).toBe('清馨');
@@ -118,7 +132,7 @@ describe('候选全量导出', () => {
 
   it('收藏 CSV 在候选列之后加分组、备注、收藏来源、性别档四列，带逗号的备注要加引号', () => {
     const r = one(plan('苏', { ...opts, search: '清馨' }, 0).page, 'plan 搜「清馨」的候选页');
-    const csv = favoritesCsv([{ r, group: '终选', note: '喜欢, 但笔画多', from: 'gen', gender: 'n' }]);
+    const csv = favoritesCsv([{ r, group: '终选', note: '喜欢, 但笔画多', from: 'gen' }]);
     const lines = csv.replace(/\r\n/g, '\n').split('\n');
     expect(lines[0]).toBe('\ufeff' + FAV_CSV_HEADER.join(','));
     expect(FAV_CSV_HEADER.slice(CSV_HEADER.length)).toEqual(['分组', '备注', '收藏来源', '性别档']);
@@ -128,7 +142,7 @@ describe('候选全量导出', () => {
     // 含逗号的字段必须整字段加引号，否则列会错位（这里数一下就看得出多了一列）
     expect(dataLine).toContain('"喜欢, 但笔画多"');
     // 尾部两列是收藏时按下的入口与当时所属的性别档
-    expect(dataLine.endsWith('"喜欢, 但笔画多",生成页,中性')).toBe(true);
+    expect(dataLine.endsWith(`"喜欢, 但笔画多",生成页,${FAV_GENDER_LABEL[r.gender.side]}`)).toBe(true);
     expect(cells[0]).toBe(r.full);
     expect(cells[CSV_HEADER.length]).toBe('终选');
     // 没有分组与备注、也没存过来源的老记录：四列都在，来源写「未记录」，性别档按当前条目算

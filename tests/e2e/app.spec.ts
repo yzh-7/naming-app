@@ -175,6 +175,23 @@ test('页脚给出应用版本与语料指纹，版本号与页面 meta 同源',
   expect(meta, 'index.html 的 meta 应当被构建注入真实版本，不能留占位符').toMatch(/^\d+\.\d+\.\d+$/);
 });
 
+test('成词门槛：默认只给「典籍里本来就挨着」的名字；拼出来的「清婉」要关掉门槛才出现', async ({ page }) => {
+  await page.goto('/?s=袁&q=清婉');
+  const chip = page.getByRole('button', { name: '只看成词的名字' });
+  await expect(chip).toHaveAttribute('aria-pressed', 'true');
+  // 清婉 取自《野有蔓草》「有美一人，清扬婉兮」：清与婉之间隔着「扬」，语料里这两个字从没挨着过
+  await expect(page.locator('article.card')).toHaveCount(0);
+  await chip.click();
+  await expect(chip).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('article.card')).toHaveCount(1);
+  const card = page.locator('article.card').first();
+  await expect(card).toContainText('清婉');
+  await expect(card.locator('.chip', { hasText: '未见成词依据' })).toHaveCount(1);
+  await expect(card.getByTitle(/拆词：原句里相邻的「清扬」被剪开/)).toHaveCount(1);
+  // 分数明细里这条扣分也在：用户能顺着分数追到「为什么它排得靠后」
+  await expect(card.getByText(/未见成词依据 · 这两个字在语料正文里从未相邻出现/)).toHaveCount(1);
+});
+
 test('性别三档互斥：选「中性」只见中性名，选「偏男」不见中性与偏女名；老链接里的 gw 被忽略', async ({ page }) => {
   await page.goto('/?s=袁&g=n');
   await expect(page.getByRole('button', { name: '中性' })).toHaveAttribute('aria-pressed', 'true');

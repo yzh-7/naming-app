@@ -7,9 +7,9 @@ const SORTS: SortKey[] = ['score', 'strokes', 'popular', 'book'];
 export type FavSource = 'gen' | 'compose';
 export type FavRecord = {
   id: string;
-  // 收藏是从哪儿按的：生成页还是自选页。0.4.0 之前存的老记录没有这两个字段，界面标「未记录」
+  // 只记「从哪儿按的」这一件不可推导的事。性别档不存：它只由用字与性别字表决定，
+  // 存下来反而会在字表换版时和界面算出来的档不一致（界面上算就好）
   from?: FavSource;
-  gender?: 'f' | 'm' | 'n';
   note?: string;
   group?: string;
   ts: number;
@@ -113,7 +113,6 @@ export function sanitizeFav(raw: unknown, index: number): FavRecord | null {
   const group = str(r.group, 24);
   if (group) rec.group = group;
   if (r.from === 'gen' || r.from === 'compose') rec.from = r.from;
-  if (r.gender === 'f' || r.gender === 'm' || r.gender === 'n') rec.gender = r.gender;
   const name = str(r.name, SNAP.name);
   if (name) rec.name = name;
   const title = str(r.title, SNAP.title);
@@ -222,6 +221,7 @@ const POP_VALUES = POP_FLOORS.map((p) => p.v);
 
 const DEFAULT: Opts = {
   gender: 'any',
+  wordOnly: true,
   length: 2,
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
   redupOnly: false,
@@ -261,6 +261,8 @@ export function sanitizeOpts(raw: unknown): Opts {
   return {
     ...DEFAULT,
     gender: pickOne<Gender>(o.gender, GENDERS) ?? DEFAULT.gender,
+    // 0.3.1 及更早的存储里没有这一项：默认「只看成词」是新开的门槛，缺字段就按新的默认走
+    wordOnly: o.wordOnly !== false,
 
     length,
     redupOnly: length === 2 && !!o.redupOnly,
@@ -293,6 +295,7 @@ export const saveOpts = (o: Opts) =>
     K.opts,
     JSON.stringify({
       gender: o.gender,
+      wordOnly: o.wordOnly,
       length: o.length,
       redupOnly: o.redupOnly,
       books: o.books,

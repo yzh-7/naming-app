@@ -279,7 +279,12 @@ export function scoreItem(
       ? [{ rule: `与现代词同形：${itemRisk.word}（freq ${itemRisk.freq}）`, delta: -12 }]
       : [];
   if (itemRisk && itemRisk.freq < 5000) ph.flags.push(`同形：${itemRisk.word}`);
-  const deltas = [...st, ...ph.deltas, ...genderDelta, ...riskDelta];
+  const ev = wordEvidence(it as unknown as WordFacts);
+  const wordDelta: Delta[] = [];
+  const wordScore = wordBonus(ev);
+  if (wordScore) wordDelta.push({ rule: `${wordScore > 0 ? '成词' : '未见成词依据'} · ${ev.why}`, delta: wordScore });
+  if (ev.spl) wordDelta.push({ rule: `拆词 · 原句里相邻的「${ev.spl}」被剪开，只取了它两边的字`, delta: -10 });
+  const deltas = [...st, ...ph.deltas, ...genderDelta, ...wordDelta, ...riskDelta];
   return {
     ...it,
     full: surname + it.name,
@@ -446,11 +451,51 @@ export function avoidPass(name: string, opts: Opts): boolean {
   return true;
 }
 
+// 成词层（0.4.0）：用户反馈「名字像硬凑」，所以把「这两个字在典籍里本来就挨着吗」做成可核对的门槛。
+// 数字是构建期从已登记语料算好写进条目的（a＝相邻出现次数，w＝现代汉语词表词频，spl＝被剪开的原词），运行时只读不算。
+// 默认只看成词层（meta.pool_word 条）；关掉这个开关就是全池。
+export type WordTier = 'attested' | 'modern' | 'redup' | 'single' | 'none';
+type WordFacts = { char?: string; a?: number; w?: number; redup?: boolean; spl?: string };
+export type WordEvidence = { tier: WordTier; a: number; w: number; spl: string; why: string };
+
+export function wordEvidence(it: WordFacts): WordEvidence {
+  const a = it.a ?? 0;
+  const w = it.w ?? 0;
+  const spl = it.spl ?? '';
+  if (it.char !== undefined) return { tier: 'single', a, w, spl, why: '单字名：成词与否不适用，只看这个字的出处' };
+  if (a >= 2) return { tier: 'attested', a, w, spl, why: `这两个字在七部典籍正文里相邻出现 ${a} 次` };
+  if (w > 0) return { tier: 'modern', a, w, spl, why: `现代汉语词表收录这个词（词频 ${w}）` };
+  if (it.redup) return { tier: 'redup', a, w, spl, why: '典籍里的叠字（重字成词）' };
+  return {
+    tier: 'none',
+    a,
+    w,
+    spl,
+    why:
+      a === 1
+        ? '这两个字只在所出原句里挨着过，语料里没有第二处'
+        : '这两个字在语料正文里从未相邻出现：是从句子里各取一字拼的',
+  };
+}
+
+export const wordPass = (it: WordFacts, opts: Opts) => !opts.wordOnly || wordEvidence(it).tier !== 'none';
+
+// 成词证据的加分按语料内复现次数分三档：语料里反复挨在一起的是真词，浮到第一页去；
+// 只出现两次的（多半就是它自己那条出处附近）只给基础分。语料只有十万字，
+// 单靠「出现两次」不足以说明它常用，所以分档而不是二值。
+export function wordBonus(ev: WordEvidence): number {
+  if (ev.tier === 'attested') return ev.a >= 30 ? 12 : ev.a >= 10 ? 9 : 6;
+  if (ev.tier === 'modern') return 2;
+  if (ev.tier === 'none') return -6;
+  return 0;
+}
+
 function universe(opts: Opts): (Named & { famous?: boolean; tier?: string })[] {
   const q = (opts.search ?? '').trim().toLowerCase();
   const t = (opts.title ?? '').trim();
   return bookUniverse(opts)
     .filter((it) => genderPass(it.name, opts))
+    .filter((it) => wordPass(it, opts))
     .filter((it) => passesShape(it.name, opts))
     .filter((it) => mustPass(it.name, opts))
     .filter((it) => avoidPass(it.name, opts))

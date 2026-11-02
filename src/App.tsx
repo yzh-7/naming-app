@@ -38,7 +38,6 @@ const favSnap = (r: Result, from: 'gen' | 'compose') => ({
   title: r.title,
   line: r.line,
   from,
-  gender: r.gender.side,
 });
 const FAV_SOURCE_LABEL: Record<FavFilterSource, string> = {
   '': '全部',
@@ -194,7 +193,7 @@ export default function App() {
     if (favGroup) list = list.filter((p) => p.rec.group === favGroup);
     if (favFrom) list = list.filter((p) => (p.rec.from ?? 'none') === favFrom);
     // 老记录没存性别档时按当前条目重算：性别档只由用字决定，与筛选无关，重算不会变来变去
-    if (favGender) list = list.filter((p) => (p.rec.gender ?? p.r.gender.side) === favGender);
+    if (favGender) list = list.filter((p) => p.r.gender.side === favGender);
     if (q)
       list = list.filter(({ rec, r }) =>
         `${r.full} ${namePinyin(r.name)} ${r.title} ${rec.note ?? ''} ${rec.group ?? ''}`.toLowerCase().includes(q),
@@ -246,7 +245,6 @@ export default function App() {
       group: p.rec.group,
       note: p.rec.note,
       from: p.rec.from,
-      gender: p.rec.gender ?? p.r.gender.side,
     }));
     if (!rows.length) {
       setNotice('当前视图里没有条目可导出');
@@ -735,7 +733,7 @@ export default function App() {
                     </p>
                   )}
                   <p className="text-meta text-ink-3 no-print">
-                    来自{FAV_SOURCE_LABEL[rec.from ?? 'none']} · {FAV_GENDER_LABEL[rec.gender ?? r.gender.side]}档
+                    来自{FAV_SOURCE_LABEL[rec.from ?? 'none']} · {FAV_GENDER_LABEL[r.gender.side]}档
                   </p>
                   <NameCard
                     r={r}

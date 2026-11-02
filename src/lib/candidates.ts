@@ -1,6 +1,6 @@
 // 候选全量导出：纯函数，把当前筛选命中的全部候选（不只是当前一页）转成 JSON / CSV 文本，下载由调用方做。
 import { BOOK_LABEL, type Result } from '../engine/types';
-import { lineGlossOf, popularity, shapeTags } from '../engine/name';
+import { lineGlossOf, popularity, shapeTags, wordEvidence } from '../engine/name';
 
 export type CandidateRow = {
   full: string;
@@ -15,6 +15,8 @@ export type CandidateRow = {
   strokes: number;
   popularity: string;
   gender: string;
+  word: string; // 成词依据（语料内相邻次数 / 现代词表收录 / 典籍叠字 / 未见依据）
+  split: string; // 跨字取词时被剪开的原词，没有就留空
 };
 
 export function candidateRow(r: Result): CandidateRow {
@@ -32,7 +34,24 @@ export function candidateRow(r: Result): CandidateRow {
     popularity: popularity(r.name).band,
     gender:
       r.gender.side === 'n' ? '中性' : `${r.gender.strong ? '' : '疑似'}${r.gender.side === 'f' ? '偏女' : '偏男'}`,
+    ...candidateQuality(r),
   };
+}
+
+// 成词依据与拆词：卡片上那两个标签的同一套口径写进导出，用户在表格里也能只留「有依据的」那一档
+export function candidateQuality(r: Result): { word: string; split: string } {
+  const ev = wordEvidence(r as unknown as { a?: number; w?: number; redup?: boolean; spl?: string; char?: string });
+  const word =
+    ev.tier === 'attested'
+      ? `语料内相邻 ${ev.a} 次`
+      : ev.tier === 'modern'
+        ? `现代词表收录（词频 ${ev.w}）`
+        : ev.tier === 'redup'
+          ? '典籍叠字'
+          : ev.tier === 'single'
+            ? '单字名不适用'
+            : '未见依据';
+  return { word, split: ev.spl };
 }
 
 export const candidateRows = (results: Result[]): CandidateRow[] => results.map((r) => candidateRow(r));
@@ -65,6 +84,8 @@ export const CSV_HEADER = [
   '总笔画',
   '用字常见度',
   '性别风格',
+  '成词依据',
+  '拆词',
 ];
 
 // 单元格转义。除了 CSV 本身的引号/逗号规则，还要防 Excel/WPS 的公式执行：
@@ -79,7 +100,22 @@ const esc = (v: string | number) => {
 // BOM + CRLF：中文在 Excel/WPS 里不乱码的最小代价
 export function candidatesCsv(results: Result[]): string {
   const rows = candidateRows(results).map((x) =>
-    [x.full, x.name, x.readings, x.score, x.book, x.title, x.author, x.line, x.gloss, x.strokes, x.popularity, x.gender]
+    [
+      x.full,
+      x.name,
+      x.readings,
+      x.score,
+      x.book,
+      x.title,
+      x.author,
+      x.line,
+      x.gloss,
+      x.strokes,
+      x.popularity,
+      x.gender,
+      x.word,
+      x.split,
+    ]
       .map(esc)
       .join(','),
   );
@@ -91,7 +127,7 @@ export function candidatesCsv(results: Result[]): string {
 export const FAV_CSV_HEADER = [...CSV_HEADER, '分组', '备注', '收藏来源', '性别档'];
 
 export function favoritesCsv(
-  entries: { r: Result; note?: string; group?: string; from?: 'gen' | 'compose'; gender?: 'f' | 'm' | 'n' }[],
+  entries: { r: Result; note?: string; group?: string; from?: 'gen' | 'compose' }[],
 ): string {
   const rows = entries.map((e) => {
     const x = candidateRow(e.r);
@@ -108,10 +144,12 @@ export function favoritesCsv(
       x.strokes,
       x.popularity,
       x.gender,
+      x.word,
+      x.split,
       e.group ?? '',
       e.note ?? '',
       e.from === 'gen' ? '生成页' : e.from === 'compose' ? '自选页' : '未记录',
-      FAV_GENDER_LABEL[e.gender ?? e.r.gender.side],
+      FAV_GENDER_LABEL[e.r.gender.side],
     ]
       .map(esc)
       .join(',');

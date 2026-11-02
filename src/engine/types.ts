@@ -30,6 +30,9 @@ export type PoolItem = {
   risk: { word: string; freq: number } | null;
   score: number;
   lg: number; // 出处今译在 LINE_GLOSS 里的下标
+  a?: number; // 成词证据：这两个字在七部典籍正文里作为相邻两字出现的次数（构建期算好，缺＝0）
+  w?: number; // 成词证据：jieba 现代汉语词表里该双字的词频（缺＝未收录）
+  spl?: string; // 跨字取词时被剪开的那个原词（只在 gap≥2 且那一处本来成词时才有）
 };
 
 export type SingleItem = Omit<PoolItem, 'name' | 'chars' | 'tier' | 'redup' | 'risk'> & {
@@ -69,6 +72,8 @@ export const cleanAvoid = (s: string) => {
 
 export type Opts = {
   gender: Gender;
+  // 只看成词：默认开。成词＝这两个字在语料里相邻出现过至少两次，或现代汉语词表收录，或是典籍叠字
+  wordOnly: boolean;
   length: 1 | 2;
   books: Record<Book, boolean>;
   redupOnly: boolean;
@@ -123,6 +128,9 @@ export type Named = {
   strict: boolean;
   redup: boolean;
   lg: number; // 出处今译在 LINE_GLOSS 里的下标
+  a?: number; // 成词证据，见 PoolItem
+  w?: number;
+  spl?: string;
 };
 
 export type Result = Named & {

@@ -202,6 +202,18 @@ describe('可分享链接', () => {
     expect(old.opts.gender).toBe('n');
     expect('genderWeak' in old.opts).toBe(false);
   });
+  it('成词门槛只在关掉时进链接（wd=0）；老链接没有这一项就走新的默认（开着）', () => {
+    expect(toQuery({ surname: '苏', reading: 0, opts: baseOpts() })).not.toContain('wd=');
+    // 链接里没写这一项：沿用本机默认（0.4.0 起默认开着），0.3.1 的老链接不带 wd 也不会变成「全池」
+    expect(fromQuery('s=苏')!.opts.wordOnly).toBeUndefined();
+    expect(sanitizeOpts(fromQuery('s=苏')!.opts).wordOnly).toBe(true);
+    expect(sanitizeOpts({}).wordOnly).toBe(true);
+    const q = toQuery({ surname: '苏', reading: 0, opts: { ...baseOpts(), wordOnly: false } });
+    expect(q).toContain('wd=0');
+    expect(fromQuery(q)!.opts.wordOnly).toBe(false);
+    expect(fromQuery('wd=1')!.opts.wordOnly).toBe(true);
+  });
+
   it('三条输入路径口径一致：同一份脏取值，本机存储 / 导入文件 / 链接给出同一个结果', () => {
     const dirty = {
       gender: 'other',

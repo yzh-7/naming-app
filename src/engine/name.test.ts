@@ -28,6 +28,9 @@ import {
   searchText,
   shapeTags,
   surnameReads,
+  wordBonus,
+  wordEvidence,
+  wordPass,
 } from './name';
 import { CHARS, META, POOL, SINGLES } from './data';
 import { BOOK_ORDER, type Book, type Opts } from './types';
@@ -38,6 +41,9 @@ const gen = (sur: string, o: Opts, b: number) => plan(sur, o, b).page;
 const ALL_BOOKS = Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Record<Book, boolean>;
 const opts = (p: Partial<Opts> = {}): Opts => ({
   gender: 'any',
+  // 这一份是全池口径的公共夹具：成词门槛关掉，池子才是完整的 1,525 条。
+  // 门槛本身另有专门用例（下面的「成词门槛」describe），别在这里顺带测。
+  wordOnly: false,
   length: 2,
   books: { ...ALL_BOOKS },
   redupOnly: false,
@@ -202,9 +208,16 @@ describe('性别判定：三档互斥（偏男／中性／偏女）', () => {
     expect(genderPass(weakFem.name, opts({ gender: 'm' }))).toBe(false);
     expect(genderPass(weakFem.name, opts({ gender: 'n' }))).toBe(false);
   });
-  it('三档条数之和＝候选池总数，一档不多一条不少', () => {
-    const each = (['m', 'n', 'f'] as const).map((g) => poolSize(opts({ gender: g })));
-    expect(each.reduce((a, b) => a + b, 0)).toBe(META.pool_B);
+  it('三档条数之和＝候选池总数，一档不多一条不少（开着成词门槛也成立）', () => {
+    for (const wordOnly of [false, true]) {
+      const each = (['m', 'n', 'f'] as const).map((g) => poolSize(opts({ gender: g, wordOnly })));
+      const total = poolSize(opts({ wordOnly }));
+      expect(
+        each.reduce((a, b) => a + b, 0),
+        `wordOnly=${wordOnly}`,
+      ).toBe(total);
+    }
+    expect(poolSize(opts({ wordOnly: false }))).toBe(META.pool_B);
     // 同一批名字不会同时出现在两档里：任取一条名字，它只落在其中一档
     const sample = POOL.filter((_, i) => i % 37 === 0).map((p) => p.name);
     expect(sample.length).toBeGreaterThan(30);
@@ -670,5 +683,68 @@ describe('禁用字（避讳字）', () => {
     expect(both).toBeLessThanOrEqual(base);
     expect(both).toBeGreaterThan(0);
     expect(poolSize(opts({ strokeMax: 40, avoidChars: av }))).toBeLessThanOrEqual(poolSize(opts({ strokeMax: 40 })));
+  });
+});
+
+describe('成词门槛：默认只给「典籍里本来就挨着的」名字（用户反馈：名字像硬凑）', () => {
+  const noEvidence = (it: (typeof POOL)[number]) => (it.a ?? 0) < 2 && (it.w ?? 0) === 0 && !it.redup;
+  it('门槛开着＝池子只剩成词层，条数与 meta 记的数一致；门槛关着＝全池', () => {
+    expect(poolSize(opts({ wordOnly: true }))).toBe(META.pool_word);
+    expect(poolSize(opts({ wordOnly: false }))).toBe(META.pool_B);
+    expect(META.pool_word + META.pool_no_evidence).toBe(META.pool_B);
+    expect(META.pool_word).toBeGreaterThan(400); // 门槛不能把池子砍到没得挑
+  });
+  it('留下的每条都真有证据，挡掉的每条都真没证据', () => {
+    const sample = POOL.filter((_, i) => i % 19 === 0);
+    expect(sample.length).toBeGreaterThan(50);
+    for (const it of sample) {
+      const ev = wordEvidence(it);
+      expect(wordPass(it, opts({ wordOnly: true })), `${it.name} ${ev.tier}`).toBe(ev.tier !== 'none');
+      if (ev.tier === 'attested') expect(it.a ?? 0).toBeGreaterThanOrEqual(2);
+      if (ev.tier === 'modern') expect(it.w ?? 0).toBeGreaterThan(0);
+      if (ev.tier === 'none') expect(noEvidence(it)).toBe(true);
+    }
+    expect(sample.filter((it) => wordEvidence(it).tier === 'none').length).toBeGreaterThan(10);
+  });
+  it('拆词标记只发生在跨字取词上，并在分数明细里单独扣 10 分、写清被剪开的是哪个词', () => {
+    const split = POOL.filter((it) => it.spl);
+    expect(split.length).toBe(META.pool_split);
+    expect(split.every((it) => it.gap >= 2)).toBe(true);
+    const it = one(split, '池内应有被剪开原词的条目');
+    const r = scoreItem('袁', it, opts({ wordOnly: false }), 0);
+    const d = r.deltas.find((x) => x.rule.startsWith('拆词'));
+    expect(d, `拆词扣分应在明细里（${r.deltas.map((x) => x.rule).join(' | ')}）`).toBeTruthy();
+    expect(d?.delta).toBe(-10);
+    expect(d?.rule).toContain(it.spl as string);
+  });
+  it('成词加分按语料内复现次数分三档，无依据扣分', () => {
+    expect(wordBonus({ tier: 'attested', a: 2, w: 0, spl: '', why: '' })).toBe(6);
+    expect(wordBonus({ tier: 'attested', a: 10, w: 0, spl: '', why: '' })).toBe(9);
+    expect(wordBonus({ tier: 'attested', a: 30, w: 0, spl: '', why: '' })).toBe(12);
+    expect(wordBonus({ tier: 'modern', a: 0, w: 7, spl: '', why: '' })).toBe(2);
+    expect(wordBonus({ tier: 'redup', a: 0, w: 0, spl: '', why: '' })).toBe(0);
+    expect(wordBonus({ tier: 'none', a: 0, w: 0, spl: '', why: '' })).toBe(-6);
+    const rare = POOL.find((it) => (it.a ?? 0) === 2 && !it.spl);
+    const common = POOL.find((it) => (it.a ?? 0) >= 30 && !it.spl);
+    expect(rare, '池内应有只出现两次的成词名').toBeTruthy();
+    expect(common, '池内应有语料里反复出现的成词名').toBeTruthy();
+    const dr = scoreItem('袁', rare!, opts({ wordOnly: false }), 0).deltas.find((d) => d.rule.startsWith('成词'));
+    const dc = scoreItem('袁', common!, opts({ wordOnly: false }), 0).deltas.find((d) => d.rule.startsWith('成词'));
+    expect(dc!.delta).toBeGreaterThan(dr!.delta);
+    const bad = POOL.find((it) => noEvidence(it) && !it.spl);
+    const b = scoreItem('袁', bad!, opts({ wordOnly: false }), 0).deltas.find((d) => d.rule.startsWith('未见成词依据'));
+    expect(b?.delta).toBe(-6);
+  });
+  it('成词多的名字在默认结果里排在前面（第一页要放有依据的名字）', () => {
+    const all = plan('袁', opts({ wordOnly: true, count: 0 }), 0, 0).page;
+    const top = [...all].sort((x, y) => y.total - x.total).slice(0, 12);
+    expect(top.every((r) => wordEvidence(r as never).tier === 'attested')).toBe(true);
+    const as = top.map((r) => (r as unknown as { a?: number }).a ?? 0);
+    expect(as.filter((a) => a >= 10).length, `前 12 条里的语料复现次数：${as.join(',')}`).toBeGreaterThanOrEqual(3);
+  });
+  it('单名层不受成词门槛影响（单字谈不上成词）', () => {
+    const o = opts({ length: 1, wordOnly: true });
+    expect(poolSize(o)).toBe(poolSize(opts({ length: 1, wordOnly: false })));
+    expect(wordEvidence({ char: '东' }).tier).toBe('single');
   });
 });

@@ -6,6 +6,7 @@ import { BOOK_ORDER, type Opts } from '../engine/types';
 
 const base: Opts = {
   gender: 'any',
+  wordOnly: true,
   length: 2,
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
   redupOnly: false,
@@ -99,6 +100,16 @@ describe('Controls：输入与条件渲染', () => {
       const pressed = seg.filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent);
       expect(pressed).toEqual([btn.textContent]);
     }
+  });
+
+  it('「只看成词的名字」默认按下：默认只给典籍里本来就挨着的名字，点一下才放开', () => {
+    render(<Harness />);
+    const chip = screen.getByRole('button', { name: '只看成词的名字' });
+    expect(chip).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(chip);
+    expect(chip).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(chip);
+    expect(chip).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('典籍标签点击即切换选中态', () => {

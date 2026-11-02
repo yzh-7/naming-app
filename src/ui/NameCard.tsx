@@ -8,6 +8,7 @@ import {
   radicalTags,
   sameSoundPeers,
   shapeTags,
+  wordEvidence,
 } from '../engine/name';
 import { BOOK_LABEL, type Book, type Result } from '../engine/types';
 
@@ -168,6 +169,22 @@ export default function NameCard({
     return { text: `${weak}${side}`, cls: g.side === 'f' ? 'chip-warm' : 'chip-cool' };
   }, [g]);
 
+  // 成词证据也常驻卡片：用户问「这名字是不是硬凑的」，答案就这两个字在语料里挨没挨着
+  const evChip = useMemo(() => {
+    const ev = wordEvidence(r as unknown as { a?: number; w?: number; redup?: boolean; spl?: string; char?: string });
+    if (ev.tier === 'single') return null;
+    const text =
+      ev.tier === 'attested'
+        ? `成词 · 语料内相邻 ${ev.a} 次`
+        : ev.tier === 'modern'
+          ? '成词 · 现代词表收录'
+          : ev.tier === 'redup'
+            ? '成词 · 典籍叠字'
+            : '未见成词依据';
+    const title = `${ev.why}${ev.spl ? `；拆词：原句里相邻的「${ev.spl}」被剪开，只取了它两边的字` : ''}`;
+    return { text, title, cls: ev.tier === 'none' ? 'text-ink-3' : 'chip-ok' };
+  }, [r]);
+
   const shapeShown = shape.chars.length > 0 || !!shape.note;
 
   return (
@@ -175,11 +192,18 @@ export default function NameCard({
       {/* 第一层：名字本体（衬线放大）+ 读音 + 性别倾向 */}
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h3 className="font-serif text-name text-ink sm:text-name-lg">{r.full}</h3>
-        {gBadge && (
-          <span className={`chip ${gBadge.cls}`} title={g.why}>
-            {gBadge.text}
-          </span>
-        )}
+        <span className="flex flex-wrap items-center gap-1.5">
+          {gBadge && (
+            <span className={`chip ${gBadge.cls}`} title={g.why}>
+              {gBadge.text}
+            </span>
+          )}
+          {evChip && (
+            <span className={`chip ${evChip.cls}`} title={evChip.title}>
+              {evChip.text}
+            </span>
+          )}
+        </span>
       </div>
       <p className="mt-0.5 text-meta tabular-nums text-ink-3">{r.readings.join(' ') || '读音留白'}</p>
 

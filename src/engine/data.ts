@@ -124,6 +124,9 @@ const META_KEYS = [
   'radical_named',
   'gloss_chars',
   'line_gloss',
+  'pool_word',
+  'pool_no_evidence',
+  'pool_split',
 ] as const;
 type Meta = {
   pool_B: number;
@@ -142,6 +145,12 @@ type Meta = {
   gloss_chars: number;
   line_gloss: number;
   given_freq_chars: number;
+  // 成词层：默认只给「这两个字在典籍里本来就挨着」的名字，三个计数在构建期算好（口径见 build-data）
+  pool_word: number;
+  pool_attested: number;
+  pool_modern_word: number;
+  pool_no_evidence: number;
+  pool_split: number;
   corpus_sha: string;
   id_prefix_stats: { groups: number; collisions: number; max_group: number };
 };
