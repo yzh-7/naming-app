@@ -515,13 +515,13 @@ if (unusedGloss.length)
 const chars = {};
 for (const ch of [...WH123].sort()) {
   const rs = readingsOf(ch);
+  // 带调拼音与「是否在白名单里」都不再存：前者由 src/engine/tone.ts 推导（下面逐条核对上游写法），
+  // 后者由 whitelist-L0.json 那一份名单推导。8,105 个字省下来实测 26,146 B gzip。
   const rec = {
     py: rs.map((r) => r.syl),
-    pm: rs.map((r) => r.mark),
     t: rs.map((r) => r.tone),
     lvl: WH1.has(ch) ? 1 : WH2.has(ch) ? 2 : 3,
     cf: cf.get(ch) ?? 0,
-    l0: L0.has(ch),
   };
   // 有才带字段，缺则省略：让「查不到」和「值为 0」在数据里可区分
   const sh = SHAPE[ch];

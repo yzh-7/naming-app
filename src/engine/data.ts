@@ -2,6 +2,7 @@ import candidatesJson from '../data/candidates.json';
 import singlesJson from '../data/singles.json';
 import realNamesJson from '../data/realnames.json';
 import charsJson from '../data/chars.json';
+import whitelistJson from '../data/whitelist-L0.json';
 import homophoneJson from '../data/homophone.json';
 import riskJson from '../data/risk.json';
 import genderJson from '../data/gender.json';
@@ -10,6 +11,7 @@ import glossJson from '../data/gloss.json';
 import lineGlossJson from '../data/line_gloss.json';
 import metaJson from '../data/meta.json';
 import { BOOK_ORDER, type CharInfo, type Homophone, type PoolItem, type RealItem, type SingleItem } from './types';
+import { markSyllable } from './tone';
 
 // 构建产物是 JSON，TypeScript 只能 `as` 断言；这里在加载时做一遍结构自检，
 // 让数据出错时在启动阶段大声失败（而不是在使用时变成 undefined 的静默 bug）。
@@ -72,23 +74,41 @@ function asSingles(v: unknown): SingleItem[] {
   return v as SingleItem[];
 }
 
+// 白名单与带调写法都不进 chars.json：前者是 whitelist-L0.json 那一份名单，后者是 py + t 的纯函数
+// （见 src/engine/tone.ts）。两处都由这里合成，界面上拿到的形状和以前一样。
+const L0_CHARS = new Set(
+  Array.isArray(whitelistJson) && whitelistJson.every(isStr) ? whitelistJson : fail('whitelist-L0 不是字符串数组'),
+);
+
 function asChars(v: unknown): Record<string, CharInfo> {
   if (!isObj(v)) fail('chars 不是对象');
+  const out: Record<string, CharInfo> = {};
   for (const [k, c] of Object.entries(v)) {
     if (
       !isObj(c) ||
       !Array.isArray(c.py) ||
       !c.py.every(isStr) ||
-      !Array.isArray(c.pm) ||
       !Array.isArray(c.t) ||
+      !c.t.every(isNum) ||
+      c.py.length !== c.t.length ||
       !isNum(c.lvl) ||
-      !isNum(c.cf) ||
-      typeof c.l0 !== 'boolean'
+      !isNum(c.cf)
     ) {
       fail(`chars["${k}"] 结构不符`);
     }
+    if ('pm' in c || 'l0' in c)
+      fail(
+        `chars["${k}"] 里又存了可以推导的字段：pm 由 py 加声调推导、l0 由 whitelist-L0 推导，存下来就是 8,105 份重复`,
+      );
+    const py = c.py as string[];
+    const tones = c.t as number[];
+    out[k] = {
+      ...(c as unknown as Omit<CharInfo, 'pm' | 'l0'>),
+      pm: py.map((syl, i) => markSyllable(syl, tones[i] ?? 0)),
+      l0: L0_CHARS.has(k),
+    };
   }
-  return v as unknown as Record<string, CharInfo>;
+  return out;
 }
 
 function asHomo(v: unknown, what: string): Homophone {

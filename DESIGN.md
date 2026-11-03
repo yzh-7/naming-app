@@ -40,6 +40,8 @@
 | `candidates.json` 不存 `chars` | 双名条目的 `chars` 恒等于 `name` 拆字。1,525 条存下来实测多花 7,951 B gzip（91,428 → 83,478 B）。写产物时把该键置成 `undefined`（`JSON.stringify` 会丢掉它），加载时 `src/engine/data.ts` 从 `name` 展开成 `PoolItem.chars`，取词、打分、界面的形状不变。自检因此改成"校验 `name` 必须是两个字，且产物里不许再出现 `chars`" |
 | 可选字段有才带 | `a`／`w`／`spl`／`risk`／`redup`／`famous` 缺字段＝无，不写 `null` 也不写 0 |
 | 今译只存下标 | 每条一个 `lg` 整数，原句今译集中在 `line_gloss.json`（实测把原句本身去重成共享表反而更大：gzip 已经吃掉了重复句） |
+| 带调拼音不存，由引擎推导 | 产物只发 `py`（不带调音节）＋ `t`（声调号），`pm` 由 `src/engine/tone.ts` 按标调规则推导：有 a 标 a、有 o 标 o、有 e 标 e，`ou` 标 o、`iu` 标 u、`ui` 标 i，否则标第一个元音；自成音节（m n ng ê）没有元音可标，按上游写法逐条列出。8,105 字 9,629 条读音的 `pm` 单独占 22,604 B gzip，是整个产物里第二贵的一块（`chars.json` 115,612 → 90,620 B gzip）。这条推导不许"看起来对"：`src/engine/tone.test.ts` 逐条比对上游带调写法，加载时 `asChars` 还判「产物里又出现 `pm` 或 `l0` 就启动失败」 |
+| 白名单成员不存，由名单推导 | `l0` 字段是 `whitelist-L0.json` 那份名单的重复投影（8,105 份），加载时推导 |
 
 ### 1.4 候选池口径（Pool-B）
 
@@ -47,11 +49,11 @@
 2. 取字对：第一字落在音步起点（起点偏移依诗体确定），第二字在同一句读内、与首字间隔不超过 3 字。相邻重复字（叠字装置）与假叠字剔除。
 3. 两道减法：两字都须在 L0 名用字白名单内；排除虚词、忌讳字、现代高频成词（jieba 词频 ≥ 5000）与噪声词。
 
-结果：`pool_B = 1,525` 条双名（`by_gap` 727 / 474 / 324），单字名 217 个，其中 76 个无典籍出处。
+结果：`pool_B = 1,660` 条双名（`by_gap` 803 / 506 / 351），单字名 234 个，其中 76 个无典籍出处。
 
 ### 1.5 L0 白名单
 
-种子为 `cnname_attributes.json` 全部用字与通用规范汉字表（一二三级，8,105 字）的交集，共 268 字；再并入 `data/raw/l0-verdicts.txt` 中人工判定为「保留」的 25 字，共 293 字。`scripts/verify.mjs` 校验账目（`L0_size = L0_seed + L0_added`）与判定文本指纹。
+种子为 `cnname_attributes.json` 全部用字与通用规范汉字表（一二三级，8,105 字）的交集，共 268 字；再并入 `data/raw/l0-verdicts.txt` 中人工判定为「保留」的 42 字，共 310 字（准入规则本身见 1.8）。`scripts/verify.mjs` 校验账目（`L0_size = L0_seed + L0_added`）与判定文本指纹。
 
 扩充流程：执行 `node scripts/l0-unlock.mjs` 生成边际增量待审表，人工判定后写回 `l0-verdicts.txt`，再执行 `npm run build`。扩表后门禁切换到下界断言模式，既有候选不允许消失。
 
