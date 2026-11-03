@@ -250,19 +250,19 @@ describe('导出的 localStorage key 常量与实际键一致', () => {
 
 describe('自选页草稿持久化', () => {
   const ck = 'naming.compose.v1';
-  it('默认值：空存储给双名/空字/非自由', () => {
-    expect(loadCompose()).toEqual({ length: 2, chars: [], free: false });
+  it('默认值：空存储给双名与空字位', () => {
+    expect(loadCompose()).toEqual({ length: 2, chars: [] });
   });
   it('往返一致', () => {
-    saveCompose({ length: 1, chars: ['子'], free: true });
-    expect(loadCompose()).toEqual({ length: 1, chars: ['子'], free: true });
+    saveCompose({ length: 1, chars: ['子'] });
+    expect(loadCompose()).toEqual({ length: 1, chars: ['子'] });
   });
   it('脏数据被收敛：非汉字过滤、超长截断、length 只认 1/2', () => {
     localStorage.setItem(ck, JSON.stringify({ length: 3, chars: ['子', 'a', '归', '云'], free: 1 }));
-    expect(loadCompose()).toEqual({ length: 2, chars: ['子', '归'], free: true });
+    expect(loadCompose()).toEqual({ length: 2, chars: ['子', '归'] });
   });
   it('存储损坏回默认，不抛异常', () => {
     localStorage.setItem(ck, 'not json');
-    expect(loadCompose()).toEqual({ length: 2, chars: [], free: false });
+    expect(loadCompose()).toEqual({ length: 2, chars: [] });
   });
 });

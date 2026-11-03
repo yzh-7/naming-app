@@ -7,7 +7,6 @@ export type CharInfo = {
   py: string[];
   pm: string[];
   t: number[];
-  lvl: number;
   cf: number;
   l0: boolean;
   st?: number; // 笔画数（通用规范汉字表 8105 字内的字）
@@ -155,8 +154,6 @@ export type Result = Named & {
   full: string;
   gender: GenderTag;
   readings: string[];
-  toneless: string;
-  initials: string;
   total: number;
   deltas: Delta[];
   flags: string[];

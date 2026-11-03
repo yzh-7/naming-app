@@ -93,8 +93,7 @@ function phonetics(surname: string, name: string, surReading: number) {
   const flags: string[] = [];
   const sur = surnameReadings(surname, surReading).filter(Boolean) as { syl: string; tone: number; mark: string }[];
   const nm = [...name].map((ch) => readings(ch)[0]).filter(Boolean) as { syl: string; tone: number; mark: string }[];
-  if (sur.length !== [...surname].length || !nm.length)
-    return { deltas, flags, readings: [], toneless: '', initials: '', total: 0 };
+  if (sur.length !== [...surname].length || !nm.length) return { deltas, flags, readings: [], total: 0 };
 
   const seq = [...sur, ...nm];
   const tones = seq.map((x) => x.tone);
@@ -152,8 +151,6 @@ function phonetics(surname: string, name: string, surReading: number) {
     deltas,
     flags,
     readings: seq.map((x) => x.mark),
-    toneless: seq.map((x) => x.syl).join(' '),
-    initials: seq.map((x) => x.syl.charAt(0)).join(''),
     total: 0,
   };
 }
@@ -325,8 +322,6 @@ export function scoreItem(
     full: surname + it.name,
     gender,
     readings: ph.readings,
-    toneless: ph.toneless,
-    initials: ph.initials,
     deltas,
     total: deltas.reduce((a, d) => a + d.delta, 0),
     flags: ph.flags,
@@ -365,8 +360,6 @@ export type Composed = {
   name: string;
   chars: string[];
   readings: string[];
-  toneless: string;
-  initials: string;
   flags: string[];
   known: boolean;
   allL0: boolean;
@@ -379,8 +372,6 @@ export function composeName(surname: string, name: string, surReading = 0): Comp
     name,
     chars,
     readings: ph.readings,
-    toneless: ph.toneless,
-    initials: ph.initials,
     flags: ph.flags,
     known: chars.every((c) => !!CHARS[c]) && [...surname].every((c) => !!CHARS[c]),
     allL0: chars.every((c) => !!CHARS[c]?.l0),
@@ -456,11 +447,14 @@ function bookUniverse(opts: Opts): (Named & { famous?: boolean; tier?: string })
   // 两个来源并列：典籍候选按七本典籍的开关取，真实人名档按来源开关取（它不是典籍，没有
   // 「哪一本」可言，所以不进 books 那七个开关）。单名层没有真实人名——语料那张表记的是双字名。
   const corpus = opts.length === 2 ? POOL.filter((p) => p.tier === 'B') : SINGLE_ITEMS;
+  // 单名层只有典籍取词（语料那张表记的是双字名）：这一层里「来源」开关没有可切的东西，
+  // 按全部来源处理。否则「只看真实人名」＋单名会留下一个没有任何控件能解释的空池
+  const source = opts.length === 1 ? 'all' : opts.source;
   const books =
-    opts.source === 'real'
+    source === 'real'
       ? []
       : corpus.filter((it) => it.book !== 'real' && opts.books[it.book as CorpusBook] && (!opts.redupOnly || it.redup));
-  const real = opts.source === 'book' || opts.length === 1 || opts.redupOnly ? [] : REAL_ITEMS;
+  const real = source === 'book' || opts.length === 1 || opts.redupOnly ? [] : REAL_ITEMS;
   return [...books, ...real];
 }
 
@@ -551,7 +545,9 @@ function universe(opts: Opts): (Named & { famous?: boolean; tier?: string })[] {
 }
 
 // 候选池里出现过的篇名（含单名条目的出处），按书在前、篇名在后排序，供筛选框的候选列表
-export const POOL_TITLES: string[] = (() => {
+// 篇名列表按「典籍＋篇名」存着：篇名筛选的候选列表要跟着典籍开关收窄，
+// 否则关掉某本之后仍能选到那本的篇名，选完就是一条空池
+const TITLE_KEYS: [string, string][] = (() => {
   const seen = new Set<string>();
   // 真实人名档没有篇名（title 为空），不进这份列表：篇名筛选管的是典籍
   for (const it of ALL_ITEMS) if (it.title) seen.add(`${it.book}\u0000${it.title}`);
@@ -560,8 +556,15 @@ export const POOL_TITLES: string[] = (() => {
       (a, b) =>
         bookOrdinal(a.split('\u0000')[0] as Book) - bookOrdinal(b.split('\u0000')[0] as Book) || (a < b ? -1 : 1),
     )
-    .map((x) => x.slice(x.indexOf('\u0000') + 1)); // 键由「典籍 + \u0000 + 篇名」拼成，取分隔符之后
+    .map((x) => [x.slice(0, x.indexOf('\u0000')), x.slice(x.indexOf('\u0000') + 1)] as [string, string]);
 })();
+
+export const POOL_TITLES: string[] = TITLE_KEYS.map(([, t]) => t);
+
+// 只列开着的那些典籍的篇名
+export function titlesForBooks(on: Partial<Record<string, boolean>>): string[] {
+  return TITLE_KEYS.filter(([b]) => on[b] !== false).map(([, t]) => t);
+}
 
 // 同篇还有多少条候选（含自己）：卡片上的「同篇候选」按钮用，1 就是这一篇里只有它。
 // 只按「当前筛选后的候选池」算（见 plan 返回的 titleCounts），不按全语料算：按全语料算的话，
@@ -614,17 +617,6 @@ export function resolveSaved(rec: { id: string; name?: string; book?: Book; titl
     if (sameName.length === 1 && onlySame) return { item: onlySame, by: 'name' };
   }
   return { item: null, by: null };
-}
-
-export function genderStats(opts: Opts) {
-  const kept = universe(opts);
-  return {
-    kept: kept.length,
-    same:
-      opts.gender === 'any'
-        ? 0
-        : kept.filter((it) => genderOf(it.name, { n: it.rn, side: it.rs }).side === opts.gender).length,
-  };
 }
 
 const PER_BOOK_CAP = 4;

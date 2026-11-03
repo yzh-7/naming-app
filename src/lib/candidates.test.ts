@@ -1,13 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  candidateRows,
-  candidatesCsv,
-  candidatesJson,
-  favoritesCsv,
-  FAV_CSV_HEADER,
-  FAV_GENDER_LABEL,
-  CSV_HEADER,
-} from './candidates';
+import { candidateRows, candidatesCsv, candidatesJson, favoritesCsv, FAV_CSV_HEADER, CSV_HEADER } from './candidates';
 import { plan } from '../engine/name';
 import type { Opts, Result } from '../engine/types';
 import { BOOK_ORDER } from '../engine/types';
@@ -131,25 +123,25 @@ describe('候选全量导出', () => {
     ).toBe(true);
   });
 
-  it('收藏 CSV 在候选列之后加分组、备注、收藏来源、性别档四列，带逗号的备注要加引号', () => {
+  it('收藏 CSV 在候选列之后只加分组、备注、收藏来源三列（性别那一列已经有了，不再加一列性别档），带逗号的备注要加引号', () => {
     const r = one(plan('苏', { ...opts, search: '清馨' }, 0).page, 'plan 搜「清馨」的候选页');
     const csv = favoritesCsv([{ r, group: '终选', note: '喜欢, 但笔画多', from: 'gen' }]);
     const lines = csv.replace(/\r\n/g, '\n').split('\n');
     expect(lines[0]).toBe('\ufeff' + FAV_CSV_HEADER.join(','));
-    expect(FAV_CSV_HEADER.slice(CSV_HEADER.length)).toEqual(['分组', '备注', '收藏来源', '性别档']);
+    expect(FAV_CSV_HEADER.slice(CSV_HEADER.length)).toEqual(['分组', '备注', '收藏来源']);
     // 数据行必须在：下面的按列拆分与尾部断言都落在它身上
     const dataLine = at(lines, 1, '收藏 CSV 拆出的行');
     const cells = dataLine.split(',');
     // 含逗号的字段必须整字段加引号，否则列会错位（这里数一下就看得出多了一列）
     expect(dataLine).toContain('"喜欢, 但笔画多"');
-    // 尾部两列是收藏时按下的入口与当时所属的性别档
-    expect(dataLine.endsWith(`"喜欢, 但笔画多",生成页,${FAV_GENDER_LABEL[r.gender.side]}`)).toBe(true);
+    // 尾部两列是分组／备注，最后一列是收藏时按下的入口
+    expect(dataLine.endsWith('"喜欢, 但笔画多",生成页')).toBe(true);
     expect(cells[0]).toBe(r.full);
     expect(cells[CSV_HEADER.length]).toBe('终选');
-    // 没有分组与备注、也没存过来源的老记录：四列都在，来源写「未记录」，性别档按当前条目算
+    // 没有分组与备注、也没存过来源的老记录：三列都在，来源写「未记录」
     const bareCsv = favoritesCsv([{ r }]).replace(/\r\n/g, '\n').split('\n');
     const bare = at(bareCsv, 1, '无分组备注的收藏 CSV 拆出的行').split(',');
     expect(bare).toHaveLength(FAV_CSV_HEADER.length);
-    expect(bare.slice(CSV_HEADER.length)).toEqual(['', '', '未记录', FAV_GENDER_LABEL[r.gender.side]]);
+    expect(bare.slice(CSV_HEADER.length)).toEqual(['', '', '未记录']);
   });
 });

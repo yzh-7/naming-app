@@ -125,9 +125,10 @@ export function candidatesCsv(results: Result[]): string {
   return '\ufeff' + [CSV_HEADER.join(','), ...rows].join('\r\n');
 }
 
-// 收藏名单 CSV：候选的列全部保留，再加「分组」「备注」「收藏来源」「性别档」四列
-// 来源与性别档是收藏当时按下的入口与当时所属的档，老记录没存过这两项就留空
-export const FAV_CSV_HEADER = [...CSV_HEADER, '分组', '备注', '收藏来源', '性别档'];
+// 收藏名单 CSV：候选的列全部保留，再加「分组」「备注」「收藏来源」三列。
+// 性别只留候选列里那一列「性别风格」：性别档只由用字决定、与收藏时开着什么筛选无关，
+// 再挂一列「性别档」是把同一个值写两遍（老记录没存过来源就写「未记录」）
+export const FAV_CSV_HEADER = [...CSV_HEADER, '分组', '备注', '收藏来源'];
 
 export function favoritesCsv(
   entries: { r: Result; note?: string; group?: string; from?: 'gen' | 'compose' }[],
@@ -153,7 +154,6 @@ export function favoritesCsv(
       e.group ?? '',
       e.note ?? '',
       e.from === 'gen' ? '生成页' : e.from === 'compose' ? '自选页' : '未记录',
-      FAV_GENDER_LABEL[e.r.gender.side],
     ]
       .map(esc)
       .join(',');

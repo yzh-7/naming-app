@@ -8,7 +8,6 @@ import {
   findItem,
   genderOf,
   genderPass,
-  genderStats,
   glossOf,
   isKnownSurname,
   L0_CHARS,
@@ -21,6 +20,7 @@ import {
   POOL_TITLES,
   polyphoneTags,
   poolSize,
+  titlesForBooks,
   popBand,
   popScore,
   popularity,
@@ -231,11 +231,29 @@ describe('性别判定：三档互斥（偏男／中性／偏女）', () => {
       expect(hits.length, `${it.name} 落在 ${hits.join('/')}`).toBe(1);
     }
   });
-  it('poolSize 与 genderStats 同一口径', () => {
-    const o = opts({ gender: 'f' });
-    expect(genderStats(o).kept).toBe(poolSize(o));
-    expect(genderStats(o).same).toBeLessThanOrEqual(poolSize(o));
+  it('titlesForBooks 只列开着的那几本：关掉楚辞，它的篇名不再出现在候选列表里', () => {
+    const on = Object.fromEntries(BOOK_ORDER.map((b) => [b, true]));
+    const all = titlesForBooks(on);
+    expect(all).toContain('离骚');
+    const noChuci = titlesForBooks({ ...on, chuci: false });
+    expect(noChuci).not.toContain('离骚');
+    expect(noChuci.length).toBeLessThan(all.length);
+    // 没说关的按开着算（空对象＝全部典籍）
+    expect(titlesForBooks({})).toEqual(all);
+  });
+  it('池子条数就是候选池口径本身，且单名层不受「来源」开关影响（那一层没有真实人名可看）', () => {
     expect(poolSize(opts())).toBe(META.pool_B);
+    // 单名层：三种来源取值给同一个池子（这一层没有真实人名可切，开关不该把它清空）
+    const one = (['all', 'book', 'real'] as const).map((source) =>
+      poolSize(opts({ length: 1, source, wordOnly: false })),
+    );
+    expect(one[0]).toBeGreaterThan(0);
+    expect(one).toEqual([one[0], one[0], one[0]]);
+    // 双名层：这一开关真有作用，两个来源互不重叠、加起来就是全部
+    const books = poolSize(opts({ source: 'book', wordOnly: false }));
+    const real = poolSize(opts({ source: 'real' }));
+    expect(books).toBe(META.pool_B);
+    expect(real).toBe(META.real_tier);
   });
 });
 

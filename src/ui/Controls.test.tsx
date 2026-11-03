@@ -142,6 +142,22 @@ describe('Controls：输入与条件渲染', () => {
     expect(sel.value).toBe('popular');
   });
 
+  it('只有一页（每批条数选了全部）时不摆一个点了没反应的「换一批」', () => {
+    render(<Harness pages={1} />);
+    expect(screen.queryByRole('button', { name: /换一批/ })).toBeNull();
+  });
+  it('篇名候选跟着典籍开关收窄：关掉楚辞就不再列出楚辞的篇名', () => {
+    render(<Harness />);
+    const options = () =>
+      Array.from(document.querySelectorAll('#pool-titles option')).map((o) => o.getAttribute('value'));
+    const before = options();
+    expect(before).toContain('离骚');
+    fireEvent.click(screen.getByRole('button', { name: '高级筛选' }));
+    fireEvent.click(screen.getByRole('button', { name: '楚辞' }));
+    const after = options();
+    expect(after).not.toContain('离骚');
+    expect(after.length).toBeLessThan(before.length);
+  });
   it('换一批回调父级；多页时显示页码', () => {
     const onBatch = vi.fn();
     render(<Harness pages={2} onBatch={onBatch} />);

@@ -500,6 +500,15 @@ describe('App 的分组、排序、对比上限、导出与主题联动', () => 
     expect(compareCells('名字')).toHaveLength(3);
   });
 
+  it('对比到第四条时说清楚为什么勾不上，不是静默失败', () => {
+    favPageWith(4);
+    const boxes = screen.getAllByLabelText('对比') as HTMLInputElement[];
+    for (const box of boxes.slice(0, 3)) fireEvent.click(box);
+    fireEvent.click(boxes[3]!);
+    expect(boxes[3]!.checked).toBe(false);
+    expect(screen.getByText(/对比最多 3 个/)).toBeInTheDocument();
+  });
+
   it('换页时回到顶部：粘性页头不会把这一页的第一张卡片压在下面', () => {
     const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     const desc = Object.getOwnPropertyDescriptor(window, 'scrollY');

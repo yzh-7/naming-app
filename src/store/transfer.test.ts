@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildState, fromQuery, parseState, serialize, toQuery } from './transfer';
-import { sanitizeOpts, type FavRecord } from './local';
+import { sanitizeOpts, type FavRecord, TITLE_MAX } from './local';
 import { BOOK_ORDER, type Opts } from '../engine/types';
 import { at } from '../testing';
 
@@ -279,7 +279,7 @@ describe('可分享链接', () => {
     expect(viaOpts.noMonotone).toBe(true);
     expect(viaOpts.redupOnly).toBe(true);
     expect(viaOpts.search).toHaveLength(40);
-    expect(viaOpts.title).toHaveLength(30);
+    expect(viaOpts.title).toHaveLength(TITLE_MAX); // 上限改了要跟着改：14 字（语料里最长篇名）
     expect(viaOpts.mustChar).toBe('');
     expect(viaOpts.mustPos).toBe('any');
     expect(viaOpts.avoidChars).toBe('月');

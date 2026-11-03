@@ -348,3 +348,41 @@ test('禁用字是一个字一个字打出来的：后打的字不把先打的�
     expect(full, `第 ${i + 1} 张卡带回了禁用字：${full}`).not.toContain('月');
   }
 });
+
+test('生成页：收藏过的那一条在名字那一行就标「已收藏」，来源筛选能把它单独找出来', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('姓（可复姓）').fill('袁');
+  const card = page.locator('article').first();
+  await expect(card.locator('.chip', { hasText: '已收藏' })).toHaveCount(0);
+  await card.getByRole('button', { name: '收藏', exact: true }).click();
+  await expect(card.locator('.chip', { hasText: '已收藏' })).toBeVisible();
+  await page.getByRole('link', { name: /收藏 1/ }).click();
+  await page.getByRole('button', { name: '生成页', exact: true }).click();
+  await expect(page.locator('article')).not.toHaveCount(0);
+  // 这一档里没有旧记录时不该出现条目：能筛空才说明「生成页」这一档是真的按来源分的
+  await page.getByRole('button', { name: '未记录', exact: true }).click();
+  await expect(page.locator('article')).toHaveCount(0);
+});
+
+test('卡片里的分数明细给的是实际数字，第一行就是总分', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('姓（可复姓）').fill('苏');
+  const details = page.locator('article').first().locator('details').filter({ hasText: '分数明细' }).first();
+  await details.click();
+  await expect(details.getByText('分数合计')).toBeVisible();
+  const text = await details.innerText();
+  expect(text).toMatch(/分数合计\s+\d+/);
+  expect(text).toMatch(/[+−-]\d+/);
+});
+
+test('收藏页上拉黑一个名字，卡片按钮状态跟着变（原来在收藏页永远显示「拉黑」）', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('姓（可复姓）').fill('苏');
+  await page.locator('article').first().getByRole('button', { name: '收藏', exact: true }).click();
+  await page.getByRole('link', { name: /收藏 1/ }).click();
+  const card = page.locator('article').first();
+  await card.getByRole('button', { name: '拉黑', exact: true }).click();
+  await expect(card.getByRole('button', { name: '已拉黑' })).toBeVisible();
+  await page.getByRole('link', { name: /拉黑 1/ }).click();
+  await expect(page.getByRole('button', { name: '已拉黑' })).toBeVisible();
+});

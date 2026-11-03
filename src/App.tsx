@@ -3,7 +3,6 @@ import {
   plan,
   scoreItem,
   findItem,
-  poolSize,
   cleanSurname,
   isKnownSurname,
   surnameReads,
@@ -32,7 +31,9 @@ import { usePwa } from './lib/pwa';
 
 type Pair = { rec: store.FavRecord; r: Result; stale: boolean };
 // 收藏里的 id 查不到时按卡片记下的名字＋出处回退找；两条路都走不通就是「找不回来」的旧条目
-const favSnap = (r: Result, from: 'gen' | 'compose') => ({
+// from 记的是「这条是从哪一页存进收藏的」，收藏页按它分「生成页／自选页／未记录」三档。
+// 不确定的场合（从收藏页或拉黑页重新收藏）就不写这一项——落到「未记录」比编一个来源诚实。
+const favSnap = (r: Result, from?: 'gen' | 'compose') => ({
   name: r.name,
   book: r.book,
   title: r.title,
@@ -112,11 +113,8 @@ export default function App() {
     setSurname(s);
   };
 
-  // 本机存储不可用（隐私模式、配额写满、站点策略禁用）时写入不再抛出，但必须让人看见「这次没保存」
-  const warnStorage = useCallback(() => {
-    if (store.storageUnavailable()) setStorageBroken(true);
-  }, []);
-  // 保存失败由存储层通知，不在 effect 里同步 setState
+  // 本机存储不可用（隐私模式、配额写满、站点策略禁用）时写入不再抛出，但必须让人看见「这次没保存」。
+  // 只有这一条路：存储层在第一次写失败时通知，界面上不再每个动作各自查一遍（那是同一件事的第六份实现）
   useEffect(() => store.subscribeStorageFailure(() => setStorageBroken(true)), []);
 
   // 换页时回到顶部：粘性页头常驻，若沿上一页的滚动位置落下，第一张卡片会被页头压在下面
@@ -157,7 +155,7 @@ export default function App() {
     [sur, effective, batch, reading],
   );
   const results = paged.page;
-  const poolCount = useMemo(() => poolSize(effective), [effective]);
+  const poolCount = paged.pool; // plan() 已经数过一遍，不再数第二遍
 
   const scored = useCallback(
     (id: string) => {
@@ -199,7 +197,9 @@ export default function App() {
         `${r.full} ${namePinyin(r.name)} ${r.title} ${rec.note ?? ''} ${rec.group ?? ''}`.toLowerCase().includes(q),
       );
     const out = [...list];
-    if (favSort === 'score') out.sort((a, b) => b.r.total - a.r.total);
+    if (favSort === 'recent')
+      out.sort((a, b) => (b.rec.ts ?? 0) - (a.rec.ts ?? 0)); // 「最近收藏」按收藏时间，不靠数组顺序碰运气
+    else if (favSort === 'score') out.sort((a, b) => b.r.total - a.r.total);
     else if (favSort === 'strokes') out.sort((a, b) => shapeTags(a.r.name).strokes - shapeTags(b.r.name).strokes);
     else if (favSort === 'popular') out.sort((a, b) => popScore(b.r.name) - popScore(a.r.name));
     return out;
@@ -215,31 +215,34 @@ export default function App() {
   }, [results]);
 
   const favIds = useMemo(() => new Set(fav.map((f) => f.id)), [fav]);
-  const toggleFav = (r: Result) => {
-    setFav(favIds.has(r.id) ? store.removeFavorite(r.id) : store.addFavorite(r.id, favSnap(r, 'gen')));
-    warnStorage();
+  const blockIds = useMemo(() => new Set(block), [block]);
+  // from 只在「从哪一页存的」确实知道的时候写：生成页写 gen，自选页自己另有一条路；
+  // 收藏页与拉黑页上的按钮此时多半是取消收藏，真要重新收藏就留空（进「未记录」）
+  const toggleFav = (r: Result, from?: 'gen' | 'compose') => {
+    setFav(favIds.has(r.id) ? store.removeFavorite(r.id) : store.addFavorite(r.id, favSnap(r, from)));
   };
   const toggleBlock = (r: Result) => {
     setBlock(block.includes(r.id) ? store.removeBlock(r.id) : store.addBlock(r.id));
-    warnStorage();
   };
   // 分组改名 / 删组（连同条目一起删）。改名后当前视图跟到新名字上
   const doRenameGroup = (from: string, to: string) => {
     if (!to || to === from) return;
     setFav(store.renameGroup(from, to));
     setFavGroup(to);
-    warnStorage();
     setNotice(`分组「${from}」已改名为「${to}」`);
   };
   const doDeleteGroup = (g: string) => {
     const before = fav.filter((f) => f.group === g).length;
     setFav(store.clearGroup(g));
     setFavGroup('');
-    warnStorage();
     setNotice(`分组「${g}」已解散，${before} 条收藏回到未分组（收藏本身没删）`);
   };
-  const toggleCompare = (id: string) =>
-    setCompare((c) => (c.includes(id) ? c.filter((x) => x !== id) : c.length >= 3 ? c : [...c, id]));
+  // 对比最多 3 个：到上限时说明白，不要静默不勾（原来点了第四个什么都不发生）
+  const toggleCompare = (id: string) => {
+    if (compare.includes(id)) setCompare(compare.filter((x) => x !== id));
+    else if (compare.length >= 3) setNotice('对比最多 3 个：先取消一个再勾新的');
+    else setCompare([...compare, id]);
+  };
 
   const doExportFavCsv = () => {
     // 收藏的分组与备注存在 rec 上，不在候选条目里：导出时要显式带上，否则这两列会是空的
@@ -331,7 +334,6 @@ export default function App() {
     setOpts(st.opts);
     setBatch(0);
     setPendingImport(null);
-    warnStorage();
     const parts = [`收藏 ${st.favorites.length}`, `拉黑 ${st.blocklist.length}`];
     if (!st.favorites.length && !st.blocklist.length) parts.push('只有姓氏与筛选设置');
     setNotice(`已导入（${mode === 'merge' ? '合并' : '覆盖'}）：${parts.join(' · ')}`);
@@ -378,7 +380,6 @@ export default function App() {
     setNotice(`名单图已生成（${entries.length} 条）${qr ? '，含扫码二维码' : '，二维码没画出来（链接过长）'}`);
   };
   const doPrint = () => {
-    setTab('fav');
     setTimeout(() => window.print?.(), 60);
   };
 
@@ -586,7 +587,7 @@ export default function App() {
                         r={r}
                         fav={favIds.has(r.id)}
                         blocked={block.includes(r.id)}
-                        onFav={() => toggleFav(r)}
+                        onFav={() => toggleFav(r, 'gen')}
                         onBlock={() => toggleBlock(r)}
                         onShare={() => void doShare(r)}
                         onCopy={() => void doCopy(r)}
@@ -745,7 +746,7 @@ export default function App() {
                   <NameCard
                     r={r}
                     fav
-                    blocked={false}
+                    blocked={blockIds.has(rec.id)}
                     onFav={() => toggleFav(r)}
                     onBlock={() => toggleBlock(r)}
                     onShare={() => void doShare(r)}
@@ -811,7 +812,6 @@ export default function App() {
                       <button
                         onClick={() => {
                           setFav(store.removeFavorite(rec.id));
-                          warnStorage();
                         }}
                         className="btn btn-quiet"
                       >

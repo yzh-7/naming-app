@@ -520,7 +520,6 @@ for (const ch of [...WH123].sort()) {
   const rec = {
     py: rs.map((r) => r.syl),
     t: rs.map((r) => r.tone),
-    lvl: WH1.has(ch) ? 1 : WH2.has(ch) ? 2 : 3,
     cf: cf.get(ch) ?? 0,
   };
   // 有才带字段，缺则省略：让「查不到」和「值为 0」在数据里可区分

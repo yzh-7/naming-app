@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { META } from '../engine/data';
-import { cleanSurname, POOL_TITLES, surnameReadingOptions, surnameReads } from '../engine/name';
+import { cleanSurname, surnameReadingOptions, surnameReads, titlesForBooks } from '../engine/name';
 import {
   AVOID_MAX,
   BOOK_LABEL,
@@ -170,7 +170,7 @@ export default function Controls({
             {([2, 1] as const).map((n) => (
               <button
                 key={n}
-                onClick={() => patch(n === 1 ? { length: 1, redupOnly: false } : { length: 2 })}
+                onClick={() => patch(n === 1 ? { length: 1, redupOnly: false, mustPos: 'any' } : { length: 2 })}
                 aria-pressed={opts.length === n}
                 className={`seg-btn flex-1 sm:flex-none ${opts.length === n ? 'seg-on' : ''}`}
               >
@@ -204,9 +204,12 @@ export default function Controls({
         >
           只看成词的名字
         </button>
-        <button onClick={onBatch} className="btn-primary col-span-full sm:ml-auto">
-          换一批{pages > 1 ? ` · ${pageNo + 1}/${pages}` : ''}
-        </button>
+        {/* 「每批条数」选了全部时只有一页，这个按钮点了什么都不发生——那就别摆在那儿 */}
+        {pages > 1 && (
+          <button onClick={onBatch} className="btn-primary col-span-full sm:ml-auto">
+            换一批 · {pageNo + 1}/{pages}
+          </button>
+        )}
       </div>
 
       {/* 第二组：搜索、指定字、排序 */}
@@ -244,7 +247,7 @@ export default function Controls({
             className="field w-full sm:w-44"
           />
           <datalist id="pool-titles">
-            {POOL_TITLES.map((t) => (
+            {titlesForBooks(opts.books).map((t) => (
               <option key={t} value={t} />
             ))}
           </datalist>

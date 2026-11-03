@@ -229,6 +229,12 @@ export default function NameCard({
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h3 className="font-serif text-name text-ink sm:text-name-lg">{r.full}</h3>
         <span className="flex flex-wrap items-center gap-1.5">
+          {/* 已收藏是设备状态，不是名字本身的属性：常驻在名字旁边，打印时不出现 */}
+          {fav && (
+            <span className="chip chip-accent no-print" title="这条已经在你本机的收藏里">
+              已收藏
+            </span>
+          )}
           {gBadge && (
             <span className={`chip ${gBadge.cls}`} title={g.conflict ? `${g.why}。${g.conflict}` : g.why}>
               {gBadge.text}
@@ -390,6 +396,10 @@ export default function NameCard({
           分数明细
         </summary>
         <ul className="mt-1.5 space-y-0.5">
+          <li className="flex justify-between gap-4 border-b border-line pb-1">
+            <span>分数合计</span>
+            <span className="tabular-nums font-medium text-ink">{r.total}</span>
+          </li>
           {r.deltas.map((d) => (
             <li key={d.rule} className="flex justify-between gap-4">
               <span>{d.rule}</span>

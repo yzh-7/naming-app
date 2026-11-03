@@ -180,7 +180,6 @@ function asChars(v: unknown): Record<string, CharInfo> {
       !Array.isArray(c.t) ||
       !c.t.every(isNum) ||
       c.py.length !== c.t.length ||
-      !isNum(c.lvl) ||
       !isNum(c.cf)
     ) {
       fail(`chars["${k}"] 结构不符`);

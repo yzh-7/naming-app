@@ -31,6 +31,26 @@ const item = POOL.find((p) => [...p.name].every((c) => glossOf(c)))!;
 const r = scoreItem('苏', item, opts, 0);
 
 describe('NameCard 组件', () => {
+  it('已收藏的名字在名字那一行就标出来，不必翻到按钮那一行；未收藏时不出现', () => {
+    const view = render(<NameCard r={r} fav blocked={false} onFav={() => {}} onBlock={() => {}} />);
+    // 名字那一行右侧的标记（不是下面那个「已收藏」按钮）
+    const chip = document.querySelector('article h3 ~ span .chip');
+    expect(chip?.textContent).toBe('已收藏');
+    expect(chip).toHaveClass('chip-accent');
+    view.unmount();
+    render(<NameCard r={r} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />);
+    expect(screen.queryByText('已收藏')).toBeNull();
+  });
+  it('分数明细第一行是分数合计，那个数字就是排序用的总分', () => {
+    render(<NameCard r={r} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />);
+    const d = Array.from(document.querySelectorAll('details')).find((x) => (x.textContent ?? '').includes('分数明细'));
+    if (!d) throw new Error('卡片里没有分数明细');
+    const first = d.querySelector('li');
+    if (!first) throw new Error('分数明细里没有条目');
+    expect(first.textContent).toContain('分数合计');
+    expect(Number((first.textContent ?? '').replace(/[^0-9]/g, ''))).toBe(r.total);
+    expect(r.total).toBeGreaterThan(0);
+  });
   it('渲染名字、读音、出处与字义', () => {
     render(<NameCard r={r} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />);
     expect(screen.getByRole('heading')).toHaveTextContent(r.full);

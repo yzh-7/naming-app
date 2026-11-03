@@ -24,7 +24,8 @@ export type Theme = 'light' | 'dark' | 'system';
 export const SEARCH_MAX = 40;
 // 出处快照的长度上限：足够回查一条记录，又不让收藏文件无限膨胀
 const SNAP = { name: 8, title: 30, line: 120 };
-export const TITLE_MAX = 30;
+// 语料里最长篇名 14 字（送李少府贬峡中 王少府贬长沙），界面输入框也是 14：三条入口同一个上限
+export const TITLE_MAX = 14;
 
 const K = {
   fav: 'naming.favorites.v1',
@@ -119,7 +120,8 @@ export function sanitizeFav(raw: unknown, index: number): FavRecord | null {
   if (title) rec.title = title;
   const line = str(r.line, SNAP.line);
   if (line) rec.line = line;
-  const book = BOOK_ORDER.find((b) => b === r.book);
+  // 'real' 是合法的出处标记：真实人名档的收藏要留得住自己出自哪一档（原来只认七本典籍，这一档被丢掉）
+  const book = BOOK_ORDER.find((b) => b === r.book) ?? (r.book === 'real' ? 'real' : undefined);
   if (book) rec.book = book;
   return rec;
 }
@@ -213,7 +215,6 @@ export const saveTheme = (t: Theme) => writeItem(K.theme, t);
 export const prefersDark = () =>
   !!(typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
 export const resolveDark = (t: Theme) => t === 'dark' || (t === 'system' && prefersDark());
-export const THEME_ORDER: Theme[] = ['light', 'dark', 'system'];
 export const THEME_LABEL: Record<Theme, string> = { light: '浅色', dark: '深色', system: '跟随系统' };
 
 // 常见度门槛只认界面那几个档（档位表在 engine/types.ts）
@@ -316,13 +317,15 @@ export const saveOpts = (o: Opts) =>
     }),
   );
 
-export type ComposeDraft = { length: 1 | 2; chars: string[]; free: boolean };
+// 草稿只存「填到哪一步」。「随机自由组合」那个开关是当次会话的选择，原来为它存了一个没人读的字段
+// （界面上的开关其实从来没持久化过），删字段比给它接上存储更符合「如无必要，勿增实体」
+export type ComposeDraft = { length: 1 | 2; chars: string[] };
 export function loadCompose(): ComposeDraft {
   const raw = readRaw(K.compose);
-  if (!raw || typeof raw !== 'object') return { length: 2, chars: [], free: false };
+  if (!raw || typeof raw !== 'object') return { length: 2, chars: [] };
   const r = raw as Record<string, unknown>;
   const chars = Array.isArray(r.chars) ? r.chars.filter(isHanChar).slice(0, 2) : [];
-  return { length: r.length === 1 ? 1 : 2, chars, free: !!r.free };
+  return { length: r.length === 1 ? 1 : 2, chars };
 }
 export const saveCompose = (d: ComposeDraft) => writeItem(K.compose, JSON.stringify(d));
 
