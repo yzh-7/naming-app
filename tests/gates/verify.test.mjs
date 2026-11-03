@@ -30,6 +30,11 @@ function runVerify(dir) {
   return { code: r.status, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
 }
 
+function runBuild(dir) {
+  const r = spawnSync(process.execPath, ['scripts/build-data.mjs'], { cwd: dir, encoding: 'utf8', timeout: 120_000 });
+  return { code: r.status, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
+}
+
 function read(dir, rel) {
   return fs.readFileSync(path.join(dir, rel), 'utf8');
 }
@@ -95,26 +100,27 @@ describe('verify 门禁的失败路径', () => {
     expect(out).toContain('FAILURES: 1');
   }, 120_000);
 
-  it('白名单少一个字且清单已同步：构建阶段就地拦住，不让残缺语料进产物', () => {
+  it('保留里塞一个虚词或字表外的字：构建阶段就地拦住，不让没人判过的字进白名单', () => {
     const dir = fixture();
     const lines = read(dir, 'data/raw/l0-verdicts.txt').trimEnd().split('\n');
-    let moved = '';
-    const out = lines.map((l) => {
-      if (l.startsWith('保留=')) {
-        const keep = l.slice(3);
-        moved = keep.at(-1) ?? '';
-        return '保留=' + keep.slice(0, -1);
-      }
-      if (l.startsWith('剔除=')) return '剔除=' + moved;
-      return l;
-    });
+    const out = lines.map((l) => (l.startsWith('保留=') ? l + '兮' : l)); // 兮 是虚词闸门里的字
     write(dir, 'data/raw/l0-verdicts.txt', out.join('\n') + '\n');
     // 判定表不进上游指纹（它是判定结果，不是外部语料），所以这里不需要动 SHA256SUMS。
+    // 门禁是「构建脚本自己拒绝写出产物」，不是一条 FAIL 计数：白名单准入放宽到一二三级字表之后，
+    // 闸门本身必须还能判红，否则放宽就变成没有闸门。
+    const b = runBuild(dir);
+    expect(b.code).not.toBe(0);
+    expect(b.out).toContain('不该进白名单的字');
+  }, 120_000);
+
+  it('白名单少一个字且清单已同步：判定与产物对不上就判红（判定表改了必须重跑构建）', () => {
+    const dir = fixture();
+    const lines = read(dir, 'data/raw/l0-verdicts.txt').trimEnd().split('\n');
+    const out = lines.map((l) => (l.startsWith('保留=') ? '保留=' + l.slice(3, -1) : l));
+    write(dir, 'data/raw/l0-verdicts.txt', out.join('\n') + '\n');
     const r = runVerify(dir);
     expect(r.code).not.toBe(0);
-    // 门禁在这里是「构建脚本自己拒绝写出产物」，不是一条 FAIL 计数；
-    // 移出幽之后，17 条含幽今译在放行后的原句里找不到出处。
-    expect(r.out).toContain('没有对应原句');
+    expect(r.out).toContain('判定文本与构建时一致');
   }, 120_000);
 
   it('自撰今译的文本改动不会被判红（门禁锁的是覆盖与一致性，不是译文措辞）', () => {

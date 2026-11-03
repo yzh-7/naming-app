@@ -131,6 +131,8 @@ const META_KEYS = [
   'radical_named',
   'gloss_chars',
   'line_gloss',
+  'gloss_gap_items',
+  'gloss_gap_lines',
   'real_tier',
   'real_tier_genders',
   'pool_real_named',
@@ -158,6 +160,9 @@ type Meta = {
   shape_chars: number;
   gloss_chars: number;
   line_gloss: number;
+  // 今译覆盖的缺口：条目数与唯一原句数（界面在这些位置显示「今译待补」，逐句清单 docs/gloss-gaps.md）
+  gloss_gap_items: number;
+  gloss_gap_lines: number;
   given_freq_chars: number;
   // 真实用名证据：这名字在 120 万真实姓名语料里出现过多少次、上游标什么性别（口径见 derive-cnname-given.mjs）
   real_tier: number;
@@ -255,6 +260,8 @@ export const REAL_ITEMS = asReal(realNamesJson, 'realnames', CHARS);
 export const RADICAL = asRadical(radicalJson);
 // 字义：名用字逐字短释义（本义优先）。只对 L0 字发布，查不到就留白
 export const GLOSS = asGloss(glossJson);
-// 出处今译：与候选/单字逐条对应，条目只存 lg 下标；越界就是构建产物坏了，启动即失败
-for (const it of [...POOL, ...SINGLES]) if (!LINE_GLOSS[it.lg]) fail(`${it.id} 的 lg=${it.lg} 取不到今译`);
+// 出处今译：条目只存 lg 下标。lg = -1 是明确的「这句还没有今译」（界面显示「今译待补」，
+// 逐句清单在 docs/gloss-gaps.md）；其它取不到就是构建产物坏了，启动即失败。
+for (const it of [...POOL, ...SINGLES])
+  if (it.lg !== -1 && !LINE_GLOSS[it.lg]) fail(`${it.id} 的 lg=${it.lg} 取不到今译`);
 export const META = asMeta(metaJson);

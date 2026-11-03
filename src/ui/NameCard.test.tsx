@@ -328,3 +328,17 @@ describe('真实人名档的出处行', () => {
     expect(screen.queryByText(/未见成词依据/)).not.toBeInTheDocument();
   });
 });
+describe('今译待补', () => {
+  it('lg = -1 的条目在卡片上明说「今译待补」，不是空着一块', () => {
+    const item = one(
+      POOL.filter((it) => it.lg === -1),
+      '应有一条出处句还没今译',
+    );
+    render(
+      <NameCard r={scoreItem('袁', item, opts, 0)} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />,
+    );
+    expect(screen.getByText('今译待补')).toBeInTheDocument();
+    expect(screen.getByText(/还没有现代汉语今译/)).toBeInTheDocument();
+    expect(document.body.textContent).toContain(item.line); // 原文与取词段照引，缺的只有译文
+  });
+});

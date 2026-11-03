@@ -125,8 +125,10 @@ if (fs.existsSync(path.join(RAW, VERDICT_FILE))) {
   const { keep, drop } = parseVerdicts(text);
   const both = keep.filter((c) => drop.includes(c));
   if (both.length) throw new Error(`判定自相矛盾，这些字同时被标了保留和剔除：${both.join(' ')}`);
-  const bad = keep.filter((c) => !WH1.has(c) || XU.has(c) || BAD.has(c));
-  if (bad.length) throw new Error(`判定里有不该进白名单的字（不在一级字表／虚词／忌讳）：${bad.join(' ')}`);
+  // 0.7.0 起准入放宽到一二三级字表：只认一级字表时，薇 琬 琰 澈 澜 汀 鸾 笙 这一类永远进不来，
+  // 而它们正是「新意」那一批（见 docs/l0-待判表.md 的第三个视角）。虚词与忌讳字的闸门不变。
+  const bad = keep.filter((c) => !WH123.has(c) || XU.has(c) || BAD.has(c));
+  if (bad.length) throw new Error(`判定里有不该进白名单的字（不在一二三级字表／虚词／忌讳）：${bad.join(' ')}`);
   if (!keep.length) throw new Error(`${VERDICT_FILE} 存在但「保留」是空的——要么给出判定，要么删掉这个文件回到种子版`);
   verdicts = { keep, drop, sha: createHash('sha256').update(text).digest('hex').slice(0, 16) };
 }
@@ -480,8 +482,12 @@ for (const line of read('line_gloss.tsv').split('\n')) {
 // 按「候选 → 单字」的首次出现顺序编号；lg 是数组下标，运行时 LINE_GLOSS[lg] 直接取
 const lineGloss = [];
 const glossIndex = new Map();
+const glossGaps = new Set(); // 今译覆盖不到的出处句：允许存在，但必须被数出来、被界面标成「待补」
 const glossAt = (src) => {
-  if (!LINE_GLOSS_RAW.has(src)) throw new Error(`原句没有今译：${src}`);
+  if (!LINE_GLOSS_RAW.has(src)) {
+    glossGaps.add(src);
+    return -1;
+  }
   let i = glossIndex.get(src);
   if (i === undefined) {
     i = lineGloss.length;
@@ -493,8 +499,18 @@ const glossAt = (src) => {
 for (const c of candidates) c.lg = glossAt(c.line);
 for (const s of singles) s.lg = glossAt(s.line);
 const unusedGloss = [...LINE_GLOSS_RAW.keys()].filter((src) => !glossIndex.has(src));
+console.log(
+  `今译覆盖：释义 ${LINE_GLOSS_RAW.size} 条｜被候选或单名用到 ${glossIndex.size} 条｜释义闲置 ${unusedGloss.length} 条｜出处句缺今译 ${glossGaps.size} 句`,
+);
 if (unusedGloss.length)
   throw new Error(`line_gloss.tsv 有 ${unusedGloss.length} 条释义没有对应原句：${unusedGloss.slice(0, 3).join(' | ')}`);
+{
+  // 覆盖率地板：扩池允许带来「原文照引、今译待补」的条目，但不能把它扩成译文大面积缺席的库
+  const total = candidates.length + singles.length;
+  const gap = candidates.filter((c) => c.lg === -1).length + singles.filter((s) => s.lg === -1).length;
+  if ((total - gap) / total < 0.8)
+    throw new Error(`今译覆盖率跌破 80%（缺 ${gap}/${total}）：这一轮扩池带进来的原句太多而译文没跟上`);
+}
 
 const chars = {};
 for (const ch of [...WH123].sort()) {
@@ -642,6 +658,9 @@ const realNames = Object.entries(GIVEN_NAMES)
 const meta = {
   generated_by: 'scripts/build-data.mjs',
   L0_size: L0.size,
+  gloss_lines: lineGloss.length, // 实际进包的今译条数（一句一条）
+  gloss_gap_items: candidates.filter((c) => c.lg === -1).length + singles.filter((s) => s.lg === -1).length,
+  gloss_gap_lines: glossGaps.size,
   L0_seed: L0_SEED.size,
   L0_added: verdicts ? verdicts.keep.length : 0,
   L0_dropped: verdicts ? verdicts.drop.length : 0,
@@ -732,6 +751,28 @@ write('radical.json', radical);
 write('gloss.json', gloss);
 // 出处今译：按原句首次出现顺序的纯数组，条目用 lg 下标取；不重复存句子，省体积
 write('line_gloss.json', lineGloss);
+{
+  // 「今译待补」清单：哪些出处句还没有今译，按书分组写进 docs，下一轮补的时候照这张表勾。
+  const byBook = new Map();
+  for (const c of [...candidates, ...singles]) {
+    if (c.lg !== -1) continue;
+    const set = byBook.get(c.book) ?? new Set();
+    set.add(c.line);
+    byBook.set(c.book, set);
+  }
+  const md = [
+    '# 今译待补清单',
+    '',
+    '由 `npm run build:data` 生成，不要手工编辑。这些原句有出处、有原文，但还没有现代汉语今译：',
+    '卡片与导出里对应位置显示「今译待补」，不是缺漏被藏起来了。补法：在 `data/raw/line_gloss.tsv` 加一行「原句 TAB 今译」，重跑构建。',
+    '',
+    `共 ${glossGaps.size} 句，落在 ${[...byBook.keys()].length} 本书、${meta.gloss_gap_items} 条候选上（总候选 ${candidates.length} 条）。`,
+    '',
+    ...[...byBook].map(([b, set]) => `## ${b}（${set.size} 句）\n\n${[...set].map((l) => `- ${l}`).join('\n')}\n`),
+  ].join('\n');
+  fs.mkdirSync('docs', { recursive: true }); // 夹具里可能没有 docs/，清单要跟着产物一起写出来
+  fs.writeFileSync('docs/gloss-gaps.md', md);
+}
 // 混合层实测 193 KB gzip，超出体积预算，且设计里它就是一层噪声：不进包，只出到 data/measured 供人工翻查
 fs.mkdirSync('data/measured', { recursive: true });
 fs.writeFileSync(

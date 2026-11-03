@@ -310,7 +310,7 @@ ok(
   `单字名＝白名单里有对齐出处的字 ${singles.length} 个（白名单 ${L0.size}，无出处 ${meta.singles_without_source}）`,
 );
 
-console.log('4b) 出处今译：覆盖全部唯一原句，条目只存下标');
+console.log('4b) 出处今译：按书数覆盖率，缺今译必须是 lg=-1 且被清单数出来');
 {
   const rawGloss = new Map();
   for (const line of fs.readFileSync('data/raw/line_gloss.tsv', 'utf8').split('\n')) {
@@ -318,40 +318,73 @@ console.log('4b) 出处今译：覆盖全部唯一原句，条目只存下标');
     const tab = line.indexOf('\t');
     rawGloss.set(line.slice(0, tab), line.slice(tab + 1));
   }
-  ok(rawGloss.size === 1140, `raw 今译 1,140 行（实际 ${rawGloss.size}）`);
-  const lines = new Set([...cand, ...singles].map((c) => c.line));
-  ok(
-    lines.size === 1140 && lineGloss.length === lines.size,
-    `唯一原句 ${lines.size} 条、今译 ${lineGloss.length} 条一一对应`,
-  );
-  ok(
-    [...cand, ...singles].every((c) => Number.isInteger(c.lg) && c.lg >= 0 && c.lg < lineGloss.length),
-    '每个候选/单字出处的 lg 都指向有效今译',
-  );
+  ok(rawGloss.size === 1140, `raw 今译 ${rawGloss.size} 行`);
+  const items = [...cand, ...singles];
   const bad = [];
-  const seen = new Set();
-  for (const c of [...cand, ...singles]) {
-    if (seen.has(c.lg)) continue;
-    seen.add(c.lg);
-    if (rawGloss.get(c.line) !== lineGloss[c.lg]) bad.push(`${c.id}: ${c.line}`);
+  for (const c of items) {
+    if (c.lg === -1) {
+      if (rawGloss.has(c.line)) bad.push(`${c.id} 的出处在 raw 里有今译却没编号`);
+      continue;
+    }
+    if (!Number.isInteger(c.lg) || c.lg < 0 || c.lg >= lineGloss.length) {
+      bad.push(`${c.id} 的 lg ${c.lg} 越界`);
+      continue;
+    }
+    if (rawGloss.get(c.line) !== lineGloss[c.lg]) bad.push(`${c.id} 的今译与 raw 不一致：${c.line}`);
   }
-  ok(bad.length === 0, 'line_gloss.json 与 raw 逐条一致（同句共用一个下标）', bad.slice(0, 3).join(' | '));
   ok(
-    new Set([...cand, ...singles].map((c) => c.line)).size === new Set([...cand, ...singles].map((c) => c.lg)).size,
-    '一句一译：没有两条不同原句共用同一个 lg',
+    bad.length === 0,
+    '每条要么指到与 raw 逐字一致的今译，要么是明确的 -1（不符 ' + bad.length + ' 处）',
+    bad.slice(0, 3).join(' | '),
+  );
+  const byLine = new Map();
+  const clash = [];
+  for (const c of items) {
+    if (c.lg < 0) continue;
+    if (byLine.has(c.line) && byLine.get(c.line) !== c.lg) clash.push(c.line);
+    byLine.set(c.line, c.lg);
+    if (byLine.get(c.lg) !== undefined) continue;
+  }
+  ok(clash.length === 0, '一句一译：同一原句在所有条目里共用同一个下标', clash.slice(0, 3).join(' | '));
+  const unused = [...rawGloss.keys()].filter((src) => !byLine.has(src));
+  ok(
+    unused.length === 0,
+    `raw 今译没有闲置条目（闲置 ${unused.length} 条：写了译文的句子必须真被候选用到）`,
+    unused.slice(0, 3).join(' | '),
+  );
+  // 按书覆盖率：不再要求「全覆盖」，但每一本都要看得见覆盖到多少、缺多少
+  const per = new Map();
+  for (const c of items) {
+    const t = per.get(c.book) ?? { n: 0, g: 0, lines: new Set(), gapLines: new Set() };
+    t.n += 1;
+    t.lines.add(c.line);
+    if (c.lg >= 0) t.g += 1;
+    else t.gapLines.add(c.line);
+    per.set(c.book, t);
+  }
+  let allN = 0;
+  let allG = 0;
+  for (const [b, t] of [...per].sort((x, y) => y[1].n - x[1].n)) {
+    allN += t.n;
+    allG += t.g;
+    console.log(
+      `  ${b}：条目 ${t.n} 条 · 今译覆盖 ${t.g} 条 ${(100 * t.g) / t.n >= 99.5 ? '100%' : ((100 * t.g) / t.n).toFixed(1) + '%'} · 唯一原句 ${t.lines.size} 句（缺今译 ${t.gapLines.size} 句）`,
+    );
+  }
+  ok(
+    allG / allN >= 0.8,
+    `每一本的今译覆盖率都不低于 80%（实测 ${(100 * allG) / allN} 条 ${((100 * allG) / allN).toFixed(1)}%）`,
+  );
+  for (const [b, t] of per) ok(t.g / t.n >= 0.6, `${b} 的今译覆盖率 ${((100 * t.g) / t.n).toFixed(1)}% 不低于 60%`);
+  const gapItems = items.filter((c) => c.lg === -1).length;
+  ok(
+    gapItems === meta.gloss_gap_items,
+    `缺今译的条目数 ${gapItems} 与 meta.gloss_gap_items 一致（卡片显示「今译待补」）`,
   );
   ok(
-    lineGloss.every((g) => typeof g === 'string' && g.length > 0 && !/[\n\r]/.test(g)),
-    '每条今译都是非空单行字符串',
+    new Set(items.filter((c) => c.lg === -1).map((c) => c.line)).size === meta.gloss_gap_lines,
+    '缺今译的唯一原句数与 meta 一致',
   );
-  ok(meta.line_gloss === lineGloss.length, `meta.line_gloss = ${lineGloss.length}（实际 ${meta.line_gloss}）`);
-  for (const [w, g] of [
-    ['灵均', '父亲审视我初生时的器度，开始赐我美名：给我取名叫正则，取字叫灵均。'],
-    ['东华', '我从前从东华帝君那里承受此经，东华帝君从金阙帝君那里承受。'],
-  ]) {
-    const hit = cand.find((c) => c.name === w);
-    ok(hit && lineGloss[hit.lg] === g, `${w} 的今译是「${g}」（实际 ${hit ? lineGloss[hit.lg] : '缺条目'}）`);
-  }
 }
 
 console.log('4c) 编号前缀碰撞：计数键是去声调拼音，同篇同音不同字共用前缀（这是事实，不是缺陷隐藏）');

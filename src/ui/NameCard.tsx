@@ -74,6 +74,19 @@ export function Source({ r }: { r: SourceRef }) {
     );
   }
   const at = r.line.indexOf(r.seg);
+  // 今译覆盖不到的句子（lg = -1）明说「待补」，不空着让用户自己猜是没有译文还是渲染坏了
+  const gloss = lineGlossOf(r);
+  const glossBlock = gloss ? (
+    <p className="mt-1.5 border-l-2 border-line pl-2 text-meta text-ink-3">
+      <span className="mr-1 rounded-ctl px-1 text-ink-3">今译</span>
+      {gloss}
+    </p>
+  ) : (
+    <p className="mt-1.5 border-l-2 border-line pl-2 text-meta text-ink-3">
+      <span className="mr-1 rounded-ctl px-1 chip">今译待补</span>
+      这一句原文照引，但还没有现代汉语今译（清单在 docs/gloss-gaps.md，补一行即进包）
+    </p>
+  );
   if (at < 0) {
     return (
       <div className="text-meta text-ink-2">
@@ -81,10 +94,7 @@ export function Source({ r }: { r: SourceRef }) {
         <div className="mt-0.5">
           取词段「<mark className="rounded px-0.5">{r.seg}</mark>」
         </div>
-        <p className="mt-1.5 border-l-2 border-line pl-2 text-meta text-ink-3">
-          <span className="mr-1 rounded-ctl px-1 text-ink-3">今译</span>
-          {lineGlossOf(r)}
-        </p>
+        {glossBlock}
       </div>
     );
   }
@@ -125,10 +135,7 @@ export function Source({ r }: { r: SourceRef }) {
         {gap > 1 && ' · 跨字取词，看原文自辨'}
         {!r.strict && ' · 长短句/散文宽口径'}
       </div>
-      <p className="mt-1.5 border-l-2 border-line pl-2 text-meta text-ink-3">
-        <span className="mr-1 rounded-ctl px-1 text-ink-3">今译</span>
-        {lineGlossOf(r)}
-      </p>
+      {glossBlock}
     </div>
   );
 }

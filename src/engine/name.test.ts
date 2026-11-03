@@ -440,17 +440,29 @@ describe('字义 / 字形 / 多音 / 小名 / 用字常见度', () => {
 });
 
 describe('出处今译', () => {
-  it('每条候选与单字出处都能取到非空今译，且同一句共用一个下标', () => {
+  it('每条出处的今译要么非空、要么是明确的 -1（待补），且同一句共用一个下标', () => {
+    let pending = 0;
     for (const it of [...POOL, ...SINGLES]) {
       expect(Number.isInteger(it.lg)).toBe(true);
+      if (it.lg === -1) {
+        pending += 1; // 界面与导出在这里显示「今译待补」，逐句清单在 docs/gloss-gaps.md
+        continue;
+      }
       expect(lineGlossOf(it).length).toBeGreaterThan(0);
     }
+    expect(pending / (POOL.length + SINGLES.length), '待补占比不得超过两成').toBeLessThan(0.2);
     const byLine = new Map<string, number>();
+    const gapLines = new Set<string>();
     for (const it of [...POOL, ...SINGLES]) {
+      if (it.lg === -1) {
+        gapLines.add(it.line);
+        continue;
+      }
       if (byLine.has(it.line)) expect(it.lg).toBe(byLine.get(it.line));
       else byLine.set(it.line, it.lg);
     }
-    expect(byLine.size).toBe(META.line_gloss);
+    expect(byLine.size).toBe(META.line_gloss); // 有译文的那批：一句一条，共用下标
+    expect(gapLines.size).toBe(META.gloss_gap_lines); // 待补的那批：句数与 meta 记的一致
   });
   it('抽一条核对句意（灵均）', () => {
     const hit = POOL.find((p) => p.name === '灵均')!;
