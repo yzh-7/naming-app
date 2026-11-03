@@ -1,5 +1,5 @@
 // L0 候选字解锁量实测：按「真实边际增量」贪心给候选字排序，并算出保留前 N 行时的准确双名池规模。
-// 口径与 build-data 完全一致（六本、音步起点、同句读内间隔≤3、虚词/忌讳/高频/现代成词四道减法、叠词粘连与假叠字剔除）。
+// 口径与 build-data 完全一致（七本、音步起点、同句读内间隔≤3、虚词/忌讳/高频/现代成词四道减法、叠词粘连与假叠字剔除）。
 // 配对按「有几个字不在种子表内」分类：0 个已在池、1 个选中该字即得（含两字相同的自配）、2 个要两字都选中才得。
 // 早期版本只统计新字×种子字，把四万多条新×新漏在账外，累计池系统性偏低。
 // node scripts/l0-unlock.mjs
@@ -40,6 +40,18 @@ const BAD = new Set(
     .split('')
     .filter((c) => WH1.has(c)),
 );
+// 真实姓名语料（第 1 期登记的 data/raw/cnname_given.json）与高频现代词表：候选字的两条旁证
+const GIVEN = json('cnname_given.json');
+const HIGH = new Set(JSON.parse(fs.readFileSync('src/data/risk.json', 'utf8')).high);
+// 功能字／泛指字／负面字：真名语料里常见、典籍里挨着的字也多，但它们拼出来的名字不像名字。
+// 这份名单承 0.4.0 那次人工判定（l0-verdicts.txt 的注释里写过同一批字），只是从「直接排除」改成
+// 「留在表里但建议剔除」，让你看得见它们凭什么排前面。
+const GENERIC = new Set(
+  '无人上一日自未来时好去处空千尽似见相高下此又里几年过多故旧将路事成难能得三重谁问正犹已莫道黄小门入从吾既大曾余前万使今初老新暗闲度闻渐声身朝暮满到外十王四方其或亦尔'.split(
+    '',
+  ),
+);
+const NEG = new Set('愁恨断残乱离怨孤独死苦泪哭亡灭败伤痛悲惊怖惧惨'.split(''));
 const wf = new Map();
 for (const line of read('jieba_dict.txt').split('\n')) {
   const p = line.split(' ');
@@ -71,9 +83,11 @@ const BOOKS = [
   { key: 'shuimo', strictMeter: true },
   { key: 'song300', strictMeter: false },
   { key: 'daofa', strictMeter: false },
+  // 乐府是 0.3.0 才加进来的一本；音步规则与诗经/水陌同（build-data 的 offsets 也这么配）
+  { key: 'yuefu', strictMeter: true },
 ];
 const offsets = (book, n) => {
-  if (book === 'shijing' || book === 'shuimo')
+  if (book === 'shijing' || book === 'shuimo' || book === 'yuefu')
     return { 4: [0, 2], 5: [0, 2], 7: [0, 2, 4] }[n] ?? [...Array(n - 1).keys()];
   if (book === 'chuci') return { 4: [0, 2], 5: [0, 3], 7: [0, 2, 4] }[n] ?? [...Array(n - 1).keys()];
   return [...Array(n - 1).keys()];
@@ -186,7 +200,9 @@ let bothNew = 0;
 for (const p of clean) {
   if (!SEED.has(p[0]) && !SEED.has(p[1])) bothNew++;
 }
-const candChars = [...new Set([...onePairs.keys(), ...adj.keys()])].filter((c) => WH1.has(c));
+// 候选范围从「只有一级字表」放宽到一二三级字表：初版保守地把候选限定在一级字表，
+// 可用户点名的那类字（舒 薇 穆 琬 琰 晏 扶 摇）恰恰都在二级以后 —— 新意卡在这道门上，不是卡在配对里。
+const candChars = [...new Set([...onePairs.keys(), ...adj.keys()])].filter((c) => WH123.has(c));
 
 // 贪心：每一步选「真实边际增量最大」的字。增量＝它单独解锁的配对 + 与已选字互相配到的新×新配对。
 const chosen = new Set();
@@ -216,7 +232,8 @@ for (;;) {
     } else ready.set(d, (ready.get(d) ?? 0) + 1);
   }
   pool += best.gain;
-  ranked.push({ c: best.c, gain: best.gain, size: pool, brought });
+  // real ＝ 它解锁的名字里，有多少条在 120 万真实姓名语料里真有人用过（「新意」的旁证）
+  ranked.push({ c: best.c, gain: best.gain, size: pool, brought, real: brought.filter((w) => w in GIVEN).length });
 }
 console.log(
   `候选字 ${candChars.length} 个（其中 ${ranked.length} 个能带来新增配对）｜两字皆新的配对 ${bothNew} 条（要两个字同时入表才拿得到）\n`,
@@ -252,7 +269,54 @@ for (const r of ranked.slice(40, 120)) {
 
 // ---- 交付物：候选字待审表（人工逐字判定用）。数据全部来自上面的实测，不另立口径。 ----
 const RADICAL = JSON.parse(fs.readFileSync('src/data/radical.json', 'utf8'));
-const TOP = 150;
+const realStat = new Map();
+for (const [name, rec] of Object.entries(GIVEN)) {
+  for (const ch of new Set([...name])) {
+    const st = realStat.get(ch) ?? { n: 0, max: 0, top: '' };
+    st.n += 1;
+    if (rec[0] > st.max) {
+      st.max = rec[0];
+      st.top = name;
+    }
+    realStat.set(ch, st);
+  }
+}
+// 建议只按三条实测给方向，最终由人拍板：
+//   留＝真名里常见（含此字的双字名 ≥40 个、最高那次 ≥40 人）且解锁 ≥25 条、撞高频词 ≤1 条
+//   慎＝解锁 <20 条，或它带来的名字里 ≥2 条撞高频现代词，或真名里完全见不到这个字
+//   看＝其余（值得看样例再定）
+const advice = (r, st, risk) => {
+  const rn = st ? st.n : 0;
+  const mx = st ? st.max : 0;
+  if (GENERIC.has(r.c))
+    return {
+      adv: '慎',
+      why: `功能字／泛指字：解锁 ${r.gain} 条多是「一富、自基、日烈」这一类不像名字的拼法，真名里常见是因为它是常用字而不是因为它适合做名字`,
+    };
+  if (NEG.has(r.c))
+    return { adv: '慎', why: `负面字：解锁 ${r.gain} 条，但它带来的名字带着${r.c}的语义（愁／恨／残／乱这一类）` };
+  if (r.gain < 20 || risk >= 2 || rn === 0) {
+    const why = [
+      r.gain < 20 ? `只解锁 ${r.gain} 条` : '',
+      risk >= 2 ? `带来的名字里 ${risk} 条本身就是高频现代词` : '',
+      rn === 0 ? '真实姓名语料里没见过这个字' : '',
+    ]
+      .filter(Boolean)
+      .join('；');
+    return { adv: '慎', why: `${why}。真名侧：含此字的双字名 ${rn} 个${st ? `（最常见 ${st.top} ${mx} 次）` : ''}` };
+  }
+  if (rn >= 40 && mx >= 40 && r.gain >= 25 && risk <= 1) {
+    return {
+      adv: '留',
+      why: `真名里常见（含此字的双字名 ${rn} 个，最常见 ${st.top} ${mx} 次）；解锁 ${r.gain} 条${risk ? `；撞高频现代词 ${risk} 条` : ''}`,
+    };
+  }
+  return {
+    adv: '看',
+    why: `解锁 ${r.gain} 条；真名侧含此字的双字名 ${rn} 个${st ? `（最常见 ${st.top} ${mx} 次）` : ''}${risk ? `；撞高频现代词 ${risk} 条` : ''}`,
+  };
+};
+const TOP = 120;
 const top = ranked.slice(0, TOP);
 const rows = top.map((r) => ({
   c: r.c,
@@ -263,6 +327,12 @@ const rows = top.map((r) => ({
   any: charAny.get(r.c) ?? 0,
   wf: wf.get(r.c) ?? 0,
   el: RADICAL[r.c] ?? '',
+  rn: realStat.get(r.c)?.n ?? 0,
+  rnMax: realStat.get(r.c)?.max ?? 0,
+  rnTop: realStat.get(r.c)?.top ?? '',
+  risk: r.brought.filter((w) => HIGH.has(w)).length,
+  real: r.real,
+  ...advice(r, realStat.get(r.c), r.brought.filter((w) => HIGH.has(w)).length),
 }));
 const cum = top.map((r) => r.size);
 // 表内字两两互相配到的「新×新」边：页面上的实时池要靠它才算准（表外的字这张表给不了，不计）
@@ -355,6 +425,7 @@ const html = `<!DOCTYPE html>
  .keep td{background:#f0fdf4} .drop td{background:#fef2f2;color:#a3a3a3} .drop .eg{visibility:hidden}
  .mark td{background:#eef2ff;color:#3730a3;font-size:12px;padding:5px 8px;border-bottom:1px solid #c7d2fe;font-weight:600}
  textarea{width:100%;height:110px;font-family:ui-monospace,monospace;font-size:12px;margin-top:8px;display:none}
+ .adv{font-size:11px;color:#404040;line-height:1.6;max-width:30ch}
  .hint{font-size:12px;color:#737373;margin-top:6px;line-height:1.8}
 </style></head><body><main>
  <h1>L0 候选字待审表——加哪些字进名用字白名单</h1>
@@ -372,9 +443,10 @@ const html = `<!DOCTYPE html>
  </div>
  <table><thead><tr>
   <th>#</th><th>字</th><th class="num">本字新增</th><th class="num">累计真池</th><th class="num">典籍音步次数</th>
-  <th class="num">现代字频</th><th>部首</th><th>它带来的名字（前 12 条）</th><th>判定</th>
+  <th class="num">现代字频</th><th class="num">解锁的真名</th><th class="num">含此字真名</th><th>部首</th><th>它带来的名字（前 12 条）</th><th>我的建议与理由</th><th>判定</th>
  </tr></thead><tbody id="tb"></tbody></table>
- <div class="hint">点字可切换 待判→保留→剔除；判定按<b>字</b>存在本机浏览器里（不按行序），重新生成这张表不会让已存的判定错位，但换电脑不带走。<br>
+ <div class="hint">「我的建议与理由」只是按三条实测给的方向（留＝真名常见＋解锁多＋不撞高频词；慎＝解锁少、撞高频词、或真名里根本见不到），<b>最终由你逐字拍板</b>，同一行右侧的判定才是结论。<br>
+ 点字可切换 待判→保留→剔除；判定按<b>字</b>存在本机浏览器里（不按行序），重新生成这张表不会让已存的判定错位，但换电脑不带走。<br>
  「累计真池」＝这一行以上（含本行）全部保留时的双名条数；上方的实时数按你实际勾选的集合算，含「两个新字互相配对」，所以勾得不连续也准。<br>
  判完点「复制判定结果」把那一串字交回给我，我按它重建 L0、跑完整门禁、重出交付物。<br>
  另有 ${bothNew.toLocaleString()} 条配对是「两个字都不在表内」，其中另一端不在这 ${TOP} 行之内的，本表拿不到——这部分要再加字才有。</div>
@@ -384,7 +456,7 @@ const html = `<!DOCTYPE html>
 const D=${data};
 const KEY='l0-review-v2';
 const tb=document.getElementById('tb');
-const mk=(n,s)=>\`<tr class="mark"><td colspan="9">—— 到这里为止保留前 \${n} 行：双名约 \${D.cum[n-1].toLocaleString()} 条＋单名 \${s} 条＝\${(D.cum[n-1]+s).toLocaleString()} 个可用名 ——</td></tr>\`;
+const mk=(n,s)=>\`<tr class="mark"><td colspan="12">—— 到这里为止保留前 \${n} 行：双名约 \${D.cum[n-1].toLocaleString()} 条＋单名 \${s} 条＝\${(D.cum[n-1]+s).toLocaleString()} 个可用名 ——</td></tr>\`;
 tb.innerHTML=D.rows.map((r,i)=>{
  const m=i+1===D.need1000?mk(D.need1000,D.s1000):i+1===D.need2900?mk(D.need2900,D.s2900):'';
  return \`<tr data-c="\${r.c}">
@@ -392,8 +464,11 @@ tb.innerHTML=D.rows.map((r,i)=>{
  <td><span class="zi" title="点击切换判定">\${r.c}</span></td>
  <td class="num">+\${r.gain}</td><td class="num">\${D.cum[i].toLocaleString()}</td>
  <td class="num">\${r.foot}</td><td class="num">\${r.wf.toLocaleString()}</td>
+ <td class="num">\${r.real}</td>
+ <td class="num">\${r.rn.toLocaleString()}\${r.rnMax ? \`（最多 \${r.rnTop} \${r.rnMax}）\` : ''}</td>
  <td>\${r.el?\`<span class="el">\${r.el}部</span>\`:'<span style="color:#d4d4d4">—</span>'}</td>
  <td class="eg">\${r.pairs.slice(0,12).map(p=>'<span>'+p+'</span>').join('')}</td>
+ <td class="adv"><b>\${r.adv}</b><br>\${r.why}</td>
  <td><select class="v"><option value="">待判</option><option value="keep">保留</option><option value="drop">剔除</option></select></td>
 </tr>\${m}\`;
 }).join('');
@@ -434,4 +509,90 @@ upd();
 </script></body></html>`;
 const OUTDESKTOP = path.join(process.env.HOME ?? '', 'Desktop', 'L0-候选字待审表.html');
 fs.writeFileSync(OUTDESKTOP, html);
+// ---- 第三个视角：按「像名字」挑的雅字 ----
+// 前两张表都指向同一个结论：典籍邻接与真实用名频次这两条证据都奖励常用字（中军、国强、一德这一类），
+// 用户要的「新意」（望舒／采薇／穆如／陆离）在这两条线上都排不到前面——那些字在真实姓名语料里
+// 使用次数接近零，只能按审美挑。所以这一份是我按字面气质挑的 44 个候选，附它们解锁的实际配对，
+// 让你按「拼出来的名字能不能用」判，而不是按频次判。
+const CURATED =
+  '舒薇穆如采陆摇扶晏琬琰瑜瑾珩澈泓砚笙弦澜溪屿笛箫琴书墨笔砚舟帆岸汀洲露霜雪梅竹松鹤鸾凤云霞晖曦晨昏晴岚峰峦岩涧泉溪涯'.split(
+    '',
+  );
+const curated = CURATED.filter((c) => WH123.has(c) && !SEED.has(c));
+console.log(`\n雅字视角（我挑的 ${CURATED.length} 个里，${curated.length} 个是候选、其余已在表内）：`);
+for (const c of curated) {
+  const pairs = (onePairs.get(c) ?? []).slice(0, 10).join(' ');
+  console.log(`  ${c} 解锁 ${(onePairs.get(c) ?? []).length} 条｜${pairs}`);
+}
+const mdCurated = [
+  '## 第三个视角：按「像名字」挑的 44 个雅字（我的审美选择）',
+  '',
+  '前两张表暴露的是同一件事：**典籍邻接和真实用名频次都奖励常用字**（中军、国强、一德这一类）。你点名的望舒／采薇／穆如／陆离在这两条线上都排不到前面——这类字在真实姓名语料里使用次数接近零，**频次证据帮不上忙，只能按字面气质挑**。下面这一份是我挑的候选（只列不在表内的），「解锁」是它单独入表能新增的双名条数，样例是实际拼出来的名字（另一端必须已在表内）。',
+  '',
+  '| 字 | 解锁 | 拼出来的名字（前 12 条） | 你的判定 |',
+  '|---|---|---|---|',
+  ...curated.map(
+    (c) =>
+      `| **${c}** | ${(onePairs.get(c) ?? []).length} | ${(onePairs.get(c) ?? []).slice(0, 12).join('、') || '—（另一端字也不在表内，要两个字一起加）'} |  |`,
+  ),
+  '',
+  '解锁 0 条的那几个字（如、瑜、瑾、珩、昏）不是没价值，是**另一端字也不在表内**：「穆如」「晏如」要 如 与另一端一起进表才拼得出来。判的时候可以成对勾（舒 已能配 望／风／月；陆＋离 要一起勾才出「陆离」），我按你勾的字重建 L0 后会把你点名的词逐一核对能不能真拼出来、出处落在哪一句。',
+  '',
+].join('\n');
+
+// 同一份数据再出一份 Markdown：不在浏览器里判的人（包括我自己后续核对）看这一份。
+// 「你的判定」一列留空给你填：填 留 / 剔 / 看 都行，把填好的这份交回来即可。
+const MD = path.join('docs', 'l0-待判表.md');
+const md = [
+  '# L0 待判表（120 个候选字）',
+  '',
+  '这份表由 `node scripts/l0-unlock.mjs` 生成，数据全部来自实测，不另立口径。生成时间见 git 记录。',
+  '',
+  '**它在决定什么**：名用字白名单（L0，现 293 字）加哪些字。加一个字，典籍里与它挨着、另一端已在表内的搭配就全部进池——这是「名字数量」和「新意」共同的杠杆，也是唯一需要人拍板的一环。',
+  '',
+  '**列的口径**：',
+  '- 本字新增＝在它上面那些字都已保留的前提下，这个字多带来多少条双名（含两个新字互相配对的部分）。',
+  '- 累计双名＝从上往下连续保留到这一行时的双名条数（现在 1,525 条）。单名另算，见 HTML 表里的里程碑行。',
+  '- 含此字真名＝120 万条真实姓名语料里，含这个字的双字名有多少个；括号里是其中最常见的那个及其人数。',
+  '- 撞高频词＝它带来的名字里，有多少条本身就是现代高频词（名字读起来像个普通名词，例如「天气」「时间」这一类）。',
+  '',
+  '**「我的建议」只是方向，不是结论**：留＝真名里常见（含此字双字名 ≥40 个、最常见那个 ≥40 人）＋解锁 ≥25 条＋撞高频词 ≤1 条；慎＝解锁 <20 条，或 ≥2 条撞高频词，或真名语料里根本没见过这个字；看＝其余。「你的判定」一列由你填（留 / 剔 / 看），填完整份交回来，我据此写进 `data/raw/l0-verdicts.txt` 并重跑全部门禁。',
+  '',
+  '| # | 字 | 我的建议 | 理由 | 本字新增 | 累计双名 | 解锁的真名 | 含此字真名 | 撞高频词 | 带来的名字（前 8 条） | 你的判定 |',
+  '|---|---|---|---|---|---|---|---|---|---|---|',
+  ...rows.map((r, i) => {
+    const eg = r.pairs.slice(0, 8).join('、') || '—';
+    const real = r.rn ? `${r.rn}（${r.rnTop} ${r.rnMax}）` : '0';
+    return `| ${i + 1} | **${r.c}** | ${r.adv} | ${r.why} | +${r.gain} | ${cum[i].toLocaleString('en-US')} | ${r.real} | ${real} | ${r.risk} | ${eg} |  |`;
+  }),
+  '',
+  `共 ${rows.length} 个候选字；榜首若全部保留，双名从 1,525 条涨到 ${cum[rows.length - 1].toLocaleString('en-US')} 条。`,
+  '',
+  '## 换个排序：按「解锁的真名」看前 40 个字',
+  '',
+  '上面那张表按边际增量排，排前面的是「在典籍里挨着的字多」，也就是常用字与功能字——这解释了为什么它看起来没有新意。这张按**它解锁的名字里有多少条真有人用过**排，才是「新意」那一条线。两个字都需要的配对（例如 望舒 要 望 与 舒 都入表）在这里看单个字看不全，所以它只作方向。',
+  '',
+  '| # | 字 | 解锁的真名 | 本字新增 | 我的建议 | 解锁的真名里前 8 条 |',
+  '|---|---|---|---|---|---|',
+  ...[...ranked]
+    .sort((a, b) => b.real - a.real || b.gain - a.gain)
+    .slice(0, 40)
+    .map((r, i) => {
+      const st = realStat.get(r.c);
+      const eg =
+        r.brought
+          .filter((w) => w in GIVEN)
+          .slice(0, 8)
+          .join('、') || '—';
+      const ad = advice(r, st, r.brought.filter((w) => HIGH.has(w)).length);
+      return `| ${i + 1} | **${r.c}** | ${r.real} | +${r.gain} | ${ad.adv} | ${eg} |`;
+    }),
+  '',
+  '顺序按真实边际增量排，**不代表前面的更好**：排前面只说明它在典籍里挨着的字多。',
+  '',
+  ...mdCurated.split('\n'),
+].join('\n');
+fs.writeFileSync(MD, md);
+console.log(`\nMarkdown 待判表已写 ${MD}（${rows.length} 行）`);
+
 console.log(`\n待审表已写 ${OUTDESKTOP}（${(Buffer.byteLength(html) / 1024).toFixed(0)} KB，前 ${TOP} 个候选字）`);
