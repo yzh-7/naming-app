@@ -3,6 +3,7 @@ import singlesJson from '../data/singles.json';
 import realNamesJson from '../data/realnames.json';
 import charsJson from '../data/chars.json';
 import whitelistJson from '../data/whitelist-L0.json';
+import sourcesJson from '../data/sources.json';
 import homophoneJson from '../data/homophone.json';
 import riskJson from '../data/risk.json';
 import genderJson from '../data/gender.json';
@@ -29,49 +30,137 @@ const BOOKS = new Set<string>(BOOK_ORDER);
 // （实测同一份数据，删掉这个字段 91,428 → 83,478 B）。加载时由 name 展开，运行时的 PoolItem
 // 形状不变，取词、打分、界面都不用改。自检仍然逐条校验 name 是两个字——存不出 chars 不等于
 // 可以少一个校验：字数的口径在这里守着。
+// 共享表：原句、篇名（含 id 里的书码与拼音）、今译下标。产物里每条候选只存下标。
+type SourceTitle = { bk: string; code: string; t: string; au: string; slug: string; st: boolean };
+type SourceLine = { s: string; g: number };
+function asSources(v: unknown): { titles: SourceTitle[]; lines: SourceLine[] } {
+  if (!isObj(v) || !Array.isArray(v.titles) || !Array.isArray(v.lines)) fail('sources 不是 { titles, lines }');
+  const titles = v.titles.map((x, i) => {
+    if (
+      !isObj(x) ||
+      !isStr(x.bk) ||
+      !BOOKS.has(x.bk) ||
+      !isStr(x.code) ||
+      !isStr(x.t) ||
+      !isStr(x.au) ||
+      !isStr(x.slug) ||
+      typeof x.st !== 'boolean'
+    )
+      fail(`sources.titles[${i}] 结构不符`);
+    return x as unknown as SourceTitle;
+  });
+  const lines = v.lines.map((x, i) => {
+    if (!isObj(x) || !isStr(x.s) || !isNum(x.g)) fail(`sources.lines[${i}] 结构不符`);
+    return x as unknown as SourceLine;
+  });
+  if (!titles.length || !lines.length) fail('sources 表是空的');
+  return { titles, lines };
+}
+const SOURCES = asSources(sourcesJson);
+
+// 取词段在产物里是「起始下标 + 长度」（拆词那几条不是连续子串，原样存 sg）
+const segOf = (line: string, it: Record<string, unknown>, where: string): string => {
+  const so = it.so;
+  const sn = it.sn;
+  if (!isNum(so) || !isNum(sn)) fail(`${where} 缺少取词段位置`);
+  if (so === -1) {
+    if (!isStr(it.sg)) fail(`${where} 的取词段不是连续子串却没存原文`);
+    return it.sg;
+  }
+  if (so < 0 || sn < 1 || so + sn > line.length) fail(`${where} 的取词段下标越界`);
+  return line.slice(so, so + sn);
+};
+
+// id 不在产物里存整串，由 层＋书码＋篇名拼音＋名字拼音＋序号 逐字重建：
+// 收藏、拉黑、分享链接里那些 id 因此一个都没变。
+const idOf = (title: SourceTitle, ns: string, sq: number, prefix = ''): string =>
+  `${prefix}B${title.code}_${title.slug}_${ns}_${String(sq).padStart(3, '0')}`;
+
 function asPool(v: unknown, what: string): PoolItem[] {
   const out: PoolItem[] = [];
   for (const it of isArr(v)) {
     if (
       !isObj(it) ||
-      !isStr(it.id) ||
       !isStr(it.name) ||
       [...it.name].length !== 2 ||
-      'chars' in it ||
-      !isStr(it.book) ||
-      !BOOKS.has(it.book) ||
-      !isStr(it.title) ||
-      !isStr(it.line) ||
+      !isNum(it.ti) ||
+      !isNum(it.li) ||
+      !isStr(it.ns) ||
+      !isNum(it.sq) ||
       !isNum(it.foot) ||
       !isNum(it.gap) ||
-      typeof it.strict !== 'boolean' ||
-      !isNum(it.lg)
+      !isNum(it.score) ||
+      ['id', 'chars', 'book', 'title', 'author', 'line', 'seg', 'tier', 'strict', 'lg'].some((k) => k in it)
     ) {
-      fail(`${what} 有结构不符的条目`);
+      fail(`${what} 有结构不符的条目（可共享或可推导的字段不许直接存）`);
     }
-    out.push({ ...(it as unknown as PoolItem), chars: [...(it as unknown as { name: string }).name] });
+    const title = SOURCES.titles[it.ti];
+    const line = SOURCES.lines[it.li];
+    if (!title || !line) fail(`${what} 里的「${it.name}」共享表下标越界`);
+    const text = line.s;
+    out.push({
+      ...(it as unknown as Omit<
+        PoolItem,
+        'id' | 'chars' | 'book' | 'title' | 'author' | 'line' | 'seg' | 'tier' | 'strict' | 'lg'
+      >),
+      id: idOf(title, it.ns, it.sq),
+      chars: [...it.name],
+      tier: 'B',
+      book: title.bk as PoolItem['book'],
+      title: title.t,
+      author: title.au,
+      line: text,
+      seg: segOf(text, it, `${what} 里的「${it.name}」`),
+      foot: it.foot,
+      gap: it.gap,
+      score: it.score,
+      strict: title.st,
+      lg: line.g,
+    });
   }
   return out;
 }
 
 function asSingles(v: unknown): SingleItem[] {
+  const out: SingleItem[] = [];
   for (const it of isArr(v)) {
     if (
       !isObj(it) ||
-      !isStr(it.id) ||
       !isStr(it.char) ||
+      [...it.char].length !== 1 ||
       !isStr(it.from) ||
-      !isStr(it.book) ||
-      !BOOKS.has(it.book) ||
-      !isStr(it.line) ||
+      !isNum(it.ti) ||
+      !isNum(it.li) ||
+      !isStr(it.ns) ||
+      !isNum(it.sq) ||
       !isNum(it.foot) ||
-      !isNum(it.gap) ||
-      !isNum(it.lg)
+      !isNum(it.score) ||
+      ['id', 'book', 'title', 'author', 'line', 'seg', 'gap', 'strict', 'lg'].some((k) => k in it)
     ) {
-      fail('singles 有结构不符的条目');
+      fail('singles 有结构不符的条目（可共享或可推导的字段不许直接存）');
     }
+    const title = SOURCES.titles[it.ti];
+    const line = SOURCES.lines[it.li];
+    if (!title || !line) fail(`singles 里的「${it.char}」共享表下标越界`);
+    out.push({
+      ...(it as unknown as Omit<
+        SingleItem,
+        'id' | 'book' | 'title' | 'author' | 'line' | 'seg' | 'gap' | 'strict' | 'lg'
+      >),
+      // 单字名的 id 一直是「S_＋出处双名的 id」，所以出处那一条的序号也从产物里来，重建后逐字不变
+      id: idOf(title, it.ns, it.sq, 'S_'),
+      book: title.bk as SingleItem['book'],
+      title: title.t,
+      author: title.au,
+      line: line.s,
+      seg: segOf(line.s, it, `singles 里的「${it.char}」`),
+      foot: it.foot,
+      gap: 0, // 单字名没有「间隔几个字」这一说：它取自出处双名的那个字位
+      strict: title.st,
+      lg: line.g,
+    });
   }
-  return v as SingleItem[];
+  return out;
 }
 
 // 白名单与带调写法都不进 chars.json：前者是 whitelist-L0.json 那一份名单，后者是 py + t 的纯函数
@@ -153,6 +242,9 @@ const META_KEYS = [
   'line_gloss',
   'gloss_gap_items',
   'gloss_gap_lines',
+  'src_titles',
+  'src_lines',
+  'src_lines_gap',
   'real_tier',
   'real_tier_genders',
   'pool_real_named',
@@ -183,6 +275,10 @@ type Meta = {
   // 今译覆盖的缺口：条目数与唯一原句数（界面在这些位置显示「今译待补」，逐句清单 docs/gloss-gaps.md）
   gloss_gap_items: number;
   gloss_gap_lines: number;
+  // 共享表规模：篇名条目数、共享原句条数、其中还没有今译的句子数
+  src_titles: number;
+  src_lines: number;
+  src_lines_gap: number;
   given_freq_chars: number;
   // 真实用名证据：这名字在 120 万真实姓名语料里出现过多少次、上游标什么性别（口径见 derive-cnname-given.mjs）
   real_tier: number;

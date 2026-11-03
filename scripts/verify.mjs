@@ -84,8 +84,31 @@ ok(
 const meta = JSON.parse(fs.readFileSync(`${OUT}/meta.json`, 'utf8'));
 const L0 = new Set(JSON.parse(fs.readFileSync(`${OUT}/whitelist-L0.json`, 'utf8')));
 const risk = JSON.parse(fs.readFileSync(`${OUT}/risk.json`, 'utf8'));
-const cand = JSON.parse(fs.readFileSync(`${OUT}/candidates.json`, 'utf8'));
-const singles = JSON.parse(fs.readFileSync(`${OUT}/singles.json`, 'utf8'));
+const SRC = JSON.parse(fs.readFileSync(`${OUT}/sources.json`, 'utf8'));
+// 产物里每条候选只存「共享表下标＋自己独有的字段」：原句、篇名、id 都在 sources.json 那张表上。
+// 这里独立展开一遍（与 src/engine/data.ts 各自的实现），下面所有规模／出处／id 断言都读展开后的条目。
+const pad3 = (n) => String(n).padStart(3, '0');
+function expandItem(c, prefix) {
+  const t = SRC.titles[c.ti];
+  const l = SRC.lines[c.li];
+  if (!t || !l) throw new Error(`产物里的共享表下标越界：${c.name ?? c.char}`);
+  if (prefix === 'S_' && c.gap !== undefined) throw new Error(`单字名不该再存 gap：${c.char}`);
+  return {
+    ...c,
+    id: `${prefix}B${t.code}_${t.slug}_${c.ns}_${pad3(c.sq)}`,
+    tier: 'B',
+    book: t.bk,
+    title: t.t,
+    author: t.au,
+    line: l.s,
+    seg: c.so === -1 ? c.sg : l.s.slice(c.so, c.so + c.sn),
+    gap: prefix === 'S_' ? 0 : c.gap,
+    strict: t.st,
+    lg: l.g,
+  };
+}
+const cand = JSON.parse(fs.readFileSync(`${OUT}/candidates.json`, 'utf8')).map((c) => expandItem(c, ''));
+const singles = JSON.parse(fs.readFileSync(`${OUT}/singles.json`, 'utf8')).map((c) => expandItem(c, 'S_'));
 const lineGloss = JSON.parse(fs.readFileSync(`${OUT}/line_gloss.json`, 'utf8'));
 const names = new Set(cand.map((c) => c.name));
 

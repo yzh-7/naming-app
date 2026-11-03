@@ -729,15 +729,97 @@ const meta = {
   pool_split: candidates.filter((c) => c.spl).length,
 };
 const write = (name, data) => fs.writeFileSync(path.join(OUT, name), JSON.stringify(data) + '\n');
+
+// ── 编码：可共享的与可推导的都不重复存（DESIGN.md 1.3.1）────────────────────────
+// candidates.json 里 31.0 KB gzip 是原句、15.7 KB 是 id、10.6 KB 是篇名与作者、6.7 KB 是取词段。
+// 这三样在同一条句读／同一篇作品上重复出现，所以集中成两张共享表（sources.json），
+// 每条记录只留下「表下标 ＋ 自己独有的字段」。id 不在产物里存整串，但它可由
+// 层＋书码＋篇名拼音＋名字拼音＋序号逐字重建：收藏、拉黑、分享链接里的 id 因此不变。
+if (candidates.some((c) => c.tier !== 'B')) throw new Error('双名层的 tier 不再是全 B，id 推导要一起改');
+const titleTable = [];
+const titleIndex = new Map();
+const lineTable = [];
+const lineIndex = new Map();
+const titleSlot = (c) => {
+  const k = `${c.book}\u0000${c.title}\u0000${c.author}`;
+  let i = titleIndex.get(k);
+  if (i === undefined) {
+    i = titleTable.length;
+    titleIndex.set(k, i);
+    titleTable.push({
+      bk: c.book,
+      code: BOOKS.find((b) => b.key === c.book).code,
+      t: c.title,
+      au: c.author,
+      slug: ascii(c.title),
+      st: BOOK_STRICT[c.book], // 严格诗体（音步起点）随篇名存一次，不在每条候选上重复
+    });
+  }
+  return i;
+};
+const lineSlot = (line, lg) => {
+  let i = lineIndex.get(line);
+  if (i === undefined) {
+    i = lineTable.length;
+    lineIndex.set(line, i);
+    lineTable.push({ s: line, g: lg ?? -1 });
+  } else if (lineTable[i].g !== (lg ?? -1)) {
+    throw new Error(`同一句的今译下标不一致：${line}`);
+  }
+  return i;
+};
+const idSeq = (id) => {
+  const m = /^(.+)_(\d{3})$/.exec(id);
+  if (!m) throw new Error(`id 形状不认识：${id}`);
+  return Number(m[2]);
+};
+const segSlot = (c, line) => {
+  const at = line.indexOf(c.seg);
+  return at >= 0 ? { so: at, sn: c.seg.length } : { so: -1, sn: 0, sg: c.seg }; // 取词段不是连续子串时（拆词的那几条）原样存
+};
+const compactPair = (c) => {
+  const li = lineSlot(c.line, c.lg);
+  const out = {
+    name: c.name,
+    ti: titleSlot(c),
+    li,
+    ...segSlot(c, c.line),
+    ns: ascii(c.name),
+    sq: idSeq(c.id),
+    foot: c.foot,
+    gap: c.gap,
+    score: c.score,
+  };
+  for (const k of ['a', 'w', 'spl', 'redup', 'famous', 'risk', 'rn', 'rs']) if (c[k] !== undefined) out[k] = c[k];
+  return out;
+};
+const compactSingle = (c) => {
+  const li = lineSlot(c.line, c.lg);
+  const out = {
+    char: c.char,
+    from: c.from,
+    ti: titleSlot(c),
+    li,
+    ...segSlot(c, c.line),
+    ns: ascii(c.from),
+    sq: idSeq(c.id.slice(2)), // 单字名的 id 是 S_＋出处双名的 id
+    foot: c.foot,
+    score: c.score,
+  };
+  if (c.famous) out.famous = true;
+  return out;
+};
 // 产物里不存 chars：双名的 chars 恒等于 name 拆字，1,525 条存下来实测多花 7,951 B gzip
 // （91,428 → 83,478 B）。运行时由 src/engine/data.ts 从 name 展开，形状不变。
-write(
-  'candidates.json',
-  // JSON.stringify 会丢掉值为 undefined 的键，所以置空就等于不存这个字段
-  candidates.map((c) => ({ ...c, chars: undefined })),
-);
+write('candidates.json', candidates.map(compactPair));
 
-write('singles.json', singles);
+write('singles.json', singles.map(compactSingle));
+
+// 两张共享表要在候选与单名都填完之后才写得出内容
+write('sources.json', { titles: titleTable, lines: lineTable });
+meta.src_titles = titleTable.length; // 产物里的篇名条目数（545 篇 vs 1,660 条双名）
+meta.src_lines = lineTable.length; // 共享原句表条数
+meta.src_lines_gap = lineTable.filter((l) => l.g === -1).length; // 其中还没有今译的句子数
 write('realnames.json', realNames);
 write('chars.json', chars);
 write('homophone.json', homophone);
@@ -801,6 +883,7 @@ const SHIPPED = [
   'radical.json',
   'gloss.json',
   'line_gloss.json',
+  'sources.json',
 ];
 // 只记未压缩字节数：gzip 结果和压缩器版本有关，写进包体会让构建不可复现（体积门槛由 size-check 现算，不进包）
 meta.ship_bytes = Object.fromEntries(SHIPPED.map((f) => [f, fs.statSync(path.join(OUT, f)).size]));
