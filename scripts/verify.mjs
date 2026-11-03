@@ -538,12 +538,12 @@ console.log('4f) 真实人名档：来源独立、与派生表一致、跨层不
     if (t < 5) return undefined;
     return rec[1] / t >= 0.8 ? 'm' : rec[2] / t >= 0.8 ? 'f' : 'n';
   };
-  // 独立重算这一档的入选集合：次数 40～600、两字都在白名单内、不与候选池重名
+  // 独立重算这一档的入选集合：次数 10～600、两字都在白名单内、不与候选池重名
   const poolNames = new Set(cand.map((c) => c.name));
   const want = new Map();
   for (const [name, rec] of Object.entries(T)) {
     if (name.length !== 2 || poolNames.has(name)) continue;
-    if (rec[0] < 40 || rec[0] > 600) continue;
+    if (rec[0] < 10 || rec[0] > 600) continue;
     if (![...name].every((ch) => L0.has(ch))) continue;
     want.set(name, rec);
   }
@@ -558,7 +558,7 @@ console.log('4f) 真实人名档：来源独立、与派生表一致、跨层不
   let withSide = 0;
   for (const it of real) {
     const rec = want.get(it.name);
-    if (!rec) bad.push(`${it.name} 不该入选（不在派生表的 40～600 段或用了白名单外的字或与候选池重名）`);
+    if (!rec) bad.push(`${it.name} 不该入选（不在派生表的 10～600 段或用了白名单外的字或与候选池重名）`);
     if (seen.has(it.name)) bad.push(`${it.name} 在本档内重复`);
     seen.add(it.name);
     if (poolNames.has(it.name)) bad.push(`${it.name} 与候选池重名（名字必须全局唯一）`);

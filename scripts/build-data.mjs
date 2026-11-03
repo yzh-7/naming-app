@@ -635,10 +635,11 @@ for (const v of Object.values(radical)) radicalDist[v] = (radicalDist[v] ?? 0) +
 
 fs.mkdirSync(OUT, { recursive: true });
 // 真实人名档：从 120 万真实姓名语料里取「真有人用过」的名字，补的是典籍取词给不了的那一半需求
-// （名字数量与「真有人这么叫过」）。口径：次数 40～600（下界滤掉只见过几次的噪声，上界滤掉
-// 婷婷／丽丽这类满街都是的），两个字都必须在名用字白名单 L0 内（与典籍候选同一套用字口径，
-// 白名单没批过的字这一档也不越权），并且不与候选池任何一条双名重名（名字唯一性是门禁）。
-const REAL_MIN = 40;
+// （名字数量与「真有人这么叫过」）。口径：次数 10～600（下界滤掉只见过一两次的噪声——10 次是在
+// 120 万条真实姓名里被十个以上的人用过，仍然算「真有人这么叫」；上界滤掉婷婷／丽丽这类满街都是的），
+// 两个字都必须在名用字白名单 L0 内（与典籍候选同一套用字口径，白名单没批过的字这一档也不越权），
+// 并且不与候选池任何一条双名重名（名字唯一性是门禁）。
+const REAL_MIN = 10;
 const REAL_MAX = 600;
 const poolNames = new Set(candidates.map((c) => c.name));
 const realNames = Object.entries(GIVEN_NAMES)
