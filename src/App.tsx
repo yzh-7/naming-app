@@ -17,7 +17,7 @@ import {
   titleKey,
 } from './engine/name';
 import { APP_VERSION, META } from './engine/data';
-import { BOOK_LABEL, BOOK_ORDER, type Opts, type Result, type ShareName } from './engine/types';
+import { BOOK_LABEL, BOOK_ORDER, type Book, type Opts, type Result, type ShareName } from './engine/types';
 import Controls from './ui/Controls';
 import NameCard from './ui/NameCard';
 import TopNav from './ui/TopNav';
@@ -208,7 +208,10 @@ export default function App() {
   const grouped = useMemo(() => {
     const m = new Map<string, Result[]>();
     for (const r of results) m.set(r.book, [...(m.get(r.book) ?? []), r]);
-    return BOOK_ORDER.filter((b) => m.has(b)).map((b) => [b, m.get(b)!] as const);
+    // 真实人名档排在这七本之后：它不是一本书，混在典籍中间会让人以为它也有出处
+    const groups: [Book, Result[]][] = BOOK_ORDER.filter((b) => m.has(b)).map((b) => [b, m.get(b)!]);
+    if (m.has('real')) groups.push(['real', m.get('real')!]);
+    return groups;
   }, [results]);
 
   const favIds = useMemo(() => new Set(fav.map((f) => f.id)), [fav]);
@@ -570,7 +573,11 @@ export default function App() {
                 <section key={book} className="space-y-2.5">
                   <h2 className="text-meta text-ink-3">
                     <span className="font-medium text-ink-2">{BOOK_LABEL[book]}</span> · {list.length} 条
-                    {list.some((r) => !r.strict) ? '（宽口径取词：长短句/散文/道法，务必看原句）' : '（音步严格）'}
+                    {book === 'real'
+                      ? '（真实姓名语料里的名字，非典籍出处）'
+                      : list.some((r) => !r.strict)
+                        ? '（宽口径取词：长短句/散文/道法，务必看原句）'
+                        : '（音步严格）'}
                   </h2>
                   <div className="grid gap-3 sm:grid-cols-2">
                     {list.map((r) => (
@@ -849,8 +856,9 @@ export default function App() {
               ? `＝种子表 ${num(META.L0_seed)} 字＋人工过字保留 ${num(META.L0_added)} 字`
               : '（种子版）'}
             ；取词段：同句读相邻 {num(META.by_gap.gap1)} 对 · 跨一字 {num(META.by_gap.gap2)} 对 · 跨两字{' '}
-            {num(META.by_gap.gap3)} 对）· 单字名有对齐出处 {num(META.singles)} 字 · 数据{' '}
-            {Math.round(META.ship_bytes_total / 1024)} KiB（未压缩，全部打进应用包），运行时零网络请求。
+            {num(META.by_gap.gap3)} 对）· 单字名有对齐出处 {num(META.singles)} 字 · 另有真实人名 {num(META.real_tier)}{' '}
+            个（非典籍出处） · 数据 "{Math.round(META.ship_bytes_total / 1024)}{' '}
+            KiB（未压缩，全部打进应用包），运行时零网络请求。
             {sur && surnameReads(sur) > 1 && ' 你的姓首字是多音字，请在上方确认读音。'}
           </p>
           <p className="measure">本应用只给可核对的出处与用字事实，不做五行、八字、五格、吉凶判断。</p>

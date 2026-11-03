@@ -7,6 +7,7 @@ import { BOOK_ORDER, type Opts } from '../engine/types';
 const base: Opts = {
   gender: 'any',
   wordOnly: true,
+  source: 'all',
   length: 2,
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
   redupOnly: false,
@@ -252,5 +253,27 @@ describe('禁用字（避讳字）', () => {
     render(<Harness poolCount={0} />);
     fireEvent.change(acInput(), { target: { value: '月' } });
     expect(screen.getByText(/禁用字「月」也在收窄结果/)).toBeInTheDocument();
+  });
+});
+describe('来源筛选', () => {
+  it('三档单选：默认「全部来源」按下，切到「只看真实人名」时另外两个弹起', () => {
+    render(<Harness />);
+    openAdvanced();
+    const all = screen.getByRole('button', { name: '全部来源' });
+    const book = screen.getByRole('button', { name: '只看典籍' });
+    const real = screen.getByRole('button', { name: '只看真实人名' });
+    expect(all).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(real);
+    expect(real).toHaveAttribute('aria-pressed', 'true');
+    expect(all).toHaveAttribute('aria-pressed', 'false');
+    expect(book).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(book);
+    expect(book).toHaveAttribute('aria-pressed', 'true');
+    expect(real).toHaveAttribute('aria-pressed', 'false');
+  });
+  it('来源说明直说真实人名档不是典籍出处', () => {
+    render(<Harness />);
+    openAdvanced();
+    expect(screen.getByText(/不是典籍出处/)).toBeInTheDocument();
   });
 });

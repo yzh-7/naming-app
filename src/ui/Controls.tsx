@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { META } from '../engine/data';
 import { cleanSurname, POOL_TITLES, surnameReadingOptions, surnameReads } from '../engine/name';
 import {
   AVOID_MAX,
@@ -6,10 +7,12 @@ import {
   BOOK_ORDER,
   MUST_POS_LABEL,
   POP_FLOORS,
+  SOURCE_LABEL,
+  SOURCE_ORDER,
   STROKE_MAXES,
   cleanAvoid,
   isHan,
-  type Book,
+  type CorpusBook,
   type Gender,
   type MustPos,
   type Opts,
@@ -113,7 +116,7 @@ export default function Controls({
   const pick = Math.min(reading, surReads.length - 1);
   const perPage = opts.count === 0 ? poolCount : opts.count;
   const patch = (p: Partial<Opts>) => setOpts((o) => ({ ...o, ...p }));
-  const toggleBook = (b: Book) => setOpts((o) => ({ ...o, books: { ...o.books, [b]: !o.books[b] } }));
+  const toggleBook = (b: CorpusBook) => setOpts((o) => ({ ...o, books: { ...o.books, [b]: !o.books[b] } }));
 
   return (
     <section className="card space-y-4">
@@ -359,7 +362,7 @@ function AdvancedFilters({
 }: {
   opts: Opts;
   patch: (p: Partial<Opts>) => void;
-  toggleBook: (b: Book) => void;
+  toggleBook: (b: CorpusBook) => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -430,6 +433,30 @@ function AdvancedFilters({
           <p className="measure text-meta text-ink-3">
             三档互斥：偏男＝每个字都只在男性风格字表或只有一个字在该表；中性＝两表都有字或两表都没有；偏女同偏男反方向。卡片上的「疑似」＝只有一个字在性别字表里；「避开同结构」＝两字结构相同（都左右、都上下）时字形偏单调。
           </p>
+
+          {/* 来源：典籍出处与真实人名是两种证据，分成两个开关，别混成「哪个更好」 */}
+          {opts.length === 2 && (
+            <div className="space-y-2">
+              <span className="lab">来源</span>
+              <div className="flex flex-wrap items-center gap-2">
+                {SOURCE_ORDER.map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => patch({ source: v })}
+                    aria-pressed={opts.source === v}
+                    className={`chip ${opts.source === v ? 'chip-accent' : 'text-ink-3'}`}
+                  >
+                    {SOURCE_LABEL[v]}
+                  </button>
+                ))}
+              </div>
+              <p className="measure text-meta text-ink-3">
+                真实人名档共 {META.real_tier} 个名字，来自 120 万条真实姓名语料，证据是「真有人这么叫过 N 次」，
+                <strong className="font-semibold">不是典籍出处</strong>
+                ；卡片与导出里都单独标注。选「只看真实人名」时不再有任何典籍候选。
+              </p>
+            </div>
+          )}
 
           {/* Books */}
           <div className="space-y-2">

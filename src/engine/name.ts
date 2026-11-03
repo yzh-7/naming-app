@@ -7,12 +7,13 @@ import {
   HOMO_INIT,
   LINE_GLOSS,
   POOL,
+  REAL_ITEMS,
   RADICAL,
   RISK_HIGH,
   SINGLES,
 } from './data';
-import type { Book, Delta, GenderSide, GenderTag, Named, Opts, PoolItem, Result, SortKey } from './types';
-import { BOOK_ORDER, cleanSurname } from './types';
+import type { Book, CorpusBook, Delta, GenderSide, GenderTag, Named, Opts, PoolItem, Result, SortKey } from './types';
+import { bookOrdinal, cleanSurname } from './types';
 
 const BILABIAL = new Set(['b', 'p', 'm']);
 
@@ -276,7 +277,9 @@ export function genderOf(name: string, real?: { n?: number; side?: 'm' | 'f' | '
 const SINGLE_ITEMS: (Named & { famous?: boolean; tier?: string })[] = SINGLES.map(
   (s) => ({ ...s, name: s.char, chars: [s.char] }) as unknown as Named & { famous?: boolean; tier?: string },
 );
-const ALL_ITEMS: (Named & { famous?: boolean; tier?: string })[] = [...POOL, ...SINGLE_ITEMS];
+// 收藏按 id 回查、自选页交叉核对都走这一份，所以真实人名档也得在里面（否则存进收藏的真实人名
+// 重新打开就变成「查不到出处」）。
+const ALL_ITEMS: (Named & { famous?: boolean; tier?: string })[] = [...POOL, ...SINGLE_ITEMS, ...REAL_ITEMS];
 
 export function scoreItem(
   surname: string,
@@ -301,9 +304,12 @@ export function scoreItem(
   if (itemRisk && itemRisk.freq < 5000) ph.flags.push(`同形：${itemRisk.word}`);
   const ev = wordEvidence(it as unknown as WordFacts);
   const wordDelta: Delta[] = [];
-  const wordScore = wordBonus(ev);
-  if (wordScore) wordDelta.push({ rule: `${wordScore > 0 ? '成词' : '未见成词依据'} · ${ev.why}`, delta: wordScore });
-  if (ev.spl) wordDelta.push({ rule: `拆词 · 原句里相邻的「${ev.spl}」被剪开，只取了它两边的字`, delta: -10 });
+  // 真实人名档不参与成词/拆词计分：它没有「从原句取字」这件事，成词证据对它既不是加分项也不是减分项
+  if (it.book !== 'real') {
+    const wordScore = wordBonus(ev);
+    if (wordScore) wordDelta.push({ rule: `${wordScore > 0 ? '成词' : '未见成词依据'} · ${ev.why}`, delta: wordScore });
+    if (ev.spl) wordDelta.push({ rule: `拆词 · 原句里相邻的「${ev.spl}」被剪开，只取了它两边的字`, delta: -10 });
+  }
   // 真实用名证据：真有人这么叫过是加分项，但没记录不等于不好，所以缺字段一分不扣
   const usageDelta: Delta[] =
     (it.rn ?? 0) >= 50
@@ -447,8 +453,15 @@ export function pairCandidates(ch: string): PairHint[] {
 }
 
 function bookUniverse(opts: Opts): (Named & { famous?: boolean; tier?: string })[] {
-  const src = opts.length === 2 ? POOL.filter((p) => p.tier === 'B') : SINGLE_ITEMS;
-  return src.filter((it) => opts.books[it.book] && (!opts.redupOnly || it.redup));
+  // 两个来源并列：典籍候选按七本典籍的开关取，真实人名档按来源开关取（它不是典籍，没有
+  // 「哪一本」可言，所以不进 books 那七个开关）。单名层没有真实人名——语料那张表记的是双字名。
+  const corpus = opts.length === 2 ? POOL.filter((p) => p.tier === 'B') : SINGLE_ITEMS;
+  const books =
+    opts.source === 'real'
+      ? []
+      : corpus.filter((it) => it.book !== 'real' && opts.books[it.book as CorpusBook] && (!opts.redupOnly || it.redup));
+  const real = opts.source === 'book' || opts.length === 1 || opts.redupOnly ? [] : REAL_ITEMS;
+  return [...books, ...real];
 }
 
 // 控件写「偏女」却只加 4 分是错的：那样偏男名照样进结果。改成真筛选。
@@ -486,7 +499,7 @@ export function avoidPass(name: string, opts: Opts): boolean {
 // 数字是构建期从已登记语料算好写进条目的（a＝相邻出现次数，w＝现代汉语词表词频，spl＝被剪开的原词），运行时只读不算。
 // 默认只看成词层（meta.pool_word 条）；关掉这个开关就是全池。
 export type WordTier = 'attested' | 'modern' | 'redup' | 'single' | 'none';
-type WordFacts = { char?: string; a?: number; w?: number; redup?: boolean; spl?: string };
+type WordFacts = { char?: string; a?: number; w?: number; redup?: boolean; spl?: string; book?: Book };
 export type WordEvidence = { tier: WordTier; a: number; w: number; spl: string; why: string };
 
 export function wordEvidence(it: WordFacts): WordEvidence {
@@ -509,7 +522,10 @@ export function wordEvidence(it: WordFacts): WordEvidence {
   };
 }
 
-export const wordPass = (it: WordFacts, opts: Opts) => !opts.wordOnly || wordEvidence(it).tier !== 'none';
+// 成词门槛只管典籍候选：它挡的是「从一句里各取一字硬拼」，而真实人名档的证据是「真有人这么叫过」，
+// 拿成词门槛去筛它等于把它整档删掉。
+export const wordPass = (it: WordFacts, opts: Opts) =>
+  it.book === 'real' || !opts.wordOnly || wordEvidence(it).tier !== 'none';
 
 // 成词证据的加分按语料内复现次数分三档：语料里反复挨在一起的是真词，浮到第一页去；
 // 只出现两次的（多半就是它自己那条出处附近）只给基础分。语料只有十万字，
@@ -537,12 +553,12 @@ function universe(opts: Opts): (Named & { famous?: boolean; tier?: string })[] {
 // 候选池里出现过的篇名（含单名条目的出处），按书在前、篇名在后排序，供筛选框的候选列表
 export const POOL_TITLES: string[] = (() => {
   const seen = new Set<string>();
-  for (const it of ALL_ITEMS) seen.add(`${it.book}\u0000${it.title}`);
+  // 真实人名档没有篇名（title 为空），不进这份列表：篇名筛选管的是典籍
+  for (const it of ALL_ITEMS) if (it.title) seen.add(`${it.book}\u0000${it.title}`);
   return [...seen]
     .sort(
       (a, b) =>
-        BOOK_ORDER.indexOf(a.split('\u0000')[0] as Book) - BOOK_ORDER.indexOf(b.split('\u0000')[0] as Book) ||
-        (a < b ? -1 : 1),
+        bookOrdinal(a.split('\u0000')[0] as Book) - bookOrdinal(b.split('\u0000')[0] as Book) || (a < b ? -1 : 1),
     )
     .map((x) => x.slice(x.indexOf('\u0000') + 1)); // 键由「典籍 + \u0000 + 篇名」拼成，取分隔符之后
 })();
@@ -604,7 +620,10 @@ export function genderStats(opts: Opts) {
   const kept = universe(opts);
   return {
     kept: kept.length,
-    same: opts.gender === 'any' ? 0 : kept.filter((it) => genderOf(it.name).side === opts.gender).length,
+    same:
+      opts.gender === 'any'
+        ? 0
+        : kept.filter((it) => genderOf(it.name, { n: it.rn, side: it.rs }).side === opts.gender).length,
   };
 }
 
@@ -637,8 +656,7 @@ function paginate(ranked: Result[], count: number): Result[][] {
   return pages;
 }
 
-const byBookThenScore = (a: Result, b: Result) =>
-  BOOK_ORDER.indexOf(a.book) - BOOK_ORDER.indexOf(b.book) || b.total - a.total;
+const byBookThenScore = (a: Result, b: Result) => bookOrdinal(a.book) - bookOrdinal(b.book) || b.total - a.total;
 
 const strokesOf = (name: string) => [...name].reduce((a, ch) => a + (CHARS[ch]?.st ?? 0), 0);
 const idCmp = (a: Result, b: Result) => (a.id < b.id ? -1 : 1);
@@ -647,7 +665,7 @@ const SORTERS: Record<SortKey, (a: Result, b: Result) => number> = {
   score: (a, b) => b.total - a.total || idCmp(a, b),
   strokes: (a, b) => strokesOf(a.name) - strokesOf(b.name) || b.total - a.total || idCmp(a, b),
   popular: (a, b) => popScore(b.name) - popScore(a.name) || b.total - a.total || idCmp(a, b),
-  book: (a, b) => BOOK_ORDER.indexOf(a.book) - BOOK_ORDER.indexOf(b.book) || b.total - a.total || idCmp(a, b),
+  book: (a, b) => bookOrdinal(a.book) - bookOrdinal(b.book) || b.total - a.total || idCmp(a, b),
 };
 
 export type Plan = { page: Result[]; pageNo: number; pages: number; pool: number; titleCounts: Map<string, number> };

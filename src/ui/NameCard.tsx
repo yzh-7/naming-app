@@ -41,6 +41,9 @@ function windowAround(line: string, from: number, to: number): Win {
 // 出处行只依赖这些字段：有出处的 Result、PoolItem、SingleItem 都满足，自选页可复用同一套渲染
 export type SourceRef = {
   book: Book;
+  name?: string; // 真实人名档的说明文案要说「这个名字」，典籍出处不需要
+  rn?: number; // 真实人名档才有：语料里出现过多少次
+  rs?: 'm' | 'f' | 'n';
   title: string;
   author: string;
   line: string;
@@ -52,11 +55,24 @@ export type SourceRef = {
 };
 
 function sourceLabel(r: SourceRef) {
+  // 真实人名档没有典籍可引，出处那一行直说它是什么，不装作有出处
+  if (r.book === 'real') return `真实人名 · 语料里 ${r.rn ?? 0} 人用过（非典籍出处）`;
   return `《${BOOK_LABEL[r.book]}·${r.title}${r.author ? `·${r.author}` : ''}》`;
 }
 
 // 出处行：默认折叠，展开后显示原文高亮 + 今译
 export function Source({ r }: { r: SourceRef }) {
+  // 真实人名档的「出处」说的是它自己的证据，不是一段不存在的原文
+  if (r.book === 'real') {
+    const side = r.rs === 'f' ? '偏女' : r.rs === 'm' ? '偏男' : r.rs === 'n' ? '男女都用' : '未知';
+    return (
+      <p className="mt-1.5 border-l-2 border-line pl-2 text-meta text-ink-3">
+        这条不是典籍出处。它来自 120 万条真实姓名语料：「{r.name ?? ''}」这个双字名在语料里出现过 {r.rn ?? 0}{' '}
+        次，上游把它标注为
+        {side}。它证明有人这么叫过，不证明这个名字有典籍来源；成词与否不适用于它，用字与读音仍按其他标签看。
+      </p>
+    );
+  }
   const at = r.line.indexOf(r.seg);
   if (at < 0) {
     return (
@@ -171,6 +187,8 @@ export default function NameCard({
 
   // 成词证据也常驻卡片：用户问「这名字是不是硬凑的」，答案就这两个字在语料里挨没挨着
   const evChip = useMemo(() => {
+    // 真实人名档不参与成词口径：它不是从原句里取字取出来的，挂「未见成词依据」是把它误归类
+    if (r.book === 'real') return null;
     const ev = wordEvidence(r as unknown as { a?: number; w?: number; redup?: boolean; spl?: string; char?: string });
     if (ev.tier === 'single') return null;
     const text =

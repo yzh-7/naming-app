@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import App from './App';
-import { POOL } from './engine/data';
+import { META, POOL } from './engine/data';
 import { BOOK_LABEL } from './engine/types';
 import { lineGlossOf, namePinyin, shapeTags } from './engine/name';
 import { at, one } from './testing';
@@ -712,5 +712,30 @@ describe('App 的分组、排序、对比上限、导出与主题联动', () => 
     expect(screen.getAllByRole('button', { name: '已拉黑' })).toHaveLength(1);
     fireEvent.click(one(screen.getAllByRole('button', { name: '收藏' }), '「收藏」按钮列表'));
     expect(screen.getByRole('link', { name: /收藏 1/ })).toBeInTheDocument();
+  });
+});
+describe('来源筛选在 App 层真的改变结果', () => {
+  it('只看真实人名时，分组标题与卡片都写「非典籍出处」，卡片不是零张', () => {
+    window.history.replaceState({}, '', '/?s=袁&src=real');
+    try {
+      render(<App />);
+      expect(screen.getByText('真实人名')).toBeInTheDocument();
+      expect(screen.getAllByText(/非典籍出处/).length).toBeGreaterThan(0);
+      expect(document.querySelectorAll('article.card').length).toBeGreaterThan(0);
+    } finally {
+      window.history.replaceState({}, '', '/');
+    }
+  });
+  it('默认「全部来源」时池子是两个来源之和，第一页仍是典籍在前（真实人名分数低，不抢首屏）', () => {
+    window.history.replaceState({}, '', '/?s=袁');
+    try {
+      render(<App />);
+      expect(screen.getByText('诗经')).toBeInTheDocument();
+      // 默认门槛开着：典籍那一半只剩成词层 497 条，真实人名档整档不受门槛管
+      const n = META.pool_word + META.real_tier;
+      expect(screen.getByText(new RegExp(`共 ${n} 条候选`))).toBeInTheDocument();
+    } finally {
+      window.history.replaceState({}, '', '/');
+    }
   });
 });

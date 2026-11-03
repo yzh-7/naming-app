@@ -5,6 +5,7 @@ import {
   cleanSurname,
   composeName,
   findCombo,
+  findItem,
   genderOf,
   genderPass,
   genderStats,
@@ -17,6 +18,7 @@ import {
   pairCandidates,
   nicknames,
   plan,
+  POOL_TITLES,
   polyphoneTags,
   poolSize,
   popBand,
@@ -32,7 +34,7 @@ import {
   wordEvidence,
   wordPass,
 } from './name';
-import { CHARS, META, POOL, SINGLES } from './data';
+import { CHARS, META, POOL, REAL_ITEMS, SINGLES } from './data';
 import { BOOK_ORDER, type Book, type Opts } from './types';
 import { at, one } from '../testing';
 
@@ -41,6 +43,9 @@ const gen = (sur: string, o: Opts, b: number) => plan(sur, o, b).page;
 const ALL_BOOKS = Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Record<Book, boolean>;
 const opts = (p: Partial<Opts> = {}): Opts => ({
   gender: 'any',
+  // 这一份夹具默认只看典籍：本文件的多数断言是候选池口径（1,525 条双名、成词层 497 条），
+  // 真实人名档另有自己的用例（下面「真实人名档」那一段），混进来会让每个计数都要加一遍。
+  source: 'book',
   // 这一份是全池口径的公共夹具：成词门槛关掉，池子才是完整的 1,525 条。
   // 门槛本身另有专门用例（下面的「成词门槛」describe），别在这里顺带测。
   wordOnly: false,
@@ -817,5 +822,82 @@ describe('筛选与卡片必须同一套证据', () => {
       const wrong = all.filter((r) => r.gender.side !== side);
       expect(wrong.map((r) => `${r.name}:${r.gender.side}`).slice(0, 5), '结果里出现了别的档').toEqual([]);
     }
+  });
+});
+describe('真实人名档（第二个来源）', () => {
+  const all = opts({ wordOnly: false, source: 'all' });
+  const realOnly = opts({ wordOnly: false, source: 'real' });
+  const bookOnly = opts({ wordOnly: false, source: 'book' });
+
+  it('默认两个来源都看：条数＝典籍全池＋真实人名档，两个来源之间不重名', () => {
+    expect(REAL_ITEMS.length).toBe(META.real_tier);
+    expect(poolSize(all)).toBe(META.pool_B + META.real_tier);
+    expect(poolSize(bookOnly)).toBe(META.pool_B);
+    expect(poolSize(realOnly)).toBe(META.real_tier);
+    const seen = new Set<string>();
+    const dup: string[] = [];
+    for (const it of [...POOL, ...REAL_ITEMS]) {
+      if (seen.has(it.name)) dup.push(it.name);
+      seen.add(it.name);
+    }
+    expect(dup.slice(0, 5), '名字必须全局唯一').toEqual([]);
+  });
+
+  it('真实人名档不写成词门槛的受害者：门槛开着它也整档在，典籍那一半照旧被门槛管', () => {
+    const gated = opts({ wordOnly: true, source: 'real' });
+    const gatedBooks = opts({ wordOnly: true, source: 'book' });
+    expect(poolSize(gated)).toBe(META.real_tier);
+    expect(poolSize(gatedBooks)).toBe(META.pool_word);
+  });
+
+  it('这一档只有双名：单名层与「只看叠字」下都不出现', () => {
+    expect(poolSize(opts({ length: 1, source: 'all', wordOnly: false }))).toBe(META.singles);
+    const redup = opts({ redupOnly: true, source: 'all', wordOnly: false });
+    expect(gen('袁', redup, 0).every((r) => r.redup)).toBe(true);
+  });
+
+  it('三档互斥在两个来源合起来的那份池子上同样成立', () => {
+    const sum = (['m', 'f', 'n'] as const).map((g) => poolSize(opts({ wordOnly: false, source: 'all', gender: g })));
+    expect(
+      at(sum, 0, '偏男档') + at(sum, 1, '偏女档') + at(sum, 2, '中性档'),
+      '两个来源合起来的三档之和必须等于池子',
+    ).toBe(META.pool_B + META.real_tier);
+    for (const side of ['m', 'f', 'n'] as const) {
+      const page = plan('袁', opts({ gender: side, wordOnly: false, count: 0 }), 0, 0).page;
+      expect(
+        page
+          .filter((r) => r.gender.side !== side)
+          .map((r) => `${r.name}:${r.gender.side}`)
+          .slice(0, 5),
+      ).toEqual([]);
+    }
+  });
+
+  it('真实人名的条目没有出处字段，id 以 RN_ 打头，能被 findItem 找回来（收藏靠它）', () => {
+    const it = one(REAL_ITEMS, '真实人名档首条');
+    expect(it.book).toBe('real');
+    expect(it.line).toBe('');
+    expect(it.title).toBe('');
+    expect(it.lg).toBe(-1);
+    expect(it.id.startsWith('RN_')).toBe(true);
+    expect(findItem(it.id)?.name).toBe(it.name);
+    expect(it.rn).toBeGreaterThanOrEqual(40);
+  });
+
+  it('卡片上的分数明细里不出现成词与拆词那两行，但出现真实用名那一行', () => {
+    const it = one(
+      REAL_ITEMS.filter((x) => (x.rn ?? 0) >= 50),
+      '语料里多人用过的真实人名',
+    );
+    const r = scoreItem('袁', it, opts({ wordOnly: false }), 0);
+    expect(r.deltas.some((d) => d.rule.startsWith('成词') || d.rule.startsWith('未见成词依据'))).toBe(false);
+    expect(r.deltas.some((d) => d.rule.startsWith('真实用名'))).toBe(true);
+    expect(r.deltas.some((d) => d.rule.includes('名用字表 L0'))).toBe(true);
+  });
+
+  it('篇名筛选与「同篇还有几条」不管这一档：它没有篇名', () => {
+    expect(POOL_TITLES.length).toBeGreaterThan(10);
+    const titles = plan('袁', opts({ wordOnly: false, source: 'real', title: '小明' }), 0, 0).page;
+    expect(titles.length).toBe(0);
   });
 });

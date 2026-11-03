@@ -472,6 +472,56 @@ console.log('4e) 真实用名证据：rn / rs 由 data/raw/cnname_given.json 独
   ok(named >= 500, `真实用名记录不能太稀（现 ${named} / ${cand.length} 条）`);
 }
 
+console.log('4f) 真实人名档：来源独立、与派生表一致、跨层不重名');
+{
+  const real = JSON.parse(fs.readFileSync('src/data/realnames.json', 'utf8'));
+  const T = JSON.parse(fs.readFileSync('data/raw/cnname_given.json', 'utf8'));
+  const L0 = new Set(JSON.parse(fs.readFileSync('src/data/whitelist-L0.json', 'utf8')));
+  const sideOf = (rec) => {
+    const t = rec[1] + rec[2];
+    if (t < 5) return undefined;
+    return rec[1] / t >= 0.8 ? 'm' : rec[2] / t >= 0.8 ? 'f' : 'n';
+  };
+  // 独立重算这一档的入选集合：次数 40～600、两字都在白名单内、不与候选池重名
+  const poolNames = new Set(cand.map((c) => c.name));
+  const want = new Map();
+  for (const [name, rec] of Object.entries(T)) {
+    if (name.length !== 2 || poolNames.has(name)) continue;
+    if (rec[0] < 40 || rec[0] > 600) continue;
+    if (![...name].every((ch) => L0.has(ch))) continue;
+    want.set(name, rec);
+  }
+  ok(
+    real.length === want.size,
+    `真实人名档条数 ${real.length}＝独立重算的入选数 ${want.size}`,
+    `meta ${meta.real_tier}`,
+  );
+  ok(real.length === meta.real_tier, `真实人名档条数与 meta.real_tier ${meta.real_tier} 一致`);
+  const bad = [];
+  const seen = new Set();
+  let withSide = 0;
+  for (const it of real) {
+    const rec = want.get(it.name);
+    if (!rec) bad.push(`${it.name} 不该入选（不在派生表的 40～600 段或用了白名单外的字或与候选池重名）`);
+    if (seen.has(it.name)) bad.push(`${it.name} 在本档内重复`);
+    seen.add(it.name);
+    if (poolNames.has(it.name)) bad.push(`${it.name} 与候选池重名（名字必须全局唯一）`);
+    if (it.src !== 'real') bad.push(`${it.name} 的来源标记不是 real`);
+    if (rec && it.rn !== rec[0]) bad.push(`${it.name} 次数记 ${it.rn} 应为 ${rec[0]}`);
+    const s = rec ? sideOf(rec) : undefined;
+    if ((it.rs ?? undefined) !== s) bad.push(`${it.name} 性别标注记 ${it.rs ?? '无'} 应为 ${s ?? '无'}`);
+    if (it.rs) withSide += 1;
+    for (const ch of it.name) if (!L0.has(ch)) bad.push(`${it.name} 用了白名单外的字 ${ch}`);
+  }
+  ok(
+    bad.length === 0,
+    `真实人名档逐条与派生表／白名单／唯一性一致（不符 ${bad.length} 处）`,
+    bad.slice(0, 4).join(' | '),
+  );
+  ok(withSide === meta.real_tier_genders, `带性别标注的 ${withSide} 条与 meta 一致`);
+  ok(real.length >= 800, `真实人名档要有量（现 ${real.length} 条），否则解决不了「随便一选就没了」`);
+}
+
 console.log('5) 性别风格：字表未漂移 + 强弱两级 + 真筛选不变量');
 {
   const rawAttr = JSON.parse(fs.readFileSync('data/raw/cnname_attributes.json', 'utf8'));

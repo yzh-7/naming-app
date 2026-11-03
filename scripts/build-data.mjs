@@ -618,6 +618,27 @@ const radicalDist = {};
 for (const v of Object.values(radical)) radicalDist[v] = (radicalDist[v] ?? 0) + 1;
 
 fs.mkdirSync(OUT, { recursive: true });
+// 真实人名档：从 120 万真实姓名语料里取「真有人用过」的名字，补的是典籍取词给不了的那一半需求
+// （名字数量与「真有人这么叫过」）。口径：次数 40～600（下界滤掉只见过几次的噪声，上界滤掉
+// 婷婷／丽丽这类满街都是的），两个字都必须在名用字白名单 L0 内（与典籍候选同一套用字口径，
+// 白名单没批过的字这一档也不越权），并且不与候选池任何一条双名重名（名字唯一性是门禁）。
+const REAL_MIN = 40;
+const REAL_MAX = 600;
+const poolNames = new Set(candidates.map((c) => c.name));
+const realNames = Object.entries(GIVEN_NAMES)
+  .filter(([name, rec]) => {
+    if (name.length !== 2 || poolNames.has(name)) return false;
+    if (rec[0] < REAL_MIN || rec[0] > REAL_MAX) return false;
+    return [...name].every((ch) => L0.has(ch));
+  })
+  .map(([name, rec]) => {
+    const it = { name, rn: rec[0], src: 'real' };
+    const s = realSide(rec);
+    if (s) it.rs = s;
+    return it;
+  })
+  .sort((a, b) => (a.name < b.name ? -1 : 1));
+
 const meta = {
   generated_by: 'scripts/build-data.mjs',
   L0_size: L0.size,
@@ -675,6 +696,8 @@ const meta = {
   given_freq_chars: Object.keys(GIVEN_FREQ).length,
   // 真实用名证据（口径见上面 realSide 那段）
   pool_real_named: realNamed,
+  real_tier: realNames.length,
+  real_tier_genders: Object.values(realNames).reduce((a, x) => a + (x.rs ? 1 : 0), 0),
   pool_real_side_m: realSideCount.m,
   pool_real_side_f: realSideCount.f,
   pool_real_side_n: realSideCount.n,
@@ -694,7 +717,9 @@ write(
   // JSON.stringify 会丢掉值为 undefined 的键，所以置空就等于不存这个字段
   candidates.map((c) => ({ ...c, chars: undefined })),
 );
+
 write('singles.json', singles);
+write('realnames.json', realNames);
 write('chars.json', chars);
 write('homophone.json', homophone);
 write('risk.json', { high: riskHigh });
@@ -726,6 +751,7 @@ fs.writeFileSync(
 const SHIPPED = [
   'candidates.json',
   'singles.json',
+  'realnames.json',
   'chars.json',
   'homophone.json',
   'risk.json',

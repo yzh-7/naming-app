@@ -1,4 +1,7 @@
-export type Book = 'shijing' | 'chuci' | 'lunyu' | 'shuimo' | 'song300' | 'daofa' | 'yuefu';
+// 七本典籍是真出处；`real` 不是典籍，是「来源」维度上的另一档（真实姓名语料里真有人用过的名字），
+// 它进 `Book` 只为了让出处标签、CSV、排序这些按 book 走的地方不用各写一套分支。
+export type CorpusBook = 'shijing' | 'chuci' | 'lunyu' | 'shuimo' | 'song300' | 'daofa' | 'yuefu';
+export type Book = CorpusBook | 'real';
 
 export type CharInfo = {
   py: string[];
@@ -83,7 +86,9 @@ export type Opts = {
   // 只看成词：默认开。成词＝这两个字在语料里相邻出现过至少两次，或现代汉语词表收录，或是典籍叠字
   wordOnly: boolean;
   length: 1 | 2;
-  books: Record<Book, boolean>;
+  books: Record<CorpusBook, boolean>;
+  // 来源：默认两者都看。真实人名档不是典籍出处，卡片与导出都单独标注，筛来源不等于换标准
+  source: Source;
   redupOnly: boolean;
   exclude: string[];
   count: number;
@@ -143,6 +148,9 @@ export type Named = {
   spl?: string;
 };
 
+// 真实人名档的一条：不存出处（它没有典籍出处），条目形状在 src/engine/data.ts 里补全
+export type RealItem = Named & { rn: number };
+
 export type Result = Named & {
   full: string;
   gender: GenderTag;
@@ -175,8 +183,17 @@ export const BOOK_LABEL: Record<Book, string> = {
   song300: '宋词',
   daofa: '道法',
   yuefu: '乐府',
+  real: '真实人名', // 不是典籍：见 Book 的注释
 };
 
-export const BOOK_ORDER: Book[] = ['shijing', 'chuci', 'lunyu', 'shuimo', 'song300', 'daofa', 'yuefu'];
+export const BOOK_LABEL_REAL = '真实人名';
+// 典籍的展示顺序：`real` 不在这里，它是来源不是典籍；按典籍排序时它排在七本之后（见 bookOrdinal）
+export const BOOK_ORDER: CorpusBook[] = ['shijing', 'chuci', 'lunyu', 'shuimo', 'song300', 'daofa', 'yuefu'];
 // 文案里凡是要报「几本典籍」的都用它，加书时不再漏改
 export const BOOK_COUNT = BOOK_ORDER.length;
+export const bookOrdinal = (b: Book) => (b === 'real' ? BOOK_ORDER.length : BOOK_ORDER.indexOf(b));
+
+/** 来源：典籍出处、真实姓名语料，或两者都看 */
+export type Source = 'all' | 'book' | 'real';
+export const SOURCE_ORDER: Source[] = ['all', 'book', 'real'];
+export const SOURCE_LABEL: Record<Source, string> = { all: '全部来源', book: '只看典籍', real: '只看真实人名' };

@@ -1,5 +1,5 @@
-import type { Book, Gender, Opts, SortKey } from '../engine/types';
-import { BOOK_ORDER, POP_FLOORS, cleanAvoid, cleanSurname, isHan } from '../engine/types';
+import type { Book, CorpusBook, Gender, Opts, SortKey, Source } from '../engine/types';
+import { BOOK_ORDER, POP_FLOORS, SOURCE_ORDER, cleanAvoid, cleanSurname, isHan } from '../engine/types';
 
 const SORTS: SortKey[] = ['score', 'strokes', 'popular', 'book'];
 
@@ -222,6 +222,8 @@ const POP_VALUES = POP_FLOORS.map((p) => p.v);
 const DEFAULT: Opts = {
   gender: 'any',
   wordOnly: true,
+  // 来源默认两者都看：真实人名档是新加的，默认关掉它等于用户看不见这次多出来的那一千多个名字
+  source: 'all',
   length: 2,
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
   redupOnly: false,
@@ -253,7 +255,7 @@ const isHanChar = (v: unknown): v is string => typeof v === 'string' && [...v].l
 
 export function sanitizeOpts(raw: unknown): Opts {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Partial<Opts> & { books?: Partial<Opts['books']> };
-  const books: Record<Book, boolean> = {} as Record<Book, boolean>;
+  const books: Record<CorpusBook, boolean> = {} as Record<CorpusBook, boolean>;
   for (const b of BOOK_ORDER) books[b] = typeof o.books?.[b] === 'boolean' ? (o.books[b] as boolean) : DEFAULT.books[b];
   // 长度只认 1（其余取值一律回 2）；叠词开关只在双名模式下有效
   const length = o.length === 1 ? 1 : 2;
@@ -267,6 +269,7 @@ export function sanitizeOpts(raw: unknown): Opts {
     length,
     redupOnly: length === 2 && !!o.redupOnly,
     books,
+    source: pickOne<Source>(o.source, SOURCE_ORDER) ?? DEFAULT.source,
     count: intIn(o.count, 0, 600) ?? DEFAULT.count,
     search: typeof o.search === 'string' ? o.search.slice(0, SEARCH_MAX) : DEFAULT.search,
     title: typeof o.title === 'string' ? o.title.slice(0, TITLE_MAX) : DEFAULT.title,
@@ -299,6 +302,7 @@ export const saveOpts = (o: Opts) =>
       length: o.length,
       redupOnly: o.redupOnly,
       books: o.books,
+      source: o.source,
       count: o.count,
       search: o.search.slice(0, SEARCH_MAX),
       sort: o.sort,

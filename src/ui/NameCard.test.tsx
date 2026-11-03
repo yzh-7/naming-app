@@ -2,13 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import NameCard, { Source } from './NameCard';
 import { genderOf, scoreItem, findItem, glossOf, lineGlossOf, sameSoundPeers, shapeTags } from '../engine/name';
-import { POOL } from '../engine/data';
+import { POOL, REAL_ITEMS } from '../engine/data';
 import { BOOK_LABEL, BOOK_ORDER, type Opts } from '../engine/types';
 import { one } from '../testing';
 
 const opts: Opts = {
   gender: 'any',
   wordOnly: true,
+  source: 'all',
   length: 2,
   books: Object.fromEntries(BOOK_ORDER.map((b) => [b, true])) as Opts['books'],
   redupOnly: false,
@@ -314,5 +315,16 @@ describe('真实用名标签', () => {
       <NameCard r={scoreItem('袁', it, opts, 0)} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />,
     );
     expect(screen.getAllByTitle(new RegExp(tag.conflict as string)).length).toBeGreaterThan(0);
+  });
+});
+describe('真实人名档的出处行', () => {
+  it('不是一段空原文，而是写明「非典籍出处」与语料次数', () => {
+    const item = one(REAL_ITEMS, '真实人名档应有条目');
+    render(
+      <NameCard r={scoreItem('袁', item, opts, 0)} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />,
+    );
+    expect(screen.getByText(new RegExp(`真实人名 · 语料里 ${item.rn} 人用过（非典籍出处）`))).toBeInTheDocument();
+    expect(screen.getByText(/这条不是典籍出处/)).toBeInTheDocument();
+    expect(screen.queryByText(/未见成词依据/)).not.toBeInTheDocument();
   });
 });

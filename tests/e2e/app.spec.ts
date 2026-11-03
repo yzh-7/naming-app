@@ -175,6 +175,21 @@ test('页脚给出应用版本与语料指纹，版本号与页面 meta 同源',
   expect(meta, 'index.html 的 meta 应当被构建注入真实版本，不能留占位符').toMatch(/^\d+\.\d+\.\d+$/);
 });
 
+test('来源筛选：只看真实人名时卡片写「非典籍出处」，只看典籍时整档消失', async ({ page }) => {
+  await page.goto('/?s=袁&src=real');
+  await page.getByRole('button', { name: '高级筛选' }).click();
+  await expect(page.getByRole('button', { name: '只看真实人名' })).toHaveAttribute('aria-pressed', 'true');
+  const cards = page.locator('article.card');
+  await expect(cards.first()).toContainText(/真实人名 · 语料里 \d+ 人用过（非典籍出处）/);
+  await expect(cards.locator('text=《')).toHaveCount(0);
+
+  await page.goto('/?s=袁&src=book');
+  await page.getByRole('button', { name: '高级筛选' }).click();
+  await expect(page.getByRole('button', { name: '只看典籍', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('article.card', { hasText: '非典籍出处' })).toHaveCount(0);
+  await expect(cards.first()).toContainText('《');
+});
+
 test('真实用名标签：卡片写明这名字在 120 万真实姓名语料里出现过多少次', async ({ page }) => {
   await page.goto('/?s=袁&q=明明');
   const card = page.locator('article.card').first();
