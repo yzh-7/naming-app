@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   plan,
+  poolSize,
   scoreItem,
   findItem,
   cleanSurname,
@@ -155,7 +156,9 @@ export default function App() {
     [sur, effective, batch, reading],
   );
   const results = paged.page;
-  const poolCount = paged.pool; // plan() 已经数过一遍，不再数第二遍
+  // plan() 已经数过一遍就不再数第二遍；没填姓时 plan 不跑，池子规模仍然要写进摘要——
+  // 否则首屏只剩一片空白，用户看不出这套语料到底有多少名字可挑（0.11.0 一度把这一行丢了）
+  const poolCount = sur ? paged.pool : poolSize(effective);
 
   const scored = useCallback(
     (id: string) => {

@@ -561,6 +561,20 @@ describe('检索与排序', () => {
     // 无命中即空池，不炸
     expect(plan('苏', opts({ search: 'zzzz' }), 0).pool).toBe(0);
   });
+  it('多本典籍分页时「按笔画排」也真是笔画序：分页不许再用同书上限牵制它', () => {
+    const strokesOf = (name: string) =>
+      [...name].reduce((a, ch) => {
+        const facts = CHARS[ch];
+        if (facts === undefined) throw new Error(`用例前提不成立：字表 CHARS 里没有「${ch}」`);
+        return a + (facts.st ?? 0);
+      }, 0);
+    const o = opts({ count: 12, sort: 'strokes' });
+    const page = plan('苏', o, 0).page;
+    expect(page.length).toBe(12);
+    const st = page.map((r) => strokesOf(r.name));
+    for (let i = 1; i < st.length; i++)
+      expect(at(st, i, '按笔画排序的笔画数序列')).toBeGreaterThanOrEqual(at(st, i - 1, '按笔画排序的笔画数序列'));
+  });
   it('按笔画排序时结果笔画单调不减；按常见度排序时单调不增', () => {
     // 单本典籍、一屏全展开：绕开分页的「同书每页≤4」跨书交织，直接看排序键
     const only = (sort: Opts['sort']): Opts =>

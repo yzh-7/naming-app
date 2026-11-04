@@ -500,6 +500,34 @@ describe('App 的分组、排序、对比上限、导出与主题联动', () => 
     expect(compareCells('名字')).toHaveLength(3);
   });
 
+  it('拉黑一条之后它当场从生成页消失，不是只在拉黑页多了一条', () => {
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
+    const name = (document.querySelector('article h3')?.textContent ?? '').trim();
+    expect(name.length).toBeGreaterThan(1);
+    fireEvent.click(screen.getAllByRole('button', { name: '拉黑' })[0]!);
+    expect(screen.queryAllByText(name, { selector: 'article h3', exact: true })).toHaveLength(0);
+  });
+  it('换排序档位时结果真的重排，不只是下拉框的值变了', () => {
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
+    const names = () => [...document.querySelectorAll('article h3')].map((n) => (n.textContent ?? '').trim());
+    const before = names();
+    expect(before.length).toBeGreaterThan(3);
+    fireEvent.change(screen.getByLabelText('结果排序'), { target: { value: 'strokes' } });
+    expect(names()).not.toEqual(before);
+  });
+  it('没填姓时摘要里仍然写着候选池有多少条：首屏不该只剩空白', () => {
+    render(<App />);
+    const want = `候选池 ${(META.pool_word + META.real_tier).toLocaleString('en-US')} 条`;
+    const summary = () => screen.queryAllByText(/候选池/).find((el) => (el.textContent ?? '').startsWith(want));
+    // 没填姓时也要写着池子有多少条：这是「这套语料到底有多少名字可挑」在界面上的唯一出口
+    expect(summary()).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '袁' } });
+    // 填了姓之后是同一个数：填姓只决定这一屏给谁看，不改变池子本身
+    expect(summary()).toHaveTextContent(want);
+  });
+
   it('对比到第四条时说清楚为什么勾不上，不是静默失败', () => {
     favPageWith(4);
     const boxes = screen.getAllByLabelText('对比') as HTMLInputElement[];

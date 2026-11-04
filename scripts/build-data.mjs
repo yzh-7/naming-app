@@ -80,7 +80,10 @@ for (const line of read('unihan_krs_gsc.txt').split('\n')) {
 const ELEMENT = { 32: '土', 75: '木', 85: '水', 86: '火', 167: '金' };
 const radicalOf = (ch) => ELEMENT[KRS.get(ch)] ?? null;
 
-// L0 名用字种子：cnname 属性表 ∩ 通用规范汉字表（一至三级，268 字）。五行/性别列只取性别风格，不用五行。
+// L0 名用字种子：cnname 属性表的**全部列**（男／女＋木火土金水＋animal＋color）∩ 通用规范汉字表（一至三级，268 字）。
+// 依据说清楚：种子取的是这张表的所有字符串列——有 105 字只出现在五行／动物／颜色列（不在男女列），它们靠这些列
+// 进白名单，进而决定哪些名字能被取出来。这些列只用于「这个字常被不常被用作人名」的事实判断；应用不做五行筛选、
+// 不算吉凶与补缺（README 与 docs/user-guide/03 同口径）；性别档另走男女两列。
 const attrs = json('cnname_attributes.json');
 // 真实姓名语料里「这两个字的组合真有人用过多少次、上游标男还是标女」（派生自 wainshine 120 万姓名，
 // 见 scripts/derive-cnname-given.mjs）。构建期查表挂到候选上，运行时只读不算。

@@ -630,7 +630,9 @@ console.log('5) 性别风格：字表未漂移 + 强弱两级 + 真筛选不变�
     '五级标签之和恰为 Pool-B 全池，没有漏判',
   );
 
-  // 筛选语义：反向一律排除；中性保留；同侧弱命中默认排除（勾「含疑似」才进）
+  // 这一段断的是**分类档位**：反向一律不属该侧；中性自成一档；同侧分「强命中」与「只靠一个字命中的疑似」。
+  // 界面默认档含疑似（src/engine/name.ts 的 genderPass 不区分强弱，Controls.tsx 的「含疑似」只管标签），
+  // 所以这两个数不是「界面默认候选集」，别把它读成筛选语义。
   const kept = (side, weak) =>
     cand.filter((c) => {
       const k = cls(c.name);
@@ -643,10 +645,10 @@ console.log('5) 性别风格：字表未漂移 + 强弱两级 + 真筛选不变�
     const strict = kept(side, false);
     const loose = kept(side, true);
     const want = (meta.gender_dist.n ?? 0) + (meta.gender_dist[`${side}.strong`] ?? 0);
-    ok(strict.length === want, `${side === 'f' ? '偏女' : '偏男'}（不含疑似）候选 = ${want}（实际 ${strict.length}）`);
+    ok(strict.length === want, `${side === 'f' ? '偏女' : '偏男'}的强命中子档 = ${want}（实际 ${strict.length}）`);
     ok(
       loose.length === want + (meta.gender_dist[`${side}.weak`] ?? 0),
-      `${side === 'f' ? '偏女' : '偏男'} 勾含疑似后 = ${want + (meta.gender_dist[`${side}.weak`] ?? 0)}（实际 ${loose.length}）`,
+      `${side === 'f' ? '偏女' : '偏男'} 强命中＋疑似两个子档之和 = ${want + (meta.gender_dist[`${side}.weak`] ?? 0)}（实际 ${loose.length}）`,
     );
     ok(
       !strict.some((c) => cls(c.name).startsWith(opp)) && !loose.some((c) => cls(c.name).startsWith(opp)),
@@ -654,15 +656,15 @@ console.log('5) 性别风格：字表未漂移 + 强弱两级 + 真筛选不变�
     );
     ok(
       !strict.some((c) => cls(c.name) === `${side}.weak`),
-      `${side === 'f' ? '偏女' : '偏男'} 默认不含只靠一个字命中的名`,
+      `${side === 'f' ? '偏女' : '偏男'} 档里只靠一个字命中的名都归疑似子档，不与强命中混成一档`,
     );
   }
 
   for (const w of ['尧圣', '雪松', '清洁', '燕雀', '梦金']) {
-    ok(names.has(w) && cls(w).endsWith('.weak'), `${w} 属「疑似」（一票命中），默认筛选必须挡掉（实际 ${cls(w)}）`);
+    ok(names.has(w) && cls(w).endsWith('.weak'), `${w} 属「疑似」（一票命中）子档（实际 ${cls(w)}）`);
     ok(
       !kept('f', false).some((c) => c.name === w) && !kept('m', false).some((c) => c.name === w),
-      `${w} 不在任一侧的默认候选里`,
+      `${w} 不进任一侧的强命中子档`,
     );
   }
   for (const [w, side] of [

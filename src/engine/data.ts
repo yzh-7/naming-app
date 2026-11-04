@@ -26,6 +26,12 @@ const isArr = (v: unknown): unknown[] => (Array.isArray(v) ? v : fail('期望数
 
 const BOOKS = new Set<string>(BOOK_ORDER);
 
+// 白名单与带调写法都不进 chars.json：前者是 whitelist-L0.json 那一份名单，后者是 py + t 的纯函数
+// （见 src/engine/tone.ts）。两处都由这里合成，界面上拿到的形状和以前一样。
+const L0_CHARS = new Set(
+  Array.isArray(whitelistJson) && whitelistJson.every(isStr) ? whitelistJson : fail('whitelist-L0 不是字符串数组'),
+);
+
 // 产物里不存 chars：双名条目的 chars 恒等于 name 拆字，1,525 条存下来要多花 7,951 B gzip
 // （实测同一份数据，删掉这个字段 91,428 → 83,478 B）。加载时由 name 展开，运行时的 PoolItem
 // 形状不变，取词、打分、界面都不用改。自检仍然逐条校验 name 是两个字——存不出 chars 不等于
@@ -83,6 +89,8 @@ function asPool(v: unknown, what: string): PoolItem[] {
       !isObj(it) ||
       !isStr(it.name) ||
       [...it.name].length !== 2 ||
+      // 用字口径不许被产物绕过：白名单没批过的字不许进候选池（以前只有真实人名档守这一条）
+      ![...it.name].every((ch) => L0_CHARS.has(ch)) ||
       !isNum(it.ti) ||
       !isNum(it.li) ||
       !isStr(it.ns) ||
@@ -162,12 +170,6 @@ function asSingles(v: unknown): SingleItem[] {
   }
   return out;
 }
-
-// 白名单与带调写法都不进 chars.json：前者是 whitelist-L0.json 那一份名单，后者是 py + t 的纯函数
-// （见 src/engine/tone.ts）。两处都由这里合成，界面上拿到的形状和以前一样。
-const L0_CHARS = new Set(
-  Array.isArray(whitelistJson) && whitelistJson.every(isStr) ? whitelistJson : fail('whitelist-L0 不是字符串数组'),
-);
 
 function asChars(v: unknown): Record<string, CharInfo> {
   if (!isObj(v)) fail('chars 不是对象');

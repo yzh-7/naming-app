@@ -333,7 +333,7 @@ export const findItem = (id: string) => ALL_ITEMS.find((it) => it.id === id);
 // 出处今译：构建期按原句首次出现顺序编号，运行时按下标取；查不到返回空串，由界面决定是否留白
 export const lineGlossOf = (it: { lg: number }) => LINE_GLOSS[it.lg] ?? '';
 
-// 名用字表（293 字）：自选页的「仅名用字表」筛选与随机自由组合都基于它
+// 名用字表（当前 310 字）：自选页的「仅名用字表」筛选与随机自由组合都基于它
 export const L0_CHARS = Object.keys(CHARS)
   .filter((ch) => !!CHARS[ch]?.l0)
   .sort();
@@ -625,7 +625,14 @@ const PER_BOOK_CAP = 4;
 // 所以池内每条名字都出现在且只出现在一页——翻满 pages 页不重不漏。
 // 旧做法是「取分数前 band 条再批内随机」：同书上限会把窗口外的名字永久挤掉，
 // 实测每批 12 条连换 60 批只出现过 174/463，换 200 批仍漏 6 条。
-function paginate(ranked: Result[], count: number): Result[][] {
+function paginate(ranked: Result[], count: number, respectOrder = false): Result[][] {
+  // 按笔画／按常见度排序时不再套同书上限：那条上限是给「按分数」那一屏防止一本书占满用的，
+  // 用户明确要按笔画看的时候再牵制一次，界面写着「按笔画排」而结果不是笔画序，就是骗人
+  if (respectOrder) {
+    const chunks: Result[][] = [];
+    for (let i = 0; i < ranked.length; i += count) chunks.push(ranked.slice(i, i + count));
+    return chunks;
+  }
   const pages: Result[][] = [];
   let rest = ranked;
   while (rest.length) {
@@ -674,11 +681,10 @@ export function plan(surname: string, opts: Opts, batch: number, surReading = 0)
   const scored = items.map((it) => scoreItem(surname, it, opts, surReading));
   const byScore = [...scored].sort(SORTERS[opts.sort ?? 'score'] ?? SORTERS.score);
   const perPage = opts.count > 0 ? opts.count : byScore.length || 1;
-  const pages = paginate(byScore, perPage);
+  const pages = paginate(byScore, perPage, opts.sort === 'strokes' || opts.sort === 'popular');
   if (!pages.length) return { page: [], pageNo: 0, pages: 0, pool: 0, titleCounts };
   const pageNo = ((batch % pages.length) + pages.length) % pages.length;
   const raw = pages[pageNo] ?? []; // 上面已排除 pages 为空，取不到就交空页
-  // 默认（按分数/按出处）按书分组展示，一屏内不至于被单一本书占满；选了笔画/常见度就尊重所选顺序
   const page = opts.sort === 'strokes' || opts.sort === 'popular' ? raw : [...raw].sort(byBookThenScore);
   return { page, pageNo, pages: pages.length, pool: byScore.length, titleCounts };
 }
