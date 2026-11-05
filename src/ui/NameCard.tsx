@@ -10,7 +10,7 @@ import {
   shapeTags,
   wordEvidence,
 } from '../engine/name';
-import { BOOK_LABEL, type Book, type Result } from '../engine/types';
+import { BOOK_LABEL, type AltRef, type Book, type Result } from '../engine/types';
 
 const WINDOW_MAX = 28;
 
@@ -60,6 +60,80 @@ function sourceLabel(r: SourceRef) {
   return `《${BOOK_LABEL[r.book]}·${r.title}${r.author ? `·${r.author}` : ''}》`;
 }
 
+// 原句窗口＋那对字的高亮：主出处与「另有出处」共用这一套。传进来的是原句里的绝对下标，
+// 所以调用方怎么定位（取词段下标／产物里存的原句下标）都不影响这里画什么。
+function marks(line: string, hots: Set<number>) {
+  const spanFrom = Math.min(...hots);
+  const spanTo = Math.max(...hots) + 1;
+  const w = windowAround(line, spanFrom, spanTo);
+  const pieces: { text: string; mark: boolean }[] = [];
+  for (let i = w.start; i < w.end; i++) {
+    const mark = hots.has(i);
+    const ch = line.charAt(i);
+    const last = pieces[pieces.length - 1];
+    if (last && last.mark === mark) last.text += ch;
+    else pieces.push({ text: ch, mark });
+  }
+  return { w, pieces };
+}
+
+function Excerpt({ w, pieces }: { w: Win; pieces: { text: string; mark: boolean }[] }) {
+  return (
+    <>
+      {w.cutLeft && <span className="text-ink-3">…</span>}
+      {pieces.map((p, i) => {
+        return p.mark ? (
+          <mark key={i} className="rounded px-0.5 font-medium">
+            {p.text}
+          </mark>
+        ) : (
+          <span key={i}>{p.text}</span>
+        );
+      })}
+      {w.cutRight ? <span className="text-ink-3">…</span> : <span className="text-ink-3">。</span>}
+    </>
+  );
+}
+
+// 今译那一段：覆盖不到的句子（lg = -1）明说「待补」，不空着让用户自己猜是没有译文还是渲染坏了
+function GlossBlock({ lg, short }: { lg: number; short?: boolean }) {
+  const gloss = lineGlossOf({ lg });
+  return gloss ? (
+    <p className="mt-2 border-l-2 border-line pl-2 text-body leading-6 text-ink-2">
+      <span className="mr-1 rounded-ctl px-1 text-meta text-ink-3">今译</span>
+      {gloss}
+    </p>
+  ) : (
+    <p className="mt-2 border-l-2 border-line pl-2 text-body leading-6 text-ink-2">
+      <span className="mr-1 rounded-ctl px-1 chip text-meta">今译待补</span>
+      <span className="text-meta text-ink-3">
+        {short
+          ? '这一句原文照引，还没有现代汉语今译'
+          : '这一句原文照引，但还没有现代汉语今译（清单在 docs/gloss-gaps.md，补一行即进包）'}
+      </span>
+    </p>
+  );
+}
+
+// 另有出处的一条：书·篇＋原句（那对字高亮）＋今译。位置是产物里存的原句下标，加载期已逐条咬死过。
+export function AltSource({ a }: { a: AltRef }) {
+  const { w, pieces } = marks(a.line, new Set([a.at, a.at2]));
+  const where =
+    a.at2 - a.at === 1
+      ? `取词段第 ${a.at + 1}–${a.at2 + 1} 字`
+      : `取词段第 ${a.at + 1} 与第 ${a.at2 + 1} 字（中间隔 ${a.at2 - a.at - 1} 字）`;
+  return (
+    <li className="font-serif text-glyph leading-6 text-ink-2">
+      <Excerpt w={w} pieces={pieces} />
+      <div className="mt-1 text-meta text-ink-3">
+        {sourceLabel({ book: a.book, title: a.title, author: a.author, rn: undefined } as SourceRef)} · {where}
+        {!a.strict && ' · 长短句/散文宽口径'}
+      </div>
+      <GlossBlock lg={a.lg} short />
+    </li>
+  );
+}
+
 // 出处行：默认折叠，展开后显示原文高亮 + 今译
 export function Source({ r }: { r: SourceRef }) {
   // 真实人名档的「出处」说的是它自己的证据，不是一段不存在的原文
@@ -77,21 +151,6 @@ export function Source({ r }: { r: SourceRef }) {
     );
   }
   const at = r.line.indexOf(r.seg);
-  // 今译覆盖不到的句子（lg = -1）明说「待补」，不空着让用户自己猜是没有译文还是渲染坏了
-  const gloss = lineGlossOf(r);
-  const glossBlock = gloss ? (
-    <p className="mt-2 border-l-2 border-line pl-2 text-body leading-6 text-ink-2">
-      <span className="mr-1 rounded-ctl px-1 text-meta text-ink-3">今译</span>
-      {gloss}
-    </p>
-  ) : (
-    <p className="mt-2 border-l-2 border-line pl-2 text-body leading-6 text-ink-2">
-      <span className="mr-1 rounded-ctl px-1 chip text-meta">今译待补</span>
-      <span className="text-meta text-ink-3">
-        这一句原文照引，但还没有现代汉语今译（清单在 docs/gloss-gaps.md，补一行即进包）
-      </span>
-    </p>
-  );
   if (at < 0) {
     return (
       <div className="text-meta text-ink-2">
@@ -99,23 +158,13 @@ export function Source({ r }: { r: SourceRef }) {
         <div className="mt-0.5">
           取词段「<mark className="rounded px-0.5">{r.seg}</mark>」
         </div>
-        {glossBlock}
+        <GlossBlock lg={r.lg} />
       </div>
     );
   }
   const gap = r.gap ?? 1;
   const hots = new Set(gap === 0 ? [at + r.foot] : [at + r.foot, at + r.foot + gap]);
-  const spanFrom = Math.min(...hots);
-  const spanTo = Math.max(...hots) + 1;
-  const w = windowAround(r.line, spanFrom, spanTo);
-  const pieces: { text: string; mark: boolean }[] = [];
-  for (let i = w.start; i < w.end; i++) {
-    const mark = hots.has(i);
-    const ch = r.line.charAt(i);
-    const last = pieces[pieces.length - 1];
-    if (last && last.mark === mark) last.text += ch;
-    else pieces.push({ text: ch, mark });
-  }
+  const { w, pieces } = marks(r.line, hots);
   const where =
     gap === 0
       ? `取词段第 ${r.foot + 1} 字`
@@ -124,23 +173,13 @@ export function Source({ r }: { r: SourceRef }) {
         : `取词段第 ${r.foot + 1} 与第 ${r.foot + gap + 1} 字（中间隔 ${gap - 1} 字）`;
   return (
     <div className="font-serif text-glyph leading-6 text-ink-2">
-      {w.cutLeft && <span className="text-ink-3">…</span>}
-      {pieces.map((p, i) => {
-        return p.mark ? (
-          <mark key={i} className="rounded px-0.5 font-medium">
-            {p.text}
-          </mark>
-        ) : (
-          <span key={i}>{p.text}</span>
-        );
-      })}
-      {w.cutRight ? <span className="text-ink-3">…</span> : <span className="text-ink-3">。</span>}
+      <Excerpt w={w} pieces={pieces} />
       <div className="mt-1 text-meta text-ink-3">
         {sourceLabel(r)} · {where}
         {gap > 1 && ' · 跨字取词，看原文自辨'}
         {!r.strict && ' · 长短句/散文宽口径'}
       </div>
-      {glossBlock}
+      <GlossBlock lg={r.lg} />
     </div>
   );
 }
@@ -275,6 +314,25 @@ export default function NameCard({
       <div data-block="source" className="mt-2.5 border-t border-line pt-2.5">
         <Source r={r} />
       </div>
+
+      {/* 另有几处出处：语料里同一个名字往往不止一处能核对到（0.14.0）。默认折叠——
+          卡上常驻的仍是主出处那一句，这一区是把「还有几处」如实列出来，不抢主句的位置 */}
+      {r.alts && r.alts.length > 0 && (
+        <details
+          data-block="alts"
+          className="mt-2 text-meta text-ink-2 no-print"
+          title="主出处之外，语料里还能核对到这个名字的句读。每条给出书·篇、原句（那对字高亮）与今译"
+        >
+          <summary className="flex min-h-11 cursor-pointer select-none items-center text-ink-3 hover:text-ink lg:min-h-8">
+            另有 {r.alts.length} 处出处
+          </summary>
+          <ul className="mt-1.5 space-y-3 border-t border-line pt-2">
+            {r.alts.map((a) => (
+              <AltSource key={`${a.ti}\u0000${a.li}\u0000${a.at}\u0000${a.at2}`} a={a} />
+            ))}
+          </ul>
+        </details>
+      )}
 
       {/* 第三层：事实（字义 / 字形 / 常见度 / 多音 / 部首 / 小名）统一成「标签 + 值」两列，
           不再是十几个颜色各异的小胶囊 */}

@@ -8,7 +8,6 @@ import { NAME_NOISE } from './name-noise.mjs';
 
 const RAW = 'data/raw';
 const OUT = 'src/data';
-const NOT_CJK = /[^一-鿿]/g;
 
 // 语料指纹：SHA256SUMS 清单本身的哈希。输入变了指纹就变，供 meta.json、verify 与页脚三处共用。
 const corpusSha = createHash('sha256')
@@ -200,7 +199,16 @@ const unitsByBook = {};
 for (const b of BOOKS) {
   unitsByBook[b.key] = { segs: 0, chars: 0 };
 }
+// 逐字判定「是不是汉字」用码点比较而不是带 /g 的正则：同一串上反复 .test() 会被 lastIndex 带着走
+const isCJK = (c) => c >= '一' && c <= '鿿';
+const QUOTE_CHARS = new Set('“”‘’「」《》（）()');
 const foot = new Map();
+// 同一个双名在语料里往往不止一处可核对出处（0.14.0 新增）。foot 只管主出处——选取规则一条没动：
+// gap 最小者优先，同 gap 时保留语料里先出现的那一处。footAll 把同一双名的**全部**出处按出现先后收齐，
+// 去重键是「书 · 原句 · 原句里那对字的两个位置 · 间隔」；主出处下面按引用身份剔掉，不进 alternates。
+const footAll = new Map();
+const occKey = (o) =>
+  `${o.book}\u0000${o.title}\u0000${o.author}\u0000${o.line}\u0000${o.pa}\u0000${o.pb}\u0000${o.gap}`;
 let sent = 0,
   segChars = 0;
 
@@ -210,28 +218,68 @@ for (const { key: book } of BOOKS) {
   for (let ti = 0; ti < texts.length; ti++) {
     const { title, author } = metas[ti];
     for (const s of String(texts[ti]).split(SPLIT)) {
-      const line = s.trim();
-      if (!line) continue;
+      const trimmed = s.trim();
+      if (!trimmed) continue;
       sent += 1;
-      for (const u of line.split(COMMA)) {
-        const cleaned = u.replace(/[“”‘’「」《》（）()]/g, '').trim();
-        if (!cleaned) continue;
-        for (const seg of cleaned.replace(NOT_CJK, '').split('兮')) {
-          if (seg.length < 2) continue;
-          segChars += seg.length;
+      // 取词、原句、下标都在**同一串文本**上算：tidy 只删多余标点，所以「存进产物的原句」与
+      // 「取词用的原句」是同一串，alternates 存的下标才是那条原句里的真实位置。
+      const line = tidy(trimmed);
+      const L = [...line];
+      // 逐字符带原句下标切小句：被剔掉的引号与标点不会让下标错位（所以 取词段 不是连续子串的那几条也量得出位置）
+      const chunks = [];
+      let from = 0;
+      for (let i = 0; i < L.length; i++) {
+        if (COMMA.test(L[i])) {
+          chunks.push([from, i]);
+          from = i + 1;
+        }
+      }
+      chunks.push([from, L.length]);
+      for (const [c0, c1] of chunks) {
+        const cells = [];
+        for (let i = c0; i < c1; i++) {
+          const ch = L[i];
+          if (QUOTE_CHARS.has(ch) || !isCJK(ch)) continue;
+          cells.push({ ch, at: i });
+        }
+        if (!cells.length) continue;
+        const segs = [];
+        let cur = [];
+        for (const c of cells) {
+          if (c.ch === '兮') {
+            segs.push(cur);
+            cur = [];
+          } else cur.push(c);
+        }
+        segs.push(cur);
+        for (const cell of segs) {
+          if (cell.length < 2) continue;
+          const cs = cell.map((x) => x.ch);
+          const seg = cs.join('');
+          segChars += cs.length;
           unitsByBook[book].segs += 1;
-          unitsByBook[book].chars += seg.length;
-          const offs = offsets(book, seg.length);
-          const cs = [...seg];
+          unitsByBook[book].chars += cs.length;
+          const offs = offsets(book, cs.length);
           for (const i of offs) {
             for (let gap = 1; gap <= MAX_GAP; gap++) {
               const j = i + gap;
               if (j >= cs.length) break;
               if (gap > 1 && (inRedup(cs, i) || inRedup(cs, j))) continue;
               const pair = cs[i] + cs[j];
-              const rec = { book, title, author, line: tidy(line), seg, foot: i, gap };
-              const cur = foot.get(pair);
-              if (!cur || cur.gap > gap) foot.set(pair, rec);
+              const pa = cell[i].at;
+              const pb = cell[j].at;
+              const rec = { book, title, author, line, seg, foot: i, gap, pa, pb };
+              let bag = footAll.get(pair);
+              if (!bag) {
+                bag = { list: [], keys: new Set() };
+                footAll.set(pair, bag);
+              }
+              const k = occKey(rec);
+              if (bag.keys.has(k)) continue; // 同一处出处只算一次：语料里重复的文本会撞出完全相同的一处
+              bag.keys.add(k);
+              bag.list.push(rec);
+              const cur2 = foot.get(pair);
+              if (!cur2 || cur2.gap > gap) foot.set(pair, rec);
             }
           }
         }
@@ -391,6 +439,8 @@ function makeList(entries, tier) {
       famous: isFamous(name),
       risk: w >= 500 ? { word: name, freq: w } : null,
       score: staticScore,
+      // 主出处之外的那几处（构建期对象，不进产物主体；写产物时压成共享表下标，见 compactAlt）
+      alts: (footAll.get(name)?.list ?? []).filter((o) => o !== v),
     };
   });
 }
@@ -507,14 +557,23 @@ const glossAt = (src) => {
   }
   return i;
 };
+// 只为「别处的出处」存在的句子也可以有人补译文：给它分配下标，但不计入 glossGaps
+// （gloss_gaps 的口径是「主出处缺译文」，验收门禁按那条核对，两本账不许混）
+const glossIndexFor = (src) => {
+  if (!LINE_GLOSS_RAW.has(src)) return -1;
+  let i = glossIndex.get(src);
+  if (i === undefined) {
+    i = lineGloss.length;
+    glossIndex.set(src, i);
+    lineGloss.push(LINE_GLOSS_RAW.get(src));
+  }
+  return i;
+};
 for (const c of candidates) c.lg = glossAt(c.line);
 for (const s of singles) s.lg = glossAt(s.line);
-const unusedGloss = [...LINE_GLOSS_RAW.keys()].filter((src) => !glossIndex.has(src));
 console.log(
-  `今译覆盖：释义 ${LINE_GLOSS_RAW.size} 条｜被候选或单名用到 ${glossIndex.size} 条｜释义闲置 ${unusedGloss.length} 条｜出处句缺今译 ${glossGaps.size} 句`,
+  `今译覆盖：释义 ${LINE_GLOSS_RAW.size} 条｜主出处用到 ${glossIndex.size} 条｜主出处缺今译 ${glossGaps.size} 句`,
 );
-if (unusedGloss.length)
-  throw new Error(`line_gloss.tsv 有 ${unusedGloss.length} 条释义没有对应原句：${unusedGloss.slice(0, 3).join(' | ')}`);
 {
   // 覆盖率地板：扩池允许带来「原文照引、今译待补」的条目，但不能把它扩成译文大面积缺席的库
   const total = candidates.length + singles.length;
@@ -784,6 +843,33 @@ const lineSlot = (line, lg) => {
   }
   return i;
 };
+// alternates 专用的两个「追加」槽位：主出处那一段两张表的形状与字节都不动，只有新条目用紧凑形。
+//   原句 → 只存字符串。带今译的句子必然已被某条主出处用到（下面 alternate 那条炸点守着这件事），
+//     所以追加段里的句子一律没有今译，不必再包一层 {s, g}。
+//   篇名 → 只存 [书, 篇名, 作者, 是否名篇] 四元组。alternate 不参与 id 重建，所以不必存 code/slug。
+const altLineSlot = (line) => {
+  let i = lineIndex.get(line);
+  if (i === undefined) {
+    i = lineTable.length;
+    lineIndex.set(line, i);
+    // 追加段的句子默认没有今译（它只为「别处的出处」存在），所以只存一个字符串。
+    // 若有人在 line_gloss.tsv 里替它补了一行，这里照收：存成 {s, g} 对象并进今译表——
+    // 「补译文」永远是允许的事，构建不许因此炸。
+    const g = glossIndexFor(line);
+    lineTable.push(g === -1 ? line : { s: line, g });
+  }
+  return i;
+};
+const altTitleSlot = (c) => {
+  const k = `${c.book}\u0000${c.title}\u0000${c.author}`;
+  let i = titleIndex.get(k);
+  if (i === undefined) {
+    i = titleTable.length;
+    titleIndex.set(k, i);
+    titleTable.push([c.book, c.title, c.author, BOOK_STRICT[c.book]]);
+  }
+  return i;
+};
 const idSeq = (id) => {
   const m = /^(.+)_(\d{3})$/.exec(id);
   if (!m) throw new Error(`id 形状不认识：${id}`);
@@ -827,15 +913,76 @@ const compactSingle = (c) => {
 };
 // 产物里不存 chars：双名的 chars 恒等于 name 拆字，1,525 条存下来实测多花 7,951 B gzip
 // （91,428 → 83,478 B）。运行时由 src/engine/data.ts 从 name 展开，形状不变。
-write('candidates.json', candidates.map(compactPair));
-
+// alternates 的编码（0.14.0）：`alt` 是扁平整数数组，每 4 个数一条出处 —— [ti, li, pa, d]
+//   ti  共享篇名表下标（绝对）
+//   li  共享原句表下标（**同一张表**：同一条原句在主出处与 alternates 之间只存一份）。
+//       同一个名字的多条按存储顺序存**差值**：第一条相对 0，之后相对上一条的 li（实测省 676 B gzip）。
+//   pa  取词首字在那条原句里的下标   d  两个取字在原句里的距离（原句里被剔掉的标点/引号会让 d ≠ gap，
+//       所以存原句里的真实距离；加载期逐条断言 line[pa] 与 line[pa+d] 就是这个名字的两个字）
+// 篇名与原句原文一条都不重复存；序号 `sq` 只有主出处需要（id 由它重建），alternate 不参与 id，所以不存。
+// 两张共享表里「为 alternates 新建的条目」用紧凑形（见上面 altLineSlot / altTitleSlot 的注释），
+// 主出处那一段一条都没动 —— 所以产物里已有的 ti/li 下标与老条目字节都不位移。
+const candOut = candidates.map(compactPair);
 write('singles.json', singles.map(compactSingle));
+// 主出处全部落进两张共享表之后才排 alternates：新篇名／新原句一律**追加**在老条目之后，
+// 产物里已有的 ti/li 一个字节都不位移（收藏、拉黑、分享链接靠 id，id 由 ti/li/ns/sq 重建）。
+const linesBefore = lineTable.length;
+const altGlossGaps = new Map(); // 书 → 只为 alternates 存在、且没有今译的原句（新的待补句子）
+let altGapAltCount = 0; // alternates 里落在「没有今译的原句」上的处数（界面会显示「今译待补」）
+const titlesBefore = titleTable.length;
+let altTotal = 0;
+let altNames = 0;
+let altMax = 0;
+for (let i = 0; i < candidates.length; i++) {
+  const alts = candidates[i].alts;
+  if (!alts.length) continue;
+  const flat = [];
+  let prevLi = 0;
+  for (const a of alts) {
+    const li = altLineSlot(a.line);
+    // 只为「别处的出处」存在的句子，若也没人给它写今译，就是一条新缺口：一起写进待补清单，不许只数主出处那一头
+    if (!LINE_GLOSS_RAW.has(a.line)) {
+      altGapAltCount += 1;
+      if (!glossGaps.has(a.line)) {
+        const set = altGlossGaps.get(a.book) ?? new Set();
+        set.add(a.line);
+        altGlossGaps.set(a.book, set);
+      }
+    }
+    flat.push(altTitleSlot(a), li - prevLi, a.pa, a.pb - a.pa);
+    prevLi = li;
+  }
+  candOut[i].alt = flat;
+  altNames += 1;
+  altTotal += alts.length;
+  if (alts.length > altMax) altMax = alts.length;
+}
+write('candidates.json', candOut);
+
+// 释义闲置要等 alternates 也消费完才能判：只给「别处的出处」用的句子同样可以有人补译文
+const unusedGloss = [...LINE_GLOSS_RAW.keys()].filter((src) => !glossIndex.has(src));
+console.log(
+  `今译覆盖（alternates 之后）：共享原句表 ${lineTable.length} 条｜带今译 ${lineGloss.length} 句｜没人用到的释义 ${unusedGloss.length} 条`,
+);
+if (unusedGloss.length)
+  throw new Error(`line_gloss.tsv 有 ${unusedGloss.length} 条释义没有对应原句：${unusedGloss.slice(0, 3).join(' | ')}`);
+meta.gloss_lines = lineGloss.length;
+meta.line_gloss = lineGloss.length;
 
 // 两张共享表要在候选与单名都填完之后才写得出内容
 write('sources.json', { titles: titleTable, lines: lineTable });
-meta.src_titles = titleTable.length; // 产物里的篇名条目数（545 篇 vs 1,660 条双名）
-meta.src_lines = lineTable.length; // 共享原句表条数
-meta.src_lines_gap = lineTable.filter((l) => l.g === -1).length; // 其中还没有今译的句子数
+meta.src_titles = titleTable.length; // 产物里的篇名条目数（545 篇主出处用篇 ＋ alternate 带来的新篇）
+meta.src_lines = lineTable.length; // 共享原句表条数（1,221 条主出处原句 ＋ alternate 带来的新句）
+meta.src_lines_gap = lineTable.filter((l) => (typeof l === 'string' ? -1 : l.g) === -1).length; // 其中还没有今译的句子数
+// alternates 计数：只作对照与文档口径，门禁（verify 4h）从 data/raw 独立重算，不读回这几个数自证
+meta.alt_names = altNames; // 有「另有出处」的双名条数
+meta.alt_names_without = candidates.length - altNames;
+meta.alt_total = altTotal; // alternate 处数合计（不含各条自己的主出处）
+meta.alt_occurrences = altTotal + candidates.length; // 主出处＋alternates 的总处数
+meta.alt_max = altMax; // 单个名字最多的 alternate 处数
+meta.alt_lines_added = lineTable.length - linesBefore; // 为 alternates 追加进共享原句表的句子数
+meta.alt_titles_added = titleTable.length - titlesBefore;
+const altGapLines = [...altGlossGaps.values()].reduce((n, set) => n + set.size, 0); // 新的待补句子数
 write('realnames.json', realNames);
 write('chars.json', chars);
 write('homophone.json', homophone);
@@ -864,9 +1011,18 @@ write('line_gloss.json', lineGloss);
     '由 `npm run build:data` 生成，不要手工编辑。这些原句有出处、有原文，但还没有现代汉语今译：',
     '卡片与导出里对应位置显示「今译待补」，不是缺漏被藏起来了。补法：在 `data/raw/line_gloss.tsv` 加一行「原句 TAB 今译」，重跑构建。',
     '',
-    `共 ${glossGaps.size} 句，落在 ${[...byBook.keys()].length} 本书、${meta.gloss_gap_items} 条候选上（总候选 ${candidates.length} 条）。`,
+    `主出处那一头：共 ${glossGaps.size} 句，落在 ${[...byBook.keys()].length} 本书、${meta.gloss_gap_items} 条候选上（总候选 ${candidates.length} 条）。`,
     '',
-    ...[...byBook].map(([b, set]) => `## ${b}（${set.size} 句）\n\n${[...set].map((l) => `- ${l}`).join('\n')}\n`),
+    `「另有 N 处出处」那一头（0.14.0 恢复的多出处）里有 ${altGapAltCount} 处落在没有今译的原句上，其中 ${altGapLines} 句是只为别处出处存在的新句子（下面按书列出）。它们不在这次的候选池计数里（名字一条没多），但界面上每一个「今译待补」都要数得出来，所以一起列在这张表里：补法同样是加一行「原句 TAB 今译」，重跑构建，原句表里那一条就从字符串变成 {s, g}，卡片上立刻有译文。`,
+    '',
+    ...[...byBook].map(
+      ([b, set]) => `## 主出处 · ${b}（${set.size} 句）\n\n${[...set].map((l) => `- ${l}`).join('\n')}\n`,
+    ),
+    `## 只为别处的出处存在的待补句子（共 ${altGapLines} 句）`,
+    '',
+    ...[...altGlossGaps].map(
+      ([b, set]) => `### ${b}（${set.size} 句）\n\n${[...set].map((l) => `- ${l}`).join('\n')}\n`,
+    ),
   ].join('\n');
   fs.mkdirSync('docs', { recursive: true }); // 夹具里可能没有 docs/，清单要跟着产物一起写出来
   fs.writeFileSync('docs/gloss-gaps.md', md);

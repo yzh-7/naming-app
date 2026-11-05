@@ -37,6 +37,24 @@ export type PoolItem = {
   rn?: number; // 真实用名证据：120 万真实姓名语料里出现过多少次（构建期从 data/raw/cnname_given.json 取，缺＝没记录）
   rs?: 'm' | 'f' | 'n'; // 该语料对这个名字的性别标注（≥5 次且 80% 单侧才算有向，缺＝未知）
   spl?: string; // 跨字取词时被剪开的那个原词（只在 gap≥2 且那一处本来成词时才有）
+  alts?: AltRef[]; // 另有几处可核对出处（0.14.0）：主出处之外的那些处，缺＝语料里只有这一处
+};
+
+// 一条「另有出处」：加载期从 sources.json 的两张共享表展开出来的运行时形状。
+// `at`/`at2` 是那对字在 `line` 里的下标（构建期存的就是原句里的真实位置），`win` 是原句里从首字到末字那一段
+// （跨字取词时含中间被跳过的字），`lg` 沿用原句上的今译下标（-1＝这一句还没有今译）。
+export type AltRef = {
+  ti: number;
+  li: number;
+  book: Book;
+  title: string;
+  author: string;
+  strict: boolean;
+  line: string;
+  at: number;
+  at2: number;
+  win: string;
+  lg: number;
 };
 
 export type SingleItem = Omit<PoolItem, 'name' | 'chars' | 'tier' | 'redup' | 'risk'> & {
@@ -147,6 +165,7 @@ export type Named = {
   rn?: number; // 真实用名证据：120 万真实姓名语料里这个名字出现过多少次（缺＝没记录）
   rs?: 'm' | 'f' | 'n'; // 上游对这个名字的性别标注（≥5 次且 80% 单侧才算有向；缺＝未知）
   spl?: string;
+  alts?: AltRef[]; // 主出处之外的其它可核对出处（见 PoolItem.alts）：只有双名候选有，单字名与真实人名档没有
 };
 
 // 真实人名档的一条：不存出处（它没有典籍出处），条目形状在 src/engine/data.ts 里补全

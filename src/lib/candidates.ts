@@ -18,6 +18,7 @@ export type CandidateRow = {
   word: string; // 成词依据（语料内相邻次数 / 现代词表收录 / 典籍叠字 / 未见依据）
   split: string; // 跨字取词时被剪开的原词，没有就留空
   usage: string; // 真实用名次数：120 万真实姓名语料里出现过多少次，没记录就留空
+  altCount: number | ''; // 其他出处数：主出处之外还能核对到几处（真实人名档没有典籍出处，留空）
 };
 
 export function candidateRow(r: Result): CandidateRow {
@@ -36,6 +37,8 @@ export function candidateRow(r: Result): CandidateRow {
     gender:
       r.gender.side === 'n' ? '中性' : `${r.gender.strong ? '' : '疑似'}${r.gender.side === 'f' ? '偏女' : '偏男'}`,
     ...candidateQuality(r),
+    // 卡片上「另有 N 处出处」那一区的同一口径：只数条数，不把那些原句与今译塞进表里（1,677 条原文做导出没必要）
+    altCount: r.book === 'real' ? '' : (r.alts?.length ?? 0),
   };
 }
 
@@ -88,6 +91,7 @@ export const CSV_HEADER = [
   '成词依据',
   '拆词',
   '真实用名次数',
+  '其他出处数',
 ];
 
 // 单元格转义。除了 CSV 本身的引号/逗号规则，还要防 Excel/WPS 的公式执行：
@@ -118,6 +122,7 @@ export function candidatesCsv(results: Result[]): string {
       x.word,
       x.split,
       x.usage,
+      x.altCount,
     ]
       .map(esc)
       .join(','),
@@ -151,6 +156,7 @@ export function favoritesCsv(
       x.word,
       x.split,
       x.usage,
+      x.altCount,
       e.group ?? '',
       e.note ?? '',
       e.from === 'gen' ? '生成页' : e.from === 'compose' ? '自选页' : '未记录',

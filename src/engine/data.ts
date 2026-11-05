@@ -11,7 +11,16 @@ import radicalJson from '../data/radical.json';
 import glossJson from '../data/gloss.json';
 import lineGlossJson from '../data/line_gloss.json';
 import metaJson from '../data/meta.json';
-import { BOOK_ORDER, type CharInfo, type Homophone, type PoolItem, type RealItem, type SingleItem } from './types';
+import {
+  BOOK_ORDER,
+  type AltRef,
+  type Book,
+  type CharInfo,
+  type Homophone,
+  type PoolItem,
+  type RealItem,
+  type SingleItem,
+} from './types';
 import { markSyllable } from './tone';
 
 // 构建产物是 JSON，TypeScript 只能 `as` 断言；这里在加载时做一遍结构自检，
@@ -37,11 +46,35 @@ const L0_CHARS = new Set(
 // 形状不变，取词、打分、界面都不用改。自检仍然逐条校验 name 是两个字——存不出 chars 不等于
 // 可以少一个校验：字数的口径在这里守着。
 // 共享表：原句、篇名（含 id 里的书码与拼音）、今译下标。产物里每条候选只存下标。
+// 0.14.0 起，「只为 alternates 新建的条目」用紧凑形（主出处那一段一条没动，字节与下标都不位移）：
+//   原句 → 一个字符串。带今译的句子必然已被某条主出处用到，所以追加段里的句子一律没有今译。
+//   篇名 → [书, 篇名, 作者, 是否名篇]。alternate 不参与 id 重建，所以不存 code／slug。
 type SourceTitle = { bk: string; code: string; t: string; au: string; slug: string; st: boolean };
 type SourceLine = { s: string; g: number };
-function asSources(v: unknown): { titles: SourceTitle[]; lines: SourceLine[] } {
+function asSources(v: unknown): {
+  titles: SourceTitle[];
+  lines: SourceLine[];
+  compactTitles: Set<number>;
+  compactLines: Set<number>;
+} {
   if (!isObj(v) || !Array.isArray(v.titles) || !Array.isArray(v.lines)) fail('sources 不是 { titles, lines }');
+  const compactTitles = new Set<number>();
+  const compactLines = new Set<number>();
   const titles = v.titles.map((x, i) => {
+    if (Array.isArray(x)) {
+      compactTitles.add(i);
+      if (
+        x.length !== 4 ||
+        !isStr(x[0]) ||
+        !BOOKS.has(x[0]) ||
+        !isStr(x[1]) ||
+        !x[1] ||
+        !isStr(x[2]) ||
+        typeof x[3] !== 'boolean'
+      )
+        fail(`sources.titles[${i}] 是紧凑形篇名但形状不对（期望 [书, 篇名, 作者, 是否名篇]）`);
+      return { bk: x[0], code: x[0], t: x[1], au: x[2], slug: '', st: x[3] };
+    }
     if (
       !isObj(x) ||
       !isStr(x.bk) ||
@@ -56,11 +89,15 @@ function asSources(v: unknown): { titles: SourceTitle[]; lines: SourceLine[] } {
     return x as unknown as SourceTitle;
   });
   const lines = v.lines.map((x, i) => {
+    if (isStr(x)) {
+      compactLines.add(i);
+      return { s: x, g: -1 };
+    }
     if (!isObj(x) || !isStr(x.s) || !isNum(x.g)) fail(`sources.lines[${i}] 结构不符`);
     return x as unknown as SourceLine;
   });
   if (!titles.length || !lines.length) fail('sources 表是空的');
-  return { titles, lines };
+  return { titles, lines, compactTitles, compactLines };
 }
 const SOURCES = asSources(sourcesJson);
 
@@ -82,6 +119,59 @@ const segOf = (line: string, it: Record<string, unknown>, where: string): string
 const idOf = (title: SourceTitle, ns: string, sq: number, prefix = ''): string =>
   `${prefix}B${title.code}_${title.slug}_${ns}_${String(sq).padStart(3, '0')}`;
 
+// 多出处（alternates）：产物里每条候选的 `alt` 是扁平整数数组，每 4 个数一条 [ti, li, pa, d]——
+// 篇名下标、原句下标、取词首字在那条原句里的下标、两个取字在原句里的距离；
+// 同一个名字里 `li` 存的是相对上一条的差值（第一条相对 0），加载时逐条累加还原。
+// 原句与篇名原文一条都不重复存。加载期逐条咬死：下标必须存在、必须不越界、必须真指到那两个字的
+// 这对位置（line[pa] 与 line[pa+d] 就是这个名字的两个字）。形状或位置不对就在这里炸，不等到界面上变成 undefined。
+// 「这一处真的属于那一篇」这件事产物自己证不了（原句表按文本去重，同一句文本可以被多篇共用），
+// 由构建门禁 scripts/verify.mjs 4h 从 data/raw 独立重算逐条核对。
+function asAlts(name: string, v: unknown, where: string): AltRef[] {
+  if (!Array.isArray(v)) fail(`${where} 的 alt 不是数组`);
+  if (v.length % 4 !== 0) fail(`${where} 的 alt 长度不是 4 的倍数（每条出处四个下标）`);
+  const chars = [...name];
+  const out: AltRef[] = [];
+  const seen = new Set<number>();
+  let prevLi = 0;
+  for (let i = 0; i < v.length; i += 4) {
+    const [ti, liDelta, pa, d] = v.slice(i, i + 4) as unknown[];
+    if (![ti, liDelta, pa, d].every((x) => Number.isInteger(x)))
+      fail(`${where} 的 alt 里有不是整数的下标（第 ${i / 4 + 1} 条）`);
+    const li = prevLi + (liDelta as number);
+    prevLi = li;
+    if (li < 0 || li >= SOURCES.lines.length) fail(`${where} 的 alternate 原句下标越界（li=${li}）`);
+    const title = SOURCES.titles[ti as number];
+    const src = SOURCES.lines[li];
+    if (!title || !src) fail(`${where} 的 alternate 共享表下标越界（ti=${ti} li=${li}）`);
+    const at = pa as number;
+    const at2 = at + (d as number);
+    // 与构建期同口径：按码点数位置（语料全在 BMP 内，两种口径实测一致，但只认一种才不会再分叉）
+    const cs = [...src.s];
+    if ((d as number) < 1 || at < 0 || at2 >= cs.length) fail(`${where} 的 alternate 取词下标越界（pa=${at} d=${d}）`);
+    if (cs[at] !== chars[0] || cs[at2] !== chars[1])
+      fail(
+        `${where} 的 alternate 下标没指到那两个字的这对位置：「${src.s}」第 ${at + 1}／${at2 + 1} 字是 ${cs[at]}${cs[at2]}`,
+      );
+    const key = (ti as number) * 1_000_003 + li * 1009 + at * 7 + (d as number);
+    if (seen.has(key)) fail(`${where} 的 alt 里有重复的出处（ti=${ti} li=${li} pa=${at} d=${d}）`);
+    seen.add(key);
+    out.push({
+      ti: ti as number,
+      li,
+      book: title.bk as Book,
+      title: title.t,
+      author: title.au,
+      strict: title.st,
+      line: src.s,
+      at,
+      at2,
+      win: cs.slice(at, at2 + 1).join(''),
+      lg: src.g,
+    });
+  }
+  return out;
+}
+
 function asPool(v: unknown, what: string): PoolItem[] {
   const out: PoolItem[] = [];
   for (const it of isArr(v)) {
@@ -98,18 +188,25 @@ function asPool(v: unknown, what: string): PoolItem[] {
       !isNum(it.foot) ||
       !isNum(it.gap) ||
       !isNum(it.score) ||
-      ['id', 'chars', 'book', 'title', 'author', 'line', 'seg', 'tier', 'strict', 'lg'].some((k) => k in it)
+      ['id', 'chars', 'book', 'title', 'author', 'line', 'seg', 'tier', 'strict', 'lg', 'alts'].some((k) => k in it)
     ) {
       fail(`${what} 有结构不符的条目（可共享或可推导的字段不许直接存）`);
     }
     const title = SOURCES.titles[it.ti];
     const line = SOURCES.lines[it.li];
     if (!title || !line) fail(`${what} 里的「${it.name}」共享表下标越界`);
+    // 主出处必须落在两张表的「完整形」那一段：紧凑形条目只为 alternates 存在，篇名没有 slug（进不了 id）
+    if (SOURCES.compactTitles.has(it.ti) || SOURCES.compactLines.has(it.li))
+      fail(`${what} 里的「${it.name}」主出处指到了只为 alternates 追加的紧凑形条目上`);
     const text = line.s;
+    const alts = it.alt === undefined ? undefined : asAlts(it.name, it.alt, `${what} 里的「${it.name}」`);
+    // 产物里的 `alt` 是编码，运行时只留展开后的 `alts`：把下标数组原样带进内存会让卡片与导出读到没校验过的数
+    const rest = { ...(it as unknown as Record<string, unknown>) };
+    delete rest.alt;
     out.push({
-      ...(it as unknown as Omit<
+      ...(rest as unknown as Omit<
         PoolItem,
-        'id' | 'chars' | 'book' | 'title' | 'author' | 'line' | 'seg' | 'tier' | 'strict' | 'lg'
+        'id' | 'chars' | 'book' | 'title' | 'author' | 'line' | 'seg' | 'tier' | 'strict' | 'lg' | 'alt' | 'alts'
       >),
       id: idOf(title, it.ns, it.sq),
       chars: [...it.name],
@@ -124,6 +221,7 @@ function asPool(v: unknown, what: string): PoolItem[] {
       score: it.score,
       strict: title.st,
       lg: line.g,
+      ...(alts ? { alts } : {}),
     });
   }
   return out;
@@ -259,6 +357,11 @@ const META_KEYS = [
   'famous_threshold',
   'pool_famous',
   'singles_famous',
+  'alt_total',
+  'alt_names',
+  'alt_max',
+  'alt_lines_added',
+  'alt_titles_added',
 ] as const;
 type Meta = {
   pool_B: number;
@@ -302,6 +405,13 @@ type Meta = {
   famous_threshold: number;
   pool_famous: number;
   singles_famous: number;
+  // 多出处（0.14.0）：处数合计／带 alternates 的条数／单名最多几处／为它追加的原句与篇名条目数
+  alt_total: number;
+  alt_names: number;
+  alt_max: number;
+  alt_lines_added: number;
+  alt_titles_added: number;
+  alt_occurrences: number;
   corpus_sha: string;
   id_prefix_stats: { groups: number; collisions: number; max_group: number };
 };

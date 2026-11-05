@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import NameCard, { Source } from './NameCard';
 import { genderOf, scoreItem, findItem, glossOf, lineGlossOf, sameSoundPeers, shapeTags } from '../engine/name';
 import { POOL, REAL_ITEMS } from '../engine/data';
-import { BOOK_LABEL, BOOK_ORDER, type Opts } from '../engine/types';
+import { BOOK_LABEL, BOOK_ORDER, type Opts, type Result } from '../engine/types';
 import { one } from '../testing';
 
 const opts: Opts = {
@@ -50,7 +50,8 @@ describe('NameCard 组件', () => {
     expect(text).toContain('分数合计');
     expect(text, '常驻的那个数字就是排序用的总分').toContain(String(r.total));
     expect(nameRow.querySelector('details'), '分数合计不该在折叠里').toBeNull();
-    const d = card.querySelector('details')!;
+    const d = card.querySelector('details[data-block="score"]')!;
+    expect(d, '卡片上必须有一个「分数明细」折叠').toBeTruthy();
     expect(d.textContent).toContain('分数明细');
     expect(d.hasAttribute('open'), '分数明细照旧默认折叠').toBe(false);
   });
@@ -64,7 +65,14 @@ describe('NameCard 组件', () => {
     const marked = card.querySelector('mark');
     expect(marked, '原句里的取词段没有高亮').toBeTruthy();
     expect(marked!.closest('details'), '原句不该再藏在折叠里').toBeNull();
-    expect(card.querySelectorAll('details'), '卡片上只剩「分数明细」一个折叠').toHaveLength(1);
+    // 卡上的折叠只有两种：分数明细，与（有 alternates 时）另有出处。出处那一块是常驻 div，不是折叠。
+    const details = [...card.querySelectorAll('details')];
+    expect(details.map((d) => d.getAttribute('data-block')).sort()).toEqual(
+      r.alts?.length ? ['alts', 'score'] : ['score'],
+    );
+    expect(card.querySelector('[data-block="source"]')!.closest('details'), '出处块不该包在折叠里').toBeNull();
+    for (const d of details)
+      expect(d.hasAttribute('open'), `「${d.getAttribute('data-block')}」默认必须折叠`).toBe(false);
   });
   it('分数明细第一行是分数合计，那个数字就是排序用的总分', () => {
     render(<NameCard r={r} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />);
@@ -385,11 +393,82 @@ describe('今译待补', () => {
       POOL.filter((it) => it.lg === -1),
       '应有一条出处句还没今译',
     );
-    render(
+    const { container } = render(
       <NameCard r={scoreItem('袁', item, opts, 0)} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />,
     );
-    expect(screen.getByText('今译待补')).toBeInTheDocument();
-    expect(screen.getByText(/还没有现代汉语今译/)).toBeInTheDocument();
+    const source = container.querySelector('[data-block="source"]')!;
+    expect(source.textContent).toContain('今译待补');
+    expect(source.textContent).toMatch(/还没有现代汉语今译/);
     expect(document.body.textContent).toContain(item.line); // 原文与取词段照引，缺的只有译文
+  });
+});
+
+describe('另有 N 处出处：主出处之外的可核对出处挂在同一张卡上', () => {
+  const item = one(
+    POOL.filter((p) => (p.alts?.length ?? 0) > 1),
+    '用例前提：池里得有在主出处之外还能核对到多处句读的名字',
+  );
+  const rAlt = scoreItem('林', item, opts, 0);
+  const single = one(
+    POOL.filter((p) => !p.alts && p.book !== 'real'),
+    '用例前提：池里得有只有一处出处的典籍候选',
+  );
+  const rOne = scoreItem('林', single, opts, 0);
+  const renderCard = (r: Result) =>
+    render(<NameCard r={r} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />).container.querySelector(
+      'article',
+    )!;
+
+  it('折叠标题写的是处数；展开之后每一处一条，不许只列一部分', () => {
+    const card = renderCard(rAlt);
+    const d = card.querySelector('details[data-block="alts"]');
+    if (!d) throw new Error(`带 ${item.alts?.length} 处 alternates 的卡必须有「另有出处」这一区`);
+    expect(d.querySelector('summary')?.textContent).toBe(`另有 ${item.alts!.length} 处出处`);
+    expect(d.hasAttribute('open'), '这一区默认折叠：卡上常驻的仍是主出处那一句').toBe(false);
+    const items = [...d.querySelectorAll('li')];
+    expect(items.length, '展开区里的条目数必须等于 alternates 处数').toBe(item.alts!.length);
+    expect(d.textContent).toContain('另有出处'.slice(0, 2));
+  });
+  it('每一处都给出书·篇＋原句（那两个取字高亮）＋今译或「今译待补」', () => {
+    const card = renderCard(rAlt);
+    const items = [...card.querySelectorAll('details[data-block="alts"] li')];
+    for (let i = 0; i < items.length; i++) {
+      const a = item.alts![i]!;
+      const li = items[i]!;
+      const c1 = a.line.charAt(a.at);
+      const c2 = a.line.charAt(a.at2);
+      const marks = [...li.querySelectorAll('mark')].map((m) => m.textContent);
+      expect(marks, `第 ${i + 1} 处必须把那两个取字高亮出来`).toEqual(a.at2 - a.at === 1 ? [`${c1}${c2}`] : [c1, c2]);
+      expect(li.textContent, '每一处都要写清是哪本书的哪一篇').toContain(BOOK_LABEL[a.book]);
+      expect(li.textContent).toContain(a.title);
+      expect(li.textContent).toContain(a.author || '');
+      expect(
+        [...li.querySelectorAll('p')].some((p) => /今译/.test(p.textContent ?? '')),
+        '今译或待补必须在',
+      ).toBe(true);
+      if (a.lg === -1) expect(li.textContent).toContain('今译待补');
+      else expect(li.textContent).toContain(lineGlossOf(a));
+    }
+  });
+  it('真实人名档与只有一处出处的典籍卡都不显示这一区（不装作有别处）', () => {
+    const real = one(REAL_ITEMS, '真实人名档首条');
+    const cardReal = renderCard(scoreItem('林', real, opts, 0));
+    expect(cardReal.querySelector('details[data-block="alts"]'), '真实人名卡不许有这个区').toBeNull();
+    const cardOne = renderCard(rOne);
+    expect(cardOne.querySelector('details[data-block="alts"]'), '只有一处出处的卡不许有这个区').toBeNull();
+    expect(cardOne.querySelectorAll('details')).toHaveLength(1);
+  });
+  it('多了这一区也不许动常驻的那一层：主原句、今译与分数合计在不点开任何折叠时都读得到', () => {
+    const card = renderCard(rAlt);
+    const source = card.querySelector('[data-block="source"]')!;
+    expect(source.closest('details'), '主出处块不该被包进折叠').toBeNull();
+    expect([...source.querySelectorAll('mark')].length, '主原句里的取词段高亮不许少').toBeGreaterThan(0);
+    const gloss = lineGlossOf(rAlt);
+    if (gloss) expect(source.textContent).toContain(gloss);
+    const nameRow = card.querySelector('h3')!.closest('div')!;
+    expect(nameRow.textContent).toContain('分数合计');
+    expect(nameRow.textContent).toContain(String(rAlt.total));
+    // 主出处的那句原句不许被 alternates 顶掉：卡上第一句原文就是它
+    expect(source.textContent).toContain(rAlt.line.slice(0, 4));
   });
 });

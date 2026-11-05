@@ -341,7 +341,10 @@ console.log('4b) 出处今译：按书数覆盖率，缺今译必须是 lg=-1 �
     const tab = line.indexOf('\t');
     rawGloss.set(line.slice(0, tab), line.slice(tab + 1));
   }
-  ok(rawGloss.size === 1140, `raw 今译 ${rawGloss.size} 行`);
+  ok(
+    rawGloss.size >= 1140 && lineGloss.length === rawGloss.size,
+    `raw 今译 ${rawGloss.size} 行、进包 ${lineGloss.length} 句（种子版基线 1,140 行，只许多不许少；写了就必须进包）`,
+  );
   const items = [...cand, ...singles];
   const bad = [];
   for (const c of items) {
@@ -369,10 +372,34 @@ console.log('4b) 出处今译：按书数覆盖率，缺今译必须是 lg=-1 �
     if (byLine.get(c.lg) !== undefined) continue;
   }
   ok(clash.length === 0, '一句一译：同一原句在所有条目里共用同一个下标', clash.slice(0, 3).join(' | '));
-  const unused = [...rawGloss.keys()].filter((src) => !byLine.has(src));
+  // 「别处的出处」同样会用到今译：alternates 指到的原句一起算进「被用到」这一侧
+  const lineTextV = (l) => (typeof l === 'string' ? l : l.s);
+  const altSentences = new Set();
+  const glossMismatch = [];
+  {
+    const rawCand = JSON.parse(fs.readFileSync(`${OUT}/candidates.json`, 'utf8'));
+    for (const c of rawCand) {
+      let prev = 0;
+      for (let i = 0; i < (c.alt ?? []).length; i += 4) {
+        prev += c.alt[i + 1];
+        const entry = SRC.lines[prev];
+        if (!entry) continue;
+        const sentence = lineTextV(entry);
+        altSentences.add(sentence);
+        if (typeof entry === 'object' && rawGloss.get(sentence) !== lineGloss[entry.g])
+          glossMismatch.push(`别处出处的一句对不上 raw 释义：${sentence}`);
+      }
+    }
+  }
+  ok(
+    glossMismatch.length === 0,
+    `别处出处带的今译也与 raw 逐字一致（不符 ${glossMismatch.length} 处）`,
+    glossMismatch.slice(0, 3).join(' | '),
+  );
+  const unused = [...rawGloss.keys()].filter((src) => !byLine.has(src) && !altSentences.has(src));
   ok(
     unused.length === 0,
-    `raw 今译没有闲置条目（闲置 ${unused.length} 条：写了译文的句子必须真被候选用到）`,
+    `raw 今译没有闲置条目（闲置 ${unused.length} 条：写了译文的句子必须真被某条出处用到，主出处或别处出处都算）`,
     unused.slice(0, 3).join(' | '),
   );
   // 按书覆盖率：不再要求「全覆盖」，但每一本都要看得见覆盖到多少、缺多少
@@ -633,6 +660,277 @@ console.log('4g) 名句层 famous：跨全池的单一阈值与逐条判定，�
     spot.length === 0,
     `典籍里反复出现的词必须在名句层里（缺 ${spot.map((n) => `${n} a=${adjacentCount.get(n) ?? 0}`).join(' ') || '无'}）`,
   );
+}
+
+console.log('4h) 多出处 alternates：每个双名的全部可核对出处由 data/raw 独立重算，逐条比对产物（不是抽样）');
+{
+  // 重算口径（与 build-data 那份各写各的实现，谁改歪了另一份就把谁咬住）：
+  //   每篇正文单独取（唐诗按「，」拼、道法按「。」拼）→ 按句读 。！？； 切句 → 每句按小句读 ，、： 切段 →
+  //   去掉引号与非汉字、以「兮」为切点得到取词段 → 起点落该书音步表、与第二字间隔 1～3、
+  //   跨字取词时两个取字都不许落在叠词内 → 每个（起点，间隔）就是一处可核对出处。
+  // 去重键：书 · 篇名 · 作者 · 原句 · 那两个字的原句下标 · 间隔——语料里重复的文本撞不出第二处。
+  // 主出处＝这些处里间隔最小的那处，同间隔取语料里先出现的那处；其余各处按 [ti, li, pa, d] 存进产物的 alt。
+  const textsOf = (b) => {
+    const j = JSON.parse(fs.readFileSync(`data/raw/${b}.json`, 'utf8'));
+    if (b === 'lunyu') return j.flatMap((ch) => ch.paragraphs);
+    if (b === 'shuimo') return j.map((po) => po.paragraphs.join('，'));
+    if (b === 'song300') return j.map((po) => (po.paragraphs ?? []).join('，'));
+    if (b === 'daofa') return j.map((po) => (po.content ?? []).join('。'));
+    return j.map((po) => (po.content ?? []).join('，'));
+  };
+  const metasOf = (b) => {
+    const j = JSON.parse(fs.readFileSync(`data/raw/${b}.json`, 'utf8'));
+    if (b === 'lunyu') return j.flatMap((ch) => ch.paragraphs.map(() => ({ title: ch.chapter, author: '' })));
+    if (b === 'song300') return j.map((po) => ({ title: po.rhythmic ?? '', author: po.author ?? '' }));
+    return j.map((po) => ({ title: po.title ?? '', author: po.author ?? '' }));
+  };
+  const tidyV = (s) =>
+    s
+      .replace(/^[\s，、：；]+/, '')
+      .replace(/[\s，、：；]+$/, '')
+      .replace(/([：；])[\s，、：；]+/g, '$1')
+      .replace(/([，、])[\s，、：；]+/g, '$1');
+  const QUOTEV = new Set('“”‘’「」《》（）()');
+  const cjk = (c) => c >= '一' && c <= '鿿';
+  // 两张表里「主出处那一段」是完整形（原句 {s,g}、篇名六字段），「为 alternates 追加的那一段」是紧凑形
+  // （原句一个字符串、篇名四元组）：读文本要认这两种形状。
+  const lineText = (l) => (typeof l === 'string' ? l : l.s);
+  const titleKey = (t) => (Array.isArray(t) ? `${t[0]}\u0000${t[1]}\u0000${t[2]}` : `${t.bk}\u0000${t.t}\u0000${t.au}`);
+  const titleIx = new Map(SRC.titles.map((t, i) => [titleKey(t), i]));
+  const lineIx = new Map(SRC.lines.map((l, i) => [lineText(l), i]));
+  const occ = new Map(); // 名字 → 去重后的全部出处（按语料出现先后）
+  for (const b of BOOK_KEYS) {
+    const texts = textsOf(b);
+    const metas = metasOf(b);
+    for (let t = 0; t < texts.length; t++) {
+      const { title, author } = metas[t];
+      for (const part of String(texts[t]).split(/[。！？；]/)) {
+        const trimmed = part.trim();
+        if (!trimmed) continue;
+        const line = tidyV(trimmed);
+        const L = [...line];
+        const chunks = [];
+        let from = 0;
+        for (let i = 0; i < L.length; i++) {
+          if (/[，、：]/.test(L[i])) {
+            chunks.push([from, i]);
+            from = i + 1;
+          }
+        }
+        chunks.push([from, L.length]);
+        for (const [c0, c1] of chunks) {
+          const cells = [];
+          for (let i = c0; i < c1; i++) if (!QUOTEV.has(L[i]) && cjk(L[i])) cells.push({ ch: L[i], at: i });
+          if (!cells.length) continue;
+          const segs = [];
+          let cur = [];
+          for (const c of cells) {
+            if (c.ch === '兮') {
+              segs.push(cur);
+              cur = [];
+            } else cur.push(c);
+          }
+          segs.push(cur);
+          for (const cell of segs) {
+            if (cell.length < 2) continue;
+            const cs = cell.map((x) => x.ch);
+            const seg = cs.join('');
+            const redup = (k) => (k > 0 && cs[k - 1] === cs[k]) || (k + 1 < cs.length && cs[k + 1] === cs[k]);
+            for (const i of offsets(b, cs.length)) {
+              for (let gap = 1; gap <= 3; gap++) {
+                const j = i + gap;
+                if (j >= cs.length) break;
+                if (gap > 1 && (redup(i) || redup(j))) continue;
+                const nm = cs[i] + cs[j];
+                if (!names.has(nm)) continue;
+                let bag = occ.get(nm);
+                if (!bag) {
+                  bag = { keys: new Set(), list: [] };
+                  occ.set(nm, bag);
+                }
+                const k = `${b}\u0000${title}\u0000${author}\u0000${line}\u0000${cell[i].at}\u0000${cell[j].at}\u0000${gap}`;
+                if (bag.keys.has(k)) continue;
+                bag.keys.add(k);
+                bag.list.push({ book: b, title, author, line, seg, foot: i, gap, pa: cell[i].at, pb: cell[j].at });
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  const bad = [];
+  // 产物里 alt 每四个整数一条：[ti, li 差值, pa, d]（同一个名字里 li 相对上一条，第一条相对 0）
+  const altQuads = (c) => {
+    const a = c.alt ?? [];
+    if (!Array.isArray(a) || a.length % 4 !== 0) return null;
+    const out = [];
+    let prev = 0;
+    for (let i = 0; i < a.length; i += 4) {
+      const li = prev + a[i + 1];
+      prev = li;
+      out.push({ ti: a[i], li, pa: a[i + 2], d: a[i + 3] });
+    }
+    return out;
+  };
+  const usedTitle = new Set();
+  const usedLine = new Set();
+  let altNames = 0;
+  let altTotal = 0;
+  let occTotal = 0;
+  let altMax = 0;
+  for (const c of cand) {
+    usedTitle.add(c.ti);
+    usedLine.add(c.li);
+    const bag = occ.get(c.name);
+    if (!bag || !bag.list.length) {
+      bad.push(`${c.name}: 语料里重算不到任何出处`);
+      continue;
+    }
+    const list = bag.list;
+    occTotal += list.length;
+    // 主出处＝间隔最小、同间隔先出现的那一处（严格更小才换）
+    let main = list[0];
+    for (const o of list) if (o.gap < main.gap) main = o;
+    if (
+      main.book !== c.book ||
+      main.title !== c.title ||
+      main.author !== c.author ||
+      main.line !== c.line ||
+      main.seg !== c.seg ||
+      main.foot !== c.foot ||
+      main.gap !== c.gap
+    ) {
+      bad.push(
+        `${c.name}: 主出处与重算不符（产物 ${c.book}·${c.title}「${c.seg}」第 ${c.foot + 1} 字起 gap ${c.gap} ／ 重算 ${main.book}·${main.title}「${main.seg}」第 ${main.foot + 1} 字起 gap ${main.gap}）`,
+      );
+    }
+    if (main.gap !== Math.min(...list.map((o) => o.gap))) bad.push(`${c.name}: 主出处不是间隔最小的那处`);
+    const want = new Set();
+    for (const o of list) {
+      if (o === main) continue;
+      const ti = titleIx.get(`${o.book}\u0000${o.title}\u0000${o.author}`);
+      const li = lineIx.get(o.line);
+      if (ti === undefined || li === undefined) {
+        bad.push(`${c.name}: 重算出的出处不在共享表里（${o.title}「${o.line}」）`);
+        continue;
+      }
+      want.add(`${ti}|${li}|${o.pa}|${o.pb - o.pa}`);
+    }
+    const got = altQuads(c);
+    if (!got) {
+      bad.push(`${c.name}: alt 不是 4 个一组的下标数组`);
+      continue;
+    }
+    altTotal += got.length;
+    if (got.length) altNames += 1;
+    if (got.length > altMax) altMax = got.length;
+    const gotSet = new Set();
+    for (const q of got) {
+      const title = SRC.titles[q.ti];
+      const src = SRC.lines[q.li];
+      if (!title || !src) {
+        bad.push(`${c.name}: alternate 的共享表下标越界（ti=${q.ti} li=${q.li}）`);
+        continue;
+      }
+      usedTitle.add(q.ti);
+      usedLine.add(q.li);
+      const cs = [...lineText(src)];
+      if (q.d < 1 || q.pa < 0 || q.pa + q.d >= cs.length) {
+        bad.push(`${c.name}: alternate 取词下标越界（${src.s} pa=${q.pa} d=${q.d}）`);
+        continue;
+      }
+      // 抽查全部而非抽样：下标必须真指到那条原句里这两个字的这对位置
+      if (cs[q.pa] !== c.name[0] || cs[q.pa + q.d] !== c.name[1])
+        bad.push(
+          `${c.name}: alternate 下标没指到那两个字的这对位置（「${src.s}」第 ${q.pa + 1}／${q.pa + q.d + 1} 字是 ${cs[q.pa]}${cs[q.pa + q.d]}）`,
+        );
+      const k = `${q.ti}|${q.li}|${q.pa}|${q.d}`;
+      if (gotSet.has(k)) bad.push(`${c.name}: alt 里有重复的出处（${k}）`);
+      gotSet.add(k);
+    }
+    if (gotSet.size !== want.size) bad.push(`${c.name}: 处数对不上（重算 ${want.size} 处／产物 ${gotSet.size} 处）`);
+    for (const k of want) if (!gotSet.has(k)) bad.push(`${c.name}: 产物少了这一处 ${k}`);
+    for (const k of gotSet) if (!want.has(k)) bad.push(`${c.name}: 产物多了这一处 ${k}`);
+  }
+  console.log(
+    `   独立重算：全池 ${cand.length} 条双名共 ${occTotal} 处出处（主出处 ${cand.length} ＋ alternates ${occTotal - cand.length}）｜产物里 alt 合计 ${altTotal} 处、带 alt 的名字 ${altNames} 条、单名最多 ${altMax} 处`,
+  );
+  ok(
+    bad.length === 0,
+    `逐条比对：每条双名的「主出处＋alternates」与语料重算完全一致（不符 ${bad.length} 条）`,
+    bad.slice(0, 4).join(' | '),
+  );
+  ok(altTotal > 0, `alternates 总数 > 0（现 ${altTotal} 处挂在 ${altNames} 条名字上）`);
+  ok(
+    altTotal === occTotal - cand.length,
+    `alternates 总数等于独立重算的差值：重算 ${occTotal} 处 − 主出处 ${cand.length} 处 = ${occTotal - cand.length}，产物存 ${altTotal}`,
+  );
+  const orphanLines = SRC.lines.filter((_, i) => !usedLine.has(i)).length;
+  const orphanTitles = SRC.titles.filter((_, i) => !usedTitle.has(i)).length;
+  ok(
+    orphanLines === 0 && orphanTitles === 0,
+    `共享表里没有没人引用的条目（原句表 ${SRC.lines.length} 条／篇名表 ${SRC.titles.length} 条全部被主出处或 alternates 引用）`,
+    `没人引用的原句 ${orphanLines} 条、篇名 ${orphanTitles} 篇`,
+  );
+  ok(
+    meta.alt_total === altTotal &&
+      meta.alt_names === altNames &&
+      meta.alt_max === altMax &&
+      meta.alt_occurrences === occTotal,
+    `meta 的 alternates 计数与重算一致（meta ${meta.alt_names} 条／${meta.alt_total} 处／最多 ${meta.alt_max}，重算 ${altNames}／${altTotal}／${altMax}）——对照用，判定依据是上面那段重算`,
+  );
+  // 主出处用的那一段共享表必须是「从头连续的一段」：0..N-1 全被主出处引用，alternates 追加的条目一律排在它后面。
+  // 这条守住的是 id 不变的前提（ti/li 不许位移），N 也钉死在 alternates 之前的实测值上。
+  const mainLines = new Set([...cand, ...singles].map((c) => c.li));
+  const mainTitles = new Set([...cand, ...singles].map((c) => c.ti));
+  const contiguous = (set, total) =>
+    set.size <= total && [...set].every((i) => i >= 0 && i < set.size) && set.size === new Set([...set]).size;
+  ok(
+    contiguous(mainLines, SRC.lines.length) && mainLines.size >= 1221,
+    `主出处用的原句表是 0..${mainLines.size - 1} 连续一段（${mainLines.size} 条，种子版基线 1,221；为 alternates 追加的 ${SRC.lines.length - mainLines.size} 条排在它之后，下标不位移）`,
+  );
+  ok(
+    contiguous(mainTitles, SRC.titles.length) && mainTitles.size >= 545,
+    `主出处用的篇名表是 0..${mainTitles.size - 1} 连续一段（${mainTitles.size} 篇，种子版基线 545；为 alternates 追加的 ${SRC.titles.length - mainTitles.size} 篇排在它之后）`,
+  );
+  ok(
+    meta.alt_lines_added === SRC.lines.length - mainLines.size &&
+      meta.alt_titles_added === SRC.titles.length - mainTitles.size,
+    `meta 记的追加条目数与实际一致（原句 ${meta.alt_lines_added} 条／篇名 ${meta.alt_titles_added} 篇）`,
+  );
+  // 追加的条目必须确实是紧凑形；完整形那一段必须一条没改（它守着 id 里的书码与拼音）
+  const fullLine = (l) => typeof l === 'object' && l !== null && typeof l.s === 'string' && typeof l.g === 'number';
+  const fullTitle = (t) =>
+    typeof t === 'object' &&
+    t !== null &&
+    !Array.isArray(t) &&
+    typeof t.code === 'string' &&
+    typeof t.slug === 'string' &&
+    t.slug !== '';
+  const compactTitle = (t) =>
+    Array.isArray(t) &&
+    t.length === 4 &&
+    typeof t[0] === 'string' &&
+    typeof t[1] === 'string' &&
+    typeof t[2] === 'string' &&
+    typeof t[3] === 'boolean';
+  ok(
+    SRC.lines.slice(0, mainLines.size).every(fullLine) &&
+      SRC.lines.slice(mainLines.size).every((l) => typeof l === 'string' || (fullLine(l) && l.g >= 0)),
+    `原句表前 ${mainLines.size} 条是完整形 {s,g}（形状与 alternates 之前相同），追加的 ${SRC.lines.length - mainLines.size} 条没有今译的就只是一个字符串、有人补了今译的就是 {s, g}（紧凑形只落在追加段，老条目一条没动）`,
+  );
+  ok(
+    SRC.titles.slice(0, mainTitles.size).every(fullTitle) && SRC.titles.slice(mainTitles.size).every(compactTitle),
+    `篇名表前 ${mainTitles.size} 篇是完整形（带 id 要用的 code／slug），追加的 ${SRC.titles.length - mainTitles.size} 篇是四元组［书, 篇名, 作者, 是否名篇］（alternate 不进 id，所以不存拼音）`,
+  );
+  const singlesWithAlt = singles.filter((s) => 'alt' in s).length;
+  ok(
+    singlesWithAlt === 0,
+    `单字名不挂 alternates（带 alt 的 ${singlesWithAlt} 条）：它的出处就是它那条双名出处的主出处`,
+  );
+  const realWithAlt = JSON.parse(fs.readFileSync(`${OUT}/realnames.json`, 'utf8')).filter((r) => 'alt' in r).length;
+  ok(realWithAlt === 0, `真实人名档不挂 alternates（带 alt 的 ${realWithAlt} 条）：它没有典籍出处`);
 }
 
 console.log('5) 性别风格：字表未漂移 + 强弱两级 + 真筛选不变量');

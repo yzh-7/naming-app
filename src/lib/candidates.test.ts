@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { candidateRows, candidatesCsv, candidatesJson, favoritesCsv, FAV_CSV_HEADER, CSV_HEADER } from './candidates';
+import {
+  candidateRow,
+  candidateRows,
+  candidatesCsv,
+  candidatesJson,
+  favoritesCsv,
+  FAV_CSV_HEADER,
+  CSV_HEADER,
+} from './candidates';
 import { plan } from '../engine/name';
 import type { Opts, Result } from '../engine/types';
 import { BOOK_ORDER } from '../engine/types';
@@ -99,8 +107,8 @@ describe('候选全量导出', () => {
     expect(csv).toContain('"\'=HYPERLINK(""x"")"');
     expect(csv).toContain("'-@危险备注");
   });
-  it('成词依据与拆词两列有值：有依据的写出次数，跨字取词被剪开的写出原词', () => {
-    expect(CSV_HEADER.slice(-3)).toEqual(['成词依据', '拆词', '真实用名次数']);
+  it('成词依据、拆词、真实用名次数、其他出处数四列有值：有依据的写出次数，跨字取词被剪开的写出原词，别处还核对得到的写条数', () => {
+    expect(CSV_HEADER.slice(-4)).toEqual(['成词依据', '拆词', '真实用名次数', '其他出处数']);
     const rows = candidateRows(plan('袁', { ...opts, count: 0 }, 0).page);
     const attested = rows.find((x) => x.word.startsWith('语料内相邻'));
     const modern = rows.find((x) => x.word.startsWith('现代词表收录'));
@@ -110,6 +118,30 @@ describe('候选全量导出', () => {
     expect(split, '应有被剪开原词的名字').toBeTruthy();
     expect(attested!.word).toMatch(/^语料内相邻 \d+ 次$/);
     expect(split!.split.length).toBe(2);
+  });
+
+  it('「其他出处数」就是卡片上「另有 N 处出处」的那个 N：条数来自引擎，不是导出里另算一遍', () => {
+    const page = plan('袁', { ...opts, count: 0 }, 0).page;
+    const idx = CSV_HEADER.indexOf('其他出处数');
+    expect(idx, '候选 CSV 必须有「其他出处数」这一列').toBe(CSV_HEADER.length - 1);
+    const withAlt = one(
+      page.filter((r) => (r.alts?.length ?? 0) > 0),
+      '用例前提：池里得有条目在主出处之外还能核对到别处',
+    );
+    expect(candidateRow(withAlt).altCount).toBe(withAlt.alts!.length);
+    const bare = one(
+      page.filter((r) => r.book !== 'real' && !r.alts),
+      '用例前提：池里得有条目只有主出处一处',
+    );
+    expect(candidateRow(bare).altCount).toBe(0);
+    // 真实人名档没有典籍出处，这一列留空而不是写 0（写 0 会让它看起来像「查过典籍、只有一处」）
+    const realRow = candidateRow(one(plan('袁', { ...opts, count: 0, source: 'real' }, 0).page, '真实人名档候选'));
+    expect(realRow.book).toBe('真实人名');
+    expect(realRow.altCount).toBe('');
+    // 导出的是条数不是那些原句本身：1,677 处出处文本不该被塞进一份随手下载的表里
+    const csv = candidatesCsv(page);
+    expect(csv).not.toContain('另有');
+    expect(at(csv.slice(1).split('\r\n'), 1, '候选 CSV 的数据行').split(',').length).toBe(CSV_HEADER.length);
   });
 
   it('字段完整：出处今译与笔画、常见度都在行里', () => {

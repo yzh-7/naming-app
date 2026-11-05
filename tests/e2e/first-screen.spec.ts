@@ -62,12 +62,30 @@ test('卡片不点开任何折叠：原句、取词段高亮、今译与分数�
   expect(await src.evaluate((el) => Boolean(el.closest('details'))), '出处那一块不该再包在 details 里').toBe(false);
   const total = ((await card.locator('[data-block="score-total"]').innerText()) ?? '').replace(/\s+/g, ' ');
   expect(total, `分数合计应当常驻在名字那一行：${total}`).toMatch(/^分数合计 \d+$/);
-  const details = card.locator('details');
-  await expect(details, '卡片上只剩「分数明细」一个折叠').toHaveCount(1);
-  expect(await details.evaluate((d) => (d as HTMLDetailsElement).open), '分数明细默认折叠').toBe(false);
+  const score = card.locator('details[data-block="score"]');
+  const alts = card.locator('details[data-block="alts"]');
+  const hasAlts = (await alts.count()) > 0;
+  await expect(score, '「分数明细」那个折叠必须还在').toHaveCount(1);
+  await expect(card.locator('details'), '卡上的折叠只有两种：分数明细，与（有别处出处时）另有出处').toHaveCount(
+    hasAlts ? 2 : 1,
+  );
+  expect(await score.evaluate((d) => (d as HTMLDetailsElement).open), '分数明细默认折叠').toBe(false);
+  if (hasAlts) {
+    expect(
+      await alts.evaluate((d) => (d as HTMLDetailsElement).open),
+      '「另有出处」默认折叠：常驻的仍是主出处那一句',
+    ).toBe(false);
+    const label = ((await alts.locator('summary').innerText()) ?? '').trim();
+    expect(label, `折叠标题要写清处数：${label}`).toMatch(/^另有 \d+ 处出处$/);
+    await expect(alts.locator('li').first(), '合着的折叠不许占卡上的高度').toBeHidden();
+  }
   const sb = await src.boundingBox();
-  const db = await details.boundingBox();
+  const db = await score.boundingBox();
   expect(sb!.height, `出处块 ${sb!.height}px 应当不低于分数块 ${db!.height}px`).toBeGreaterThanOrEqual(db!.height);
+  if (hasAlts) {
+    const ab = await alts.boundingBox();
+    expect(ab!.height, `合着的「另有出处」只是一行入口，不该占掉整块高度：${ab!.height}px`).toBeLessThanOrEqual(56);
+  }
 });
 
 test('真实人名档的卡：「真名 · N 人用过」与「非典籍出处」那一行常驻', async ({ page }) => {
@@ -77,6 +95,10 @@ test('真实人名档的卡：「真名 · N 人用过」与「非典籍出处�
   const src = card.locator('[data-block="source"]');
   await expect(src).toContainText(/真实人名 · 语料里 \d+ 人用过（非典籍出处）/);
   await expect(src.getByText(/这条不是典籍出处/)).toBeVisible();
+  await expect(
+    card.locator('details[data-block="alts"]'),
+    '真实人名卡不许有「另有出处」那一区（它没有典籍出处）',
+  ).toHaveCount(0);
   await expect(card.locator('.chip', { hasText: /^真名 · \d+ 人用过$/ }), '名字那一行的真名标签不许消失').toHaveCount(
     1,
   );

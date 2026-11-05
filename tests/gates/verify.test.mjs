@@ -135,6 +135,29 @@ describe('verify 门禁的失败路径', () => {
     expect(code).toBe(0);
   }, 120_000);
 
+  it('给「只出现在别处出处」的句子补一行今译：构建照收、译文进包、门禁不判红', () => {
+    const dir = fixture();
+    const src0 = JSON.parse(read(dir, 'src/data/sources.json'));
+    const cand0 = JSON.parse(read(dir, 'src/data/candidates.json'));
+    const mainLines = new Set(cand0.map((c) => c.li));
+    const altOnly = src0.lines.filter((_, i) => !mainLines.has(i)).map((l) => (typeof l === 'string' ? l : l.s));
+    expect(altOnly.length, '夹具里必须有只为 alternates 存在的原句').toBeGreaterThan(0);
+    const target = altOnly[0];
+    const tsv = read(dir, 'data/raw/line_gloss.tsv').trimEnd();
+    write(dir, 'data/raw/line_gloss.tsv', `${tsv}\n${target}\t这一句补上的今译\n`);
+    refreshSum(dir, 'line_gloss.tsv');
+    const { code, out } = runVerify(dir);
+    expect(out, out.slice(-700)).toContain('ALL PASS');
+    expect(code, out.slice(-700)).toBe(0);
+    const src1 = JSON.parse(read(dir, 'src/data/sources.json'));
+    const found = src1.lines.find((l) => (typeof l === 'string' ? l : l.s) === target);
+    expect(typeof found === 'object' && found !== null && found.g >= 0, '补的译文必须挂进原句表').toBe(true);
+    const gloss = JSON.parse(read(dir, 'src/data/line_gloss.json'));
+    expect(gloss[found.g]).toBe('这一句补上的今译');
+    const meta1 = JSON.parse(read(dir, 'src/data/meta.json'));
+    expect(meta1.gloss_lines, 'meta 记的今译条数必须是补完之后的数').toBe(gloss.length);
+  }, 120_000);
+
   it('名句层的判据被改坏成人手一份：门禁从语料重算，判红而不是读回产物里记的数', () => {
     const dir = fixture();
     const script = read(dir, 'scripts/build-data.mjs');
@@ -150,6 +173,42 @@ describe('verify 门禁的失败路径', () => {
     expect(code).toBe(1);
     expect(failLines(out).length).toBeGreaterThan(0);
     expect(out).toContain('名句层 famous');
+    expect(out).toContain('FAILURES:');
+  }, 120_000);
+
+  it('alternates 判定被改坏（每条只留主出处）：门禁从语料独立重算判红，而不是读回产物里记的数', () => {
+    const dir = fixture();
+    const script = read(dir, 'scripts/build-data.mjs');
+    const tampered = script.replace(
+      'alts: (footAll.get(name)?.list ?? []).filter((o) => o !== v),',
+      'alts: [], // 探测：把「另有几处出处」这条判定改坏，只留主出处',
+    );
+    expect(tampered, '夹具必须确实改到那一条判定').not.toBe(script);
+    write(dir, 'scripts/build-data.mjs', tampered);
+    // 构建脚本自己那套 meta.alt_total 计数照旧在数，产物内部也自洽；
+    // 拦得住它的是 verify 4h 那份从 data/raw 独立重算的逐条比对。
+    const { code, out } = runVerify(dir);
+    expect(code).toBe(1);
+    expect(failLines(out).length).toBeGreaterThan(0);
+    expect(out).toContain('多出处 alternates');
+    expect(out).toContain('alternates 总数 > 0');
+    expect(out).toContain('处数对不上');
+    expect(out).toContain('FAILURES:');
+  }, 120_000);
+
+  it('alternates 的取词下标被挪动一位：门禁逐条咬住「没指到那两个字的这对位置」', () => {
+    const dir = fixture();
+    const script = read(dir, 'scripts/build-data.mjs');
+    const tampered = script.replace(
+      'flat.push(altTitleSlot(a), li - prevLi, a.pa, a.pb - a.pa);',
+      'flat.push(altTitleSlot(a), li - prevLi, a.pa + 1, a.pb - a.pa);',
+    );
+    expect(tampered, '夹具必须确实改到那一条编码').not.toBe(script);
+    write(dir, 'scripts/build-data.mjs', tampered);
+    const { code, out } = runVerify(dir);
+    expect(code).toBe(1);
+    expect(failLines(out).length).toBeGreaterThan(0);
+    expect(out).toContain('多出处 alternates');
     expect(out).toContain('FAILURES:');
   }, 120_000);
 });
