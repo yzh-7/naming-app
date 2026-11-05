@@ -3,7 +3,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import App from './App';
 import { META, POOL } from './engine/data';
 import { BOOK_LABEL } from './engine/types';
-import { lineGlossOf, namePinyin, shapeTags } from './engine/name';
+import { lineGlossOf, namePinyin, popScore, shapeTags } from './engine/name';
 import { at, one } from './testing';
 import { FAV_KEY } from './store/local';
 
@@ -381,16 +381,30 @@ describe('App 的分组、排序、对比上限、导出与主题联动', () => 
   it('收藏排序的笔画档与常见度档各用各的尺子：默认档不按笔画排，两档都真的重排', () => {
     render(<App />);
     fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
-    fireEvent.click(one(screen.getAllByRole('button', { name: '收藏' }), '「收藏」按钮列表'));
+    // 按卡片认领「收藏」按钮：按钮列表会因为已经收藏的那条换名而缩，按下标取会漂
+    const favOf = (full: string) =>
+      within(screen.getByRole('heading', { level: 3, name: full }).closest('article')!).getByRole('button', {
+        name: '收藏',
+      });
+    // 这三条（苏昊天 / 苏白云 / 苏飞雪）在当前语料里：笔画 12・9・14，常见度 7,520・16,410・8,773——
+    // 两把尺子给出的顺序不一样，下面的比对才有东西可咬。前提全部显式断言，语料一变就先红在这里。
+    const firstScreen = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent!);
+    expect(firstScreen, '用例前提：苏昊天 应当在第一屏').toContain('苏昊天');
+    fireEvent.click(favOf('苏昊天'));
     fireEvent.click(screen.getByRole('button', { name: /^换一批/ }));
-    const second = screen.getAllByRole('button', { name: '收藏' });
-    fireEvent.click(at(second, 0, '「收藏」按钮列表'));
-    fireEvent.click(at(second, 1, '「收藏」按钮列表'));
+    const second = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent!);
+    expect(second, '用例前提：苏白云 应当在换一批之后的那一屏').toContain('苏白云');
+    expect(second, '用例前提：苏飞雪 应当在换一批之后的那一屏').toContain('苏飞雪');
+    fireEvent.click(favOf('苏白云'));
+    fireEvent.click(favOf('苏飞雪'));
     fireEvent.click(screen.getByRole('link', { name: /收藏 3/ }));
 
     const select = screen.getByLabelText('收藏排序') as HTMLSelectElement;
     const order = () => screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent!);
     const strokes = () => order().map((full) => shapeTags(full.slice(1)).strokes); // 卡片标题是全名；这一用例的姓固定一个字，所以 slice(1) 取的就是双名
+    const popular = () => order().map((full) => popScore(full.slice(1)));
+    expect(new Set(strokes()).size, '用例前提：这三条的笔画各不相同，否则「按笔画排」没有可排的东西').toBe(3);
+    expect(new Set(popular()).size, '用例前提：这三条的常见度各不相同，否则「按常见度排」没有可排的东西').toBe(3);
     const recent = order();
     const recentStrokes = strokes();
     expect(
@@ -409,8 +423,13 @@ describe('App 的分组、排序、对比上限、导出与主题联动', () => 
 
     fireEvent.change(select, { target: { value: 'popular' } });
     const popularOrder = order();
+    const byPopular = popular();
+    expect(
+      [...byPopular].sort((a, b) => b - a),
+      '「用字常见度」这一档应按常见度递减',
+    ).toEqual(byPopular);
     expect(popularOrder, '「用字常见度」用的是另一把尺子').not.toEqual(recent);
-    expect(popularOrder).not.toEqual(strokeOrder);
+    expect(popularOrder, '常见度这一档给出的顺序不该与笔画那一档相同').not.toEqual(strokeOrder);
   });
 
   it('分数档真的按分数排：先收藏的那条低分的被挪到后面，同分的两条保持收藏时的先后', () => {
@@ -425,12 +444,12 @@ describe('App 的分组、排序、对比上限、导出与主题联动', () => 
       within(screen.getByRole('heading', { level: 3, name: full }).closest('article')!).getByRole('button', {
         name: '收藏',
       });
-    // 当前语料里这三条：batch[5] 分数低于另外两条，batch[3] 与 batch[4] 同分（下面全部显式断言）。
-    // 收藏的先后顺序很要紧：默认档就是收藏记录的顺序（新的在前），低分的那条最后收藏、
+    // 当前口径下这三条：苏水清 53、苏松柏 53（同分的那两条）、苏雨雪 52（低分的那条），都在这一屏里。
+    const want = ['苏水清', '苏松柏', '苏雨雪'];
+    for (const n of want) expect(batch, `用例前提：${n} 应当在这一屏里`).toContain(n);
+    // 收藏的先后顺序很要紧：默认档就是收藏记录的顺序（新收藏的在前），低分的那条最后收藏、
     // 才会正好落在队首，被分数档挪到队尾。
-    fireEvent.click(favOf(at(batch, 3, '这一屏的卡片标题列表')));
-    fireEvent.click(favOf(at(batch, 4, '这一屏的卡片标题列表')));
-    fireEvent.click(favOf(at(batch, 5, '这一屏的卡片标题列表')));
+    for (const n of want) fireEvent.click(favOf(n));
     fireEvent.click(screen.getByRole('link', { name: /收藏 3/ }));
 
     const order = () => screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent!);
@@ -441,6 +460,10 @@ describe('App 的分组、排序、对比上限、导出与主题联动', () => 
     expect(names, '对比表应当三条，与卡片一一对应').toHaveLength(3);
     expect(scores).toHaveLength(3);
     const scoreOf = new Map(names.map((n, i) => [n, scores[i]]));
+    expect(
+      want.map((n) => scoreOf.get(n)),
+      '用例前提：这三条在当前口径下的分数是 53・53・52（两条同分＋一条低分）。口径一变就先红在这里，别改断言',
+    ).toEqual([53, 53, 52]);
     expect(new Set(scores).size, '这三条不能全都同分，否则「按分数排」没有可排的东西').toBeGreaterThan(1);
     const dup = scores.find((s, i) => scores.indexOf(s) !== i);
     expect(dup, '这三条里应当有两条同分，否则「同分不换位」没有可断言的对象').toBeDefined();
@@ -486,6 +509,20 @@ describe('App 的分组、排序、对比上限、导出与主题联动', () => 
     expect(screen.getByText('分组「备选」已解散，1 条收藏回到未分组（收藏本身没删）')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '备选' })).not.toBeInTheDocument();
     expect(groupInputs().map((i) => i.value)).toEqual(['', '']);
+  });
+
+  it('卡底那一行只留整行备注与一个「分组／对比」入口：分组输入与对比勾选都在这个入口里', () => {
+    favPageWith(1);
+    const entry = screen.getByRole('button', { name: /^分组／对比/ });
+    expect(entry).toHaveAttribute('aria-expanded', 'true'); // 宽屏默认展开
+    expect(screen.getByPlaceholderText('为什么喜欢它'), '备注仍然是整行输入').toBeInTheDocument();
+    fireEvent.click(entry);
+    expect(entry).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByLabelText('分组'), '收起之后分组输入不该还留在卡底').not.toBeInTheDocument();
+    expect(screen.queryByLabelText('对比'), '收起之后对比勾选不该还留在卡底').not.toBeInTheDocument();
+    fireEvent.click(entry);
+    expect((screen.getByLabelText('分组') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('对比') as HTMLInputElement).checked).toBe(false);
   });
 
   it('对比最多三条：第四条勾不上，对比表也只有三列', () => {
@@ -560,33 +597,42 @@ describe('App 的分组、排序、对比上限、导出与主题联动', () => 
   });
 
   it('跟随系统主题时系统的深色偏好一变就套用，卸载时把监听摘掉', () => {
+    const DARK = '(prefers-color-scheme: dark)';
     const handlers = new Map<string, EventListener[]>();
-    const mq = {
+    // matchMedia 桩按 media 分别记账：深色偏好与「窄屏」两路监听都走这里，
+    // 只按事件名计数的话会互相顶数（主题一路 ＋ 生成页两处窄屏判定各一路）
+    const mq = (media: string) => ({
       matches: false,
-      media: '(prefers-color-scheme: dark)',
+      media,
       addEventListener: (t: string, cb: EventListener) => {
-        handlers.set(t, [...(handlers.get(t) ?? []), cb]);
+        const k = `${media}|${t}`;
+        handlers.set(k, [...(handlers.get(k) ?? []), cb]);
       },
       removeEventListener: (t: string, cb: EventListener) => {
+        const k = `${media}|${t}`;
         handlers.set(
-          t,
-          (handlers.get(t) ?? []).filter((x) => x !== cb),
+          k,
+          (handlers.get(k) ?? []).filter((x) => x !== cb),
         );
       },
-    };
+    });
+    const dark = mq(DARK);
     const prevMatchMedia = window.matchMedia;
-    window.matchMedia = (() => mq) as unknown as typeof window.matchMedia;
+    window.matchMedia = ((q: string) => (q === DARK ? dark : mq(q))) as unknown as typeof window.matchMedia;
     try {
+      const of = (media: string) => handlers.get(`${media}|change`) ?? [];
       const { unmount } = render(<App />);
-      expect(handlers.get('change') ?? [], '「跟随系统」应当挂上系统偏好变化的监听').toHaveLength(1);
+      expect(of(DARK), '「跟随系统」应当挂上系统偏好变化的监听').toHaveLength(1);
+      const pane = [...handlers.keys()].filter((k) => !k.startsWith(`${DARK}|`));
+      expect(pane.length, '生成页的窄屏判定（matchMedia）也应当挂上自己的监听').toBeGreaterThan(0);
       expect(document.documentElement.classList.contains('dark')).toBe(false);
-      mq.matches = true;
-      for (const cb of handlers.get('change') ?? []) cb(new Event('change'));
+      dark.matches = true;
+      for (const cb of of(DARK)) cb(new Event('change'));
       expect(document.documentElement.classList.contains('dark')).toBe(true);
       unmount();
-      expect(handlers.get('change') ?? [], '卸载时应当摘掉监听').toHaveLength(0);
+      for (const [k, list] of handlers) expect(list, `卸载时应当摘掉 ${k} 的监听`).toHaveLength(0);
     } finally {
-      mq.matches = false;
+      dark.matches = false;
       document.documentElement.classList.remove('dark');
       window.matchMedia = prevMatchMedia;
     }

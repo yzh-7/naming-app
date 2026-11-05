@@ -134,6 +134,24 @@ describe('verify 门禁的失败路径', () => {
     expect(out).toContain('ALL PASS');
     expect(code).toBe(0);
   }, 120_000);
+
+  it('名句层的判据被改坏成人手一份：门禁从语料重算，判红而不是读回产物里记的数', () => {
+    const dir = fixture();
+    const script = read(dir, 'scripts/build-data.mjs');
+    const tampered = script.replace(
+      'const isFamous = (name) => (adjacent.get(name) ?? 0) >= famousThreshold;',
+      'const isFamous = () => true; // 探测：名句分人手一份',
+    );
+    expect(tampered, '夹具必须确实改到那一条判据').not.toBe(script);
+    write(dir, 'scripts/build-data.mjs', tampered);
+    // 构建脚本自己会照改坏的判据重算 meta.pool_famous，产物内部照样自洽；
+    // 拦得住它的是 verify 4g 那份从 data/raw 独立重算的阈值与逐条判定。
+    const { code, out } = runVerify(dir);
+    expect(code).toBe(1);
+    expect(failLines(out).length).toBeGreaterThan(0);
+    expect(out).toContain('名句层 famous');
+    expect(out).toContain('FAILURES:');
+  }, 120_000);
 });
 
 afterAll(() => {

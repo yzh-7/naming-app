@@ -18,7 +18,7 @@ import {
 } from './engine/name';
 import { APP_VERSION, META } from './engine/data';
 import { BOOK_LABEL, BOOK_ORDER, type Book, type Opts, type Result, type ShareName } from './engine/types';
-import Controls from './ui/Controls';
+import Controls, { useNarrowPane } from './ui/Controls';
 import NameCard from './ui/NameCard';
 import TopNav from './ui/TopNav';
 import { type Tab } from './ui/TopNav';
@@ -104,6 +104,7 @@ export default function App() {
   const [favFrom, setFavFrom] = useState<FavFilterSource>('');
   const [favGender, setFavGender] = useState<FavFilterGender>('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const narrow = useNarrowPane();
   const { offline, updateReady, applyUpdate } = usePwa();
 
   const sur = cleanSurname(surname);
@@ -495,6 +496,9 @@ export default function App() {
           /* 宽屏两栏：左边筛选常驻（粘顶），右边结果栅格；窄屏退回单列，筛选在上 */
           <div className="grid items-start gap-4 xl:grid-cols-[minmax(19rem,21.5rem)_minmax(0,1fr)] xl:gap-6">
             <div className="min-w-0 space-y-3 no-print xl:sticky xl:top-[5.25rem] xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto">
+              {/* 手机上引导语排在筛选之前：筛选收成四行之后它才终于落在首屏里，
+                  排在筛选之后它就被推到 1000px 开外，没人看得见 */}
+              {narrow && !sur && <FirstVisitNote />}
               <Controls
                 surname={surname}
                 setSurname={changeSurname}
@@ -549,12 +553,7 @@ export default function App() {
             </div>
 
             <div className="min-w-0 space-y-4">
-              {!sur && (
-                <p className="measure mx-auto rounded-card border border-dashed border-line-strong bg-surface-2 p-6 text-center text-meta leading-6 text-ink-3">
-                  先填姓氏。名字的起点落在典籍原句的音步边界上，第二个字取同句读内隔 0–2
-                  字的位置，两字都须在名用字表内。
-                </p>
-              )}
+              {!narrow && !sur && <FirstVisitNote />}
               {sur && !knownSur && (
                 <p className="rounded-card border border-warn-line bg-warn-soft p-4 text-body leading-7 text-warn">
                   「{sur}」有字不在读音表（通用规范汉字表 8105
@@ -567,7 +566,7 @@ export default function App() {
                   {opts.title ? '当前只在看《' + opts.title + '》，点「不限篇」回到全部；' : ''}
                   {opts.avoidChars ? '禁用字「' + opts.avoidChars + '」也在滤，先点「不限」；' : ''}
                   {opts.strokeMax || opts.popFloor || opts.noMonotone ? '试试放宽笔画/常见度/结构筛选；' : ''}
-                  {opts.redupOnly ? '当前开着「只看典籍叠字」，先取消它；' : ''}其余可能是典籍全选关或都已拉黑。
+                  {opts.redupOnly ? '当前开着「只看叠字」，先取消它；' : ''}其余可能是典籍全选关或都已拉黑。
                 </p>
               )}
               <p aria-live="polite" className="sr-only">
@@ -716,6 +715,12 @@ export default function App() {
                 ))}
               </div>
             )}
+            {/* 组名的候选只写一份：原来每张卡各带一个同 id 的 datalist，那是重复 id */}
+            <datalist id="fav-groups">
+              {favGroups.map((g) => (
+                <option key={g} value={g} />
+              ))}
+            </datalist>
             {favGroup && (
               <GroupTools
                 key={favGroup}
@@ -755,41 +760,14 @@ export default function App() {
                     onShare={() => void doShare(r)}
                     onCopy={() => void doCopy(r)}
                   />
-                  <div className="flex flex-wrap items-center gap-2 px-1 no-print">
-                    <label className="flex min-h-11 items-center gap-1.5">
-                      <input
-                        type="checkbox"
-                        checked={compare.includes(rec.id)}
-                        onChange={() => toggleCompare(rec.id)}
-                        className="size-6 accent-accent"
-                      />
-                      <span className="text-meta text-ink-3">对比</span>
-                    </label>
-                    <label className="flex min-h-11 items-center gap-1.5">
-                      <span className="text-meta text-ink-3">分组</span>
-                      <input
-                        list="fav-groups"
-                        value={rec.group ?? ''}
-                        onChange={(e) => setFav(store.updateFavorite(rec.id, { group: e.target.value }))}
-                        placeholder="如 女孩/备选"
-                        className="field w-full min-w-0 basis-32 sm:w-32"
-                      />
-                    </label>
-                    <datalist id="fav-groups">
-                      {favGroups.map((g) => (
-                        <option key={g} value={g} />
-                      ))}
-                    </datalist>
-                    <label className="flex min-w-0 flex-1 items-center gap-1.5">
-                      <span className="text-meta text-ink-3">备注</span>
-                      <input
-                        value={rec.note ?? ''}
-                        onChange={(e) => setFav(store.updateFavorite(rec.id, { note: e.target.value }))}
-                        placeholder="为什么喜欢它"
-                        className="field min-w-0 basis-32 flex-1"
-                      />
-                    </label>
-                  </div>
+                  <FavCardTools
+                    rec={rec}
+                    full={r.full}
+                    compareOn={compare.includes(rec.id)}
+                    narrow={narrow}
+                    onPatch={(p) => setFav(store.updateFavorite(rec.id, p))}
+                    onToggleCompare={() => toggleCompare(rec.id)}
+                  />
                 </div>
               ))
             )}
@@ -888,6 +866,90 @@ export default function App() {
           </details>
         </footer>
       </main>
+    </div>
+  );
+}
+
+// 首访引导语：手机上排在筛选之前（这才落在首屏里），宽屏仍排在结果之上
+function FirstVisitNote() {
+  return (
+    <p className="measure mx-auto rounded-card border border-dashed border-line-strong bg-surface-2 p-3 text-meta leading-6 text-ink-3 sm:p-6 sm:text-center">
+      先填姓氏。名字的起点落在典籍原句的音步边界上，第二个字取同句读内隔 0–2 字的位置，两字都须在名用字表内。
+    </p>
+  );
+}
+
+// 卡底那一行原来同时摆着「对比」「分组」「备注」三样，备注输入被挤到 90px 宽。
+// 现在只留整行的备注 ＋ 一个「分组／对比」入口：分组输入与对比勾选都收在入口后面，
+// 一条功能不少——分组、按组筛、整组改名／解散、对比最多三条都在。
+function FavCardTools({
+  rec,
+  full,
+  compareOn,
+  narrow,
+  onPatch,
+  onToggleCompare,
+}: {
+  rec: store.FavRecord;
+  full: string;
+  compareOn: boolean;
+  narrow: boolean;
+  onPatch: (p: { note?: string; group?: string }) => void;
+  onToggleCompare: () => void;
+}) {
+  // 宽屏默认展开、手机默认收起；用户手动开合过就以他的为准（不写 effect：同步 setState 会引发级联渲染）
+  const [override, setOverride] = useState<boolean | null>(null);
+  const open = override ?? !narrow;
+  const panel = `fav-tools-${rec.id}`;
+  return (
+    <div className="space-y-2 px-1 no-print">
+      <label className="block">
+        <span className="sr-only">{full} 的备注</span>
+        <input
+          value={rec.note ?? ''}
+          onChange={(e) => onPatch({ note: e.target.value })}
+          placeholder="为什么喜欢它"
+          className="field w-full"
+        />
+      </label>
+      <button
+        onClick={() => setOverride(!open)}
+        aria-expanded={open}
+        aria-controls={panel}
+        title="分组与对比都收在这里：给这条起个组名，或勾它进对比表（最多三条）"
+        className="btn btn-quiet"
+      >
+        <svg
+          className={`size-3 transition-transform ${open ? 'rotate-90' : ''}`}
+          viewBox="0 0 12 12"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path d="M4.5 2l5 4-5 4z" />
+        </svg>
+        分组／对比
+      </button>
+      {/* 当前组名写在这里而不是塞进按钮名里：按钮名带上组名会和分组筛选那一排的 chip 撞名 */}
+      {rec.group && <span className="text-meta text-ink-3">当前分组：{rec.group}</span>}
+      {open && (
+        <div id={panel} className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2">
+            <span className="lab shrink-0">分组</span>
+            <input
+              list="fav-groups"
+              value={rec.group ?? ''}
+              onChange={(e) => onPatch({ group: e.target.value })}
+              placeholder="如 女孩/备选"
+              className="field w-full min-w-0 sm:w-40"
+            />
+          </label>
+          <label className="flex min-h-11 items-center gap-1.5">
+            <input type="checkbox" checked={compareOn} onChange={onToggleCompare} className="size-6 accent-accent" />
+            <span className="text-meta text-ink-3">对比</span>
+          </label>
+          <span className="text-meta text-ink-3">勾 2–3 条出对比表，最多 3 条</span>
+        </div>
+      )}
     </div>
   );
 }

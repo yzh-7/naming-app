@@ -32,14 +32,39 @@ const r = scoreItem('苏', item, opts, 0);
 
 describe('NameCard 组件', () => {
   it('已收藏的名字在名字那一行就标出来，不必翻到按钮那一行；未收藏时不出现', () => {
-    const view = render(<NameCard r={r} fav blocked={false} onFav={() => {}} onBlock={() => {}} />);
-    // 名字那一行右侧的标记（不是下面那个「已收藏」按钮）
-    const chip = document.querySelector('article h3 ~ span .chip');
+    const { container, unmount } = render(<NameCard r={r} fav blocked={false} onFav={() => {}} onBlock={() => {}} />);
+    // 名字那一行里的标记（不是卡片下方那个「已收藏」按钮）
+    const nameRow = container.querySelector('article h3')!.closest('div')!;
+    const chip = nameRow.querySelector('.chip');
     expect(chip?.textContent).toBe('已收藏');
     expect(chip).toHaveClass('chip-accent');
-    view.unmount();
+    unmount();
     render(<NameCard r={r} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />);
     expect(screen.queryByText('已收藏')).toBeNull();
+  });
+  it('分数合计常驻在名字那一行：不点开「分数明细」也看得见那个总分', () => {
+    const { container } = render(<NameCard r={r} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />);
+    const card = container.querySelector('article')!;
+    const nameRow = card.querySelector('h3')!.parentElement!;
+    const text = nameRow.textContent ?? '';
+    expect(text).toContain('分数合计');
+    expect(text, '常驻的那个数字就是排序用的总分').toContain(String(r.total));
+    expect(nameRow.querySelector('details'), '分数合计不该在折叠里').toBeNull();
+    const d = card.querySelector('details')!;
+    expect(d.textContent).toContain('分数明细');
+    expect(d.hasAttribute('open'), '分数明细照旧默认折叠').toBe(false);
+  });
+  it('原句与今译常驻在卡片上，不再包在 details 里（出处才是这本应用的核心凭据）', () => {
+    const { container } = render(<NameCard r={r} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />);
+    const card = container.querySelector('article')!;
+    const gloss = lineGlossOf(r);
+    const glossEl = [...card.querySelectorAll('p')].find((p) => (p.textContent ?? '').includes(gloss));
+    expect(glossEl, '卡片里找不到今译那一段').toBeTruthy();
+    expect(glossEl!.closest('details'), '今译不该再藏在折叠里').toBeNull();
+    const marked = card.querySelector('mark');
+    expect(marked, '原句里的取词段没有高亮').toBeTruthy();
+    expect(marked!.closest('details'), '原句不该再藏在折叠里').toBeNull();
+    expect(card.querySelectorAll('details'), '卡片上只剩「分数明细」一个折叠').toHaveLength(1);
   });
   it('分数明细第一行是分数合计，那个数字就是排序用的总分', () => {
     render(<NameCard r={r} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />);
@@ -338,13 +363,19 @@ describe('真实用名标签', () => {
   });
 });
 describe('真实人名档的出处行', () => {
-  it('不是一段空原文，而是写明「非典籍出处」与语料次数', () => {
+  it('不是一段空原文，而是写明「非典籍出处」与语料次数，且常驻不在折叠里', () => {
     const item = one(REAL_ITEMS, '真实人名档应有条目');
-    render(
+    const { container } = render(
       <NameCard r={scoreItem('袁', item, opts, 0)} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />,
     );
-    expect(screen.getByText(new RegExp(`真实人名 · 语料里 ${item.rn} 人用过（非典籍出处）`))).toBeInTheDocument();
+    const card = container.querySelector('article')!;
+    const line = screen.getByText(new RegExp(`真实人名 · 语料里 ${item.rn} 人用过（非典籍出处）`));
+    expect(line).toBeInTheDocument();
+    expect(line.closest('details'), '这一行不该藏在折叠里').toBeNull();
     expect(screen.getByText(/这条不是典籍出处/)).toBeInTheDocument();
+    // 名字那一行的「真名 · N 人用过」也常驻：真实人名档没有原句，这一行就是它的证据
+    const nameRow = card.querySelector('h3')!.closest('div')!;
+    expect(nameRow.textContent).toContain(`真名 · ${item.rn} 人用过`);
     expect(screen.queryByText(/未见成词依据/)).not.toBeInTheDocument();
   });
 });

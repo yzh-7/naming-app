@@ -427,11 +427,13 @@ console.log('4c) 编号前缀碰撞：计数键是去声调拼音，同篇同音
   );
 }
 
-console.log('4d) 成词证据：a / w / spl 由 data/raw 与 jieba 词典独立重算核对（默认只给成词层的名字）');
-{
-  const books = ['shijing', 'chuci', 'lunyu', 'shuimo', 'song300', 'daofa', 'yuefu'];
+// 语料里「相邻两字」的出现次数：4d 的成词证据与 4g 的名句层共用这一份重算结果。
+// 它与 build-data 的 adjacent 是两份各写各的实现——同一条口径（每篇正文单独取、按非汉字字符切段、
+// 段内长度 2 的滑动窗、允许重叠），谁改歪了另一份就把谁咬住。
+const BOOK_KEYS = ['shijing', 'chuci', 'lunyu', 'shuimo', 'song300', 'daofa', 'yuefu'];
+const adjacentCount = (() => {
   const adj = new Map();
-  for (const b of books) {
+  for (const b of BOOK_KEYS) {
     const raw = JSON.parse(fs.readFileSync(`data/raw/${b}.json`, 'utf8'));
     for (const unit of raw) {
       const body = Array.isArray(unit.paragraphs)
@@ -450,6 +452,11 @@ console.log('4d) 成词证据：a / w / spl 由 data/raw 与 jieba 词典独立�
       }
     }
   }
+  return adj;
+})();
+
+console.log('4d) 成词证据：a / w / spl 由 data/raw 与 jieba 词典独立重算核对（默认只给成词层的名字）');
+{
   const jieba = new Map();
   for (const line of fs.readFileSync('data/raw/jieba_dict.txt', 'utf8').split('\n')) {
     const p = line.split(' ');
@@ -459,7 +466,7 @@ console.log('4d) 成词证据：a / w / spl 由 data/raw 与 jieba 词典独立�
   const badW = [];
   const badSpl = [];
   for (const c of cand) {
-    const a = adj.get(c.name) ?? 0;
+    const a = adjacentCount.get(c.name) ?? 0;
     if ((c.a ?? 0) !== a) badA.push(`${c.name}: 记 ${c.a ?? 0} 实算 ${a}`);
     const w = jieba.get(c.name) ?? 0;
     if ((c.w ?? 0) !== w) badW.push(`${c.name}: 记 ${c.w ?? 0} 实算 ${w}`);
@@ -576,6 +583,56 @@ console.log('4f) 真实人名档：来源独立、与派生表一致、跨层不
   );
   ok(withSide === meta.real_tier_genders, `带性别标注的 ${withSide} 条与 meta 一致`);
   ok(real.length >= 800, `真实人名档要有量（现 ${real.length} 条），否则解决不了「随便一选就没了」`);
+}
+
+console.log('4g) 名句层 famous：跨全池的单一阈值与逐条判定，全部由 data/raw 独立重算（不读回 meta 自己跟自己比）');
+{
+  // 判据（与 build-data 那段各写各的）：候选全池里「这两个字在语料正文里确实挨着过」（a ≥ 1）的那部分取词，
+  // 复现次数排成一个数列，取它的 90 分位 T；一条候选的名字 a ≥ T 就记 famous:true，打分 +8。
+  const counts = cand
+    .map((c) => adjacentCount.get(c.name) ?? 0)
+    .filter((v) => v >= 1)
+    .sort((a, b) => a - b);
+  if (!counts.length) throw new Error('候选全池里没有一条取词在语料里挨着过，名句阈值无从重算');
+  const T = counts[Math.floor(counts.length * 0.9)] ?? counts[counts.length - 1];
+  const famous = cand.filter((c) => c.famous === true);
+  const bad = [];
+  for (const c of cand) {
+    const want = (adjacentCount.get(c.name) ?? 0) >= T;
+    if (!!c.famous !== want)
+      bad.push(`${c.name}: a=${adjacentCount.get(c.name) ?? 0} 记 famous=${c.famous} 应为 ${want}`);
+  }
+  ok(
+    bad.length === 0,
+    `逐条 famous 与语料重算一致（重算阈值 T=${T}，有复现的取词 ${counts.length} 条，不符 ${bad.length} 条）`,
+    bad.slice(0, 4).join(' | '),
+  );
+  const badSingles = [];
+  for (const s of singles) {
+    const want = (adjacentCount.get(s.from) ?? 0) >= T;
+    if (!!s.famous !== want) badSingles.push(`${s.char}←${s.from}: 记 ${s.famous} 应为 ${want}`);
+  }
+  ok(
+    badSingles.length === 0,
+    `单字名的名句层继承它那条出处的判定（重算 ${singles.filter((s) => s.famous).length} / ${singles.length} 条，不符 ${badSingles.length} 条）`,
+    badSingles.slice(0, 4).join(' | '),
+  );
+  // 退化闸门：阈值必须严于成词门槛（a ≥ 2），命中数必须明显多于旧判据的 58 条，也不许宽到人手一份。
+  ok(T >= 3, `阈值 T=${T} 必须严于成词门槛 a ≥ 2，否则名句分与成词分是同一件事`);
+  ok(famous.length > 58, `名句层 ${famous.length} 条必须多于旧判据的 58 条（旧判据实为「取词段复现 ≥ 2」）`);
+  ok(famous.length <= cand.length * 0.2, `名句层不许宽到人手一份（现 ${famous.length} / ${cand.length} 条）`);
+  ok(famous.length === meta.pool_famous, `名句层条数与 meta.pool_famous ${meta.pool_famous} 一致`);
+  ok(
+    singles.filter((s) => s.famous).length === meta.singles_famous,
+    `单字名名句层条数与 meta.singles_famous ${meta.singles_famous} 一致`,
+  );
+  ok(T === meta.famous_threshold, `构建期记录的阈值与重算一致（meta ${meta.famous_threshold} / 重算 ${T}）`);
+  const inPool = new Set(famous.map((c) => c.name));
+  const spot = ['明月', '君子', '依依', '昊天'].filter((n) => !inPool.has(n));
+  ok(
+    spot.length === 0,
+    `典籍里反复出现的词必须在名句层里（缺 ${spot.map((n) => `${n} a=${adjacentCount.get(n) ?? 0}`).join(' ') || '无'}）`,
+  );
 }
 
 console.log('5) 性别风格：字表未漂移 + 强弱两级 + 真筛选不变量');

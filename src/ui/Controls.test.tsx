@@ -83,12 +83,15 @@ describe('Controls：输入与条件渲染', () => {
     expect(screen.queryByText('姓的读音（多音姓请选）')).not.toBeInTheDocument();
   });
 
-  it('切到单名时藏起「只看典籍叠字」（否则开关不可见却清空池子）', () => {
+  it('切到单名时藏起「只看叠字」（否则开关不可见却清空池子）', () => {
     render(<Harness />);
     openAdvanced();
-    expect(screen.getByRole('button', { name: '只看典籍叠字' })).toBeInTheDocument();
+    const btn = screen.getByRole('button', { name: '只看叠字' });
+    // 这个开关筛的是「这两个字本身相同」：典籍叠字加真实人名里的叠字名，标签与说明都要写到位
+    expect(btn.getAttribute('title')).toContain('典籍叠字 ＋ 真实人名里的叠字名');
+    expect(btn.getAttribute('title')).toContain('单名层没有叠字，切到双名才能筛');
     fireEvent.click(screen.getByRole('button', { name: '单名' }));
-    expect(screen.queryByRole('button', { name: '只看典籍叠字' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '只看叠字' })).not.toBeInTheDocument();
   });
 
   it('性别筛选是互斥三档＋不限，按下去只有一档是按下态', () => {

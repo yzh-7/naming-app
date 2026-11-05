@@ -27,8 +27,8 @@ export type PoolItem = {
   foot: number;
   gap: number;
   strict: boolean;
-  redup: boolean;
-  famous: boolean;
+  redup: boolean; // 典籍叠字装置（依依 燕燕）：构建期标的；真实人名档恒 false，那条 +3 分不给它（见 data.ts asReal）
+  famous: boolean; // 名句层：这两个字在语料正文里的复现次数 a 达到全池单一阈值（构建期现算，口径见 build-data 与 verify 4g）
   risk: { word: string; freq: number } | null;
   score: number;
   lg: number; // 出处今译在 LINE_GLOSS 里的下标
@@ -88,6 +88,8 @@ export type Opts = {
   books: Record<CorpusBook, boolean>;
   // 来源：默认两者都看。真实人名档不是典籍出处，卡片与导出都单独标注，筛来源不等于换标准
   source: Source;
+  // 只看叠字：只留「这两个字本身相同」的名字。典籍侧照构建期的 redup 标记，真实人名档照写法现算
+  // （单名层没有叠字，所以这一档切到单名时被界面藏起）
   redupOnly: boolean;
   exclude: string[];
   count: number;

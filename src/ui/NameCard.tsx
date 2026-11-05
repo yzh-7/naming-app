@@ -66,25 +66,30 @@ export function Source({ r }: { r: SourceRef }) {
   if (r.book === 'real') {
     const side = r.rs === 'f' ? '偏女' : r.rs === 'm' ? '偏男' : r.rs === 'n' ? '男女都用' : '未知';
     return (
-      <p className="mt-1.5 border-l-2 border-line pl-2 text-meta text-ink-3">
-        这条不是典籍出处。它来自 120 万条真实姓名语料：「{r.name ?? ''}」这个双字名在语料里出现过 {r.rn ?? 0}{' '}
-        次，上游把它标注为
-        {side}。它证明有人这么叫过，不证明这个名字有典籍来源；成词与否不适用于它，用字与读音仍按其他标签看。
-      </p>
+      <div>
+        <p className="font-serif text-glyph leading-6 text-ink-2">真实人名 · 语料里 {r.rn ?? 0} 人用过（非典籍出处）</p>
+        <p className="mt-2 border-l-2 border-line pl-2 text-body leading-6 text-ink-2">
+          这条不是典籍出处。它来自 120 万条真实姓名语料：「{r.name ?? ''}」这个双字名在语料里出现过 {r.rn ?? 0}{' '}
+          次，上游把它标注为
+          {side}。它证明有人这么叫过，不证明这个名字有典籍来源；成词与否不适用于它，用字与读音仍按其他标签看。
+        </p>
+      </div>
     );
   }
   const at = r.line.indexOf(r.seg);
   // 今译覆盖不到的句子（lg = -1）明说「待补」，不空着让用户自己猜是没有译文还是渲染坏了
   const gloss = lineGlossOf(r);
   const glossBlock = gloss ? (
-    <p className="mt-1.5 border-l-2 border-line pl-2 text-meta text-ink-3">
-      <span className="mr-1 rounded-ctl px-1 text-ink-3">今译</span>
+    <p className="mt-2 border-l-2 border-line pl-2 text-body leading-6 text-ink-2">
+      <span className="mr-1 rounded-ctl px-1 text-meta text-ink-3">今译</span>
       {gloss}
     </p>
   ) : (
-    <p className="mt-1.5 border-l-2 border-line pl-2 text-meta text-ink-3">
-      <span className="mr-1 rounded-ctl px-1 chip">今译待补</span>
-      这一句原文照引，但还没有现代汉语今译（清单在 docs/gloss-gaps.md，补一行即进包）
+    <p className="mt-2 border-l-2 border-line pl-2 text-body leading-6 text-ink-2">
+      <span className="mr-1 rounded-ctl px-1 chip text-meta">今译待补</span>
+      <span className="text-meta text-ink-3">
+        这一句原文照引，但还没有现代汉语今译（清单在 docs/gloss-gaps.md，补一行即进包）
+      </span>
     </p>
   );
   if (at < 0) {
@@ -118,7 +123,7 @@ export function Source({ r }: { r: SourceRef }) {
         ? `取词段第 ${r.foot + 1}–${r.foot + 2} 字`
         : `取词段第 ${r.foot + 1} 与第 ${r.foot + gap + 1} 字（中间隔 ${gap - 1} 字）`;
   return (
-    <div className="text-body text-ink-2">
+    <div className="font-serif text-glyph leading-6 text-ink-2">
       {w.cutLeft && <span className="text-ink-3">…</span>}
       {pieces.map((p, i) => {
         return p.mark ? (
@@ -225,9 +230,20 @@ export default function NameCard({
 
   return (
     <article className="card">
-      {/* 第一层：名字本体（衬线放大）+ 读音 + 性别倾向 */}
+      {/* 第一层：名字本体（衬线放大）＋ 分数合计 ＋ 读音 ＋ 性别倾向 */}
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <h3 className="font-serif text-name text-ink sm:text-name-lg">{r.full}</h3>
+        <span className="flex min-w-0 flex-wrap items-baseline gap-x-2.5">
+          <h3 className="font-serif text-name text-ink sm:text-name-lg">{r.full}</h3>
+          {/* 分数合计常驻：默认排序就是按分数排的，那个数字不该只住在「分数明细」里 */}
+          <span
+            data-block="score-total"
+            className="flex items-baseline gap-1.5"
+            title="分数合计＝这一池内排序用的那个总分，由可解释的加减项相加，不构成对名字优劣的评价。逐项看下面的「分数明细」"
+          >
+            <span className="text-meta text-ink-3">分数合计</span>
+            <span className="font-serif text-glyph tabular-nums text-accent-ink">{r.total}</span>
+          </span>
+        </span>
         <span className="flex flex-wrap items-center gap-1.5">
           {/* 已收藏是设备状态，不是名字本身的属性：常驻在名字旁边，打印时不出现 */}
           {fav && (
@@ -254,23 +270,11 @@ export default function NameCard({
       </div>
       <p className="mt-0.5 text-meta tabular-nums text-ink-3">{r.readings.join(' ') || '读音留白'}</p>
 
-      {/* 第二层：出处（这本应用的核心凭据，一行常驻，点开看原句与今译） */}
-      <details className="mt-2.5">
-        <summary className="flex min-h-11 cursor-pointer select-none items-center gap-2 text-meta text-ink-2 hover:text-ink lg:min-h-8">
-          <svg
-            className="size-3 shrink-0 text-ink-3 transition-transform open:rotate-90"
-            viewBox="0 0 12 12"
-            fill="currentColor"
-            aria-hidden="true"
-          >
-            <path d="M4.5 2l5 4-5 4z" />
-          </svg>
-          <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{sourceLabel(r)}</span>
-        </summary>
-        <div className="mt-2 border-t border-line pt-2">
-          <Source r={r} />
-        </div>
-      </details>
+      {/* 第二层：出处常驻。这本应用的核心凭据就是那句原文，它不该在折叠里——
+          原句与今译直接给，书·篇与取词段做小字 */}
+      <div data-block="source" className="mt-2.5 border-t border-line pt-2.5">
+        <Source r={r} />
+      </div>
 
       {/* 第三层：事实（字义 / 字形 / 常见度 / 多音 / 部首 / 小名）统一成「标签 + 值」两列，
           不再是十几个颜色各异的小胶囊 */}
@@ -391,11 +395,11 @@ export default function NameCard({
       )}
 
       {/* 分数明细：默认折叠 */}
-      <details className="mt-3 text-meta text-ink-2 no-print">
+      <details data-block="score" className="mt-3 text-meta text-ink-2 no-print">
         <summary className="flex min-h-11 cursor-pointer select-none items-center text-ink-3 hover:text-ink lg:min-h-8">
           分数明细
         </summary>
-        <ul className="mt-1.5 space-y-0.5">
+        <ul className="mt-1.5 space-y-0.5 leading-snug">
           <li className="flex justify-between gap-4 border-b border-line pb-1">
             <span>分数合计</span>
             <span className="tabular-nums font-medium text-ink">{r.total}</span>

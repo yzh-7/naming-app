@@ -75,6 +75,11 @@ function finalOf(syl: string) {
   return /^[jqxy]$/.test(ini) && fin.startsWith('u') ? `ü${fin.slice(1)}` : fin;
 }
 
+// 静态那几分只读构建期写进条目的事实，运行时不再判一遍。
+// famous（名句层）的判据住在构建期：候选全池里「这两个字在语料正文里确实挨着过」（a ≥ 1）的那部分取词，
+// 复现次数排成数列取 90 分位 T（本轮 T=4），a ≥ T 的条目带 famous:true。它不再是「每本书各自的取词段
+// 复现 ≥ 2」——那条在这七本语料里恒等于「这条取词段恰好还出现过一次」，58／1,660 条命中，明月、君子都没有。
+// 阈值与逐条判定由 verify 4g 从 data/raw 独立重算，跑偏就判红（scripts/build-data.mjs 同注释）。
 function staticDeltas(item: Named & { famous?: boolean; tier?: string }): Delta[] {
   const d: Delta[] = [];
   const gap = item.gap ?? 1;
@@ -83,7 +88,7 @@ function staticDeltas(item: Named & { famous?: boolean; tier?: string }): Delta[
   if (item.redup) d.push({ rule: '典籍叠字（依依 燕燕 昭昭）', delta: 3 });
   if (gap === 2) d.push({ rule: '跨一字取词（不成固定词）', delta: -4 });
   else if (gap >= 3) d.push({ rule: '跨两字取词（取自同句读相隔位置）', delta: -8 });
-  if (item.famous) d.push({ rule: '原句为本书名句层', delta: 8 });
+  if (item.famous) d.push({ rule: '原句属名句层：这个词在典籍正文里反复出现', delta: 8 });
   if (item.book === 'chuci' || item.book === 'shijing') d.push({ rule: '出处为楚辞/诗经', delta: 3 });
   return d;
 }
@@ -443,6 +448,16 @@ export function pairCandidates(ch: string): PairHint[] {
   return pairIndex.get(ch) ?? [];
 }
 
+// 叠字开关（redupOnly）：「只看叠字」筛的是「这两个字本身相同」这件事，两个来源都筛、不整档屏蔽。
+// 典籍侧照构建期的 redup 标记筛（它同时管着「假叠字」的剔除：以德报德→德德 这种跨位重复不进池）；
+// 真实人名档没有构建期标记——data.ts 给它 redup:false（它不领「典籍叠字」那 +3 分，也不进成词口径），
+// 所以这里按写法现算：婷婷 400 人、丹丹 371 人、晶晶 368 人这一类（146 条）留下来，
+// 非叠字的那 4,950 条照旧被开关挡住。旧行为是整档清空，把这一档里所有真叠字名一起屏蔽了。
+export const isReduplexName = (name: string): boolean => {
+  const cs = [...name];
+  return cs.length === 2 && cs[0] === cs[1];
+};
+
 function bookUniverse(opts: Opts): (Named & { famous?: boolean; tier?: string })[] {
   // 两个来源并列：典籍候选按七本典籍的开关取，真实人名档按来源开关取（它不是典籍，没有
   // 「哪一本」可言，所以不进 books 那七个开关）。单名层没有真实人名——语料那张表记的是双字名。
@@ -454,7 +469,8 @@ function bookUniverse(opts: Opts): (Named & { famous?: boolean; tier?: string })
     source === 'real'
       ? []
       : corpus.filter((it) => it.book !== 'real' && opts.books[it.book as CorpusBook] && (!opts.redupOnly || it.redup));
-  const real = source === 'book' || opts.length === 1 || opts.redupOnly ? [] : REAL_ITEMS;
+  const real =
+    source === 'book' || opts.length === 1 ? [] : REAL_ITEMS.filter((it) => !opts.redupOnly || isReduplexName(it.name));
   return [...books, ...real];
 }
 

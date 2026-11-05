@@ -195,10 +195,9 @@ function rawMeta(book) {
   return j.map((po) => ({ title: po.title ?? '', author: po.author ?? '' }));
 }
 
-const unitCounts = {};
+// 取词段的逐段复现计数原来只服务于「每本书 90 分位」那条旧判据，换判据之后没有读点，跟着删。
 const unitsByBook = {};
 for (const b of BOOKS) {
-  unitCounts[b.key] = new Map();
   unitsByBook[b.key] = { segs: 0, chars: 0 };
 }
 const foot = new Map();
@@ -222,7 +221,6 @@ for (const { key: book } of BOOKS) {
           segChars += seg.length;
           unitsByBook[book].segs += 1;
           unitsByBook[book].chars += seg.length;
-          unitCounts[book].set(seg, (unitCounts[book].get(seg) ?? 0) + 1);
           const offs = offsets(book, seg.length);
           const cs = [...seg];
           for (const i of offs) {
@@ -275,17 +273,45 @@ for (const [pair, v] of pC_all) if (L0.has(pair[0]) || L0.has(pair[1])) pMix.set
 const dup = (p) => p[0] === p[1];
 const sameShape = [...pB].filter(([p]) => (wf.get(p) ?? 0) >= 500);
 
-// top10% 名句：该书内 seg 出现次数的 90 分位，且至少出现 2 次
-const lineThreshold = {};
+// 成词证据（0.4.0 新增）：这两个字在七部典籍正文里作为「相邻两字」出现过几次。
+// 口径写死在这里：每篇正文单独取（不跨篇拼接）→ 按句读（句号的标点、逗号、顿号、冒号一类非汉字字符）切成段
+// → 只在段内做长度 2 的滑动窗计数，允许重叠（所以「依依」在「依依依依」里算 3 次）。
+// 切段这一步是有意的：「X，Y」这种跨句读的相邻不算成词，否则逗号两侧的字会被误当成一个词。
+// 算出来的数进候选条目，运行时只读不算。
+// 为什么要它：用户反馈「名字像硬凑」。跨字取词（gap 2/3）本来就是从一句里挑两个字，
+// 如果这两个字在语料里从没挨在一起过，那它就是纯粹拼出来的，而不是典籍里现成的词。
+// 同一个数也是下面名句层的判据原料：成词问「挨不挨着」，名句问「这个词被用到什么程度」。
+const adjacent = new Map();
 for (const { key } of BOOKS) {
-  const arr = [...unitCounts[key].values()].sort((a, b) => a - b);
-  if (!arr.length) {
-    lineThreshold[key] = Infinity;
-    continue;
+  for (const text of rawText(key)) {
+    for (const seg of text.split(/[^\u4e00-\u9fff]+/)) {
+      for (let i = 0; i + 1 < seg.length; i++) {
+        const k = seg.slice(i, i + 2);
+        adjacent.set(k, (adjacent.get(k) ?? 0) + 1);
+      }
+    }
   }
-  const q = arr[Math.floor(arr.length * 0.9)] ?? arr[arr.length - 1];
-  lineThreshold[key] = Math.max(2, q);
 }
+
+// 名句层（本轮换判据，工作区未发版）：跨全池的单一阈值，一句话说清——
+//   候选全池（Pool-B）里「这两个字在语料正文里确实挨着过」（a ≥ 1）的那部分取词，它们的复现次数排成一个数列，
+//   取它的 90 分位 T；一条候选的名字 a ≥ T 就记 famous:true，打分 +8。本轮实测 T = 4。
+// 换掉的是「每本书内取词段复现次数的 90 分位、且不低于 2」。那个量的是整截取词段（「君子好逑」这种四字段）
+// 在语料里重复出现几次：七本语料 20,852 个取词段里 94.6% 只出现 1 次，七本书各自的 90 分位是 1（诗经 2），
+// max(2, q) 恒等于 2，判据退化成「这条取词段恰好还出现过一次」，只命中 58／1,660 条，
+// 明月（相邻出现 31 次）、君子（296 次）反而没有这一分。
+// 分位取在 a ≥ 1 的那一份上（本轮 826 条）也是口径的一部分：池内 834 条是跨字取词（gap 2/3），
+// 这两个字在语料里从没挨着过，把这一堆 0 算进分位，T 落回 2，与成词门槛（a ≥ 2）落进同一个集合，+8 又变人手一份。
+// T 只由语料现算：verify 4g 从 data/raw 独立重算一遍 T 与逐条 famous（不读 meta 里的数自己跟自己比），
+// 两处实现不一致就判红；meta.famous_threshold 把构建期那个数写出来，供文档与门禁对照。
+const poolAdjCounts = [...pB.keys()]
+  .map((p) => adjacent.get(p) ?? 0)
+  .filter((v) => v >= 1)
+  .sort((a, b) => a - b);
+if (!poolAdjCounts.length) throw new Error('候选全池里没有一条取词在语料里挨着过，名句阈值无从计算');
+const famousThreshold =
+  poolAdjCounts[Math.floor(poolAdjCounts.length * 0.9)] ?? poolAdjCounts[poolAdjCounts.length - 1];
+const isFamous = (name) => (adjacent.get(name) ?? 0) >= famousThreshold;
 
 const syllable = (ch) =>
   pinyin(ch, { toneType: 'none', type: 'string', multiple: true })
@@ -345,7 +371,7 @@ function makeList(entries, tier) {
       20 +
       (dup(name) ? 3 : 0) +
       gapPenalty +
-      ((unitCounts[v.book].get(v.seg) ?? 0) >= lineThreshold[v.book] ? 8 : 0) +
+      (isFamous(name) ? 8 : 0) +
       (v.book === 'chuci' || v.book === 'shijing' ? 3 : 0);
     const w = wf.get(name) ?? 0;
     return {
@@ -362,7 +388,7 @@ function makeList(entries, tier) {
       gap: v.gap,
       strict: BOOK_STRICT[v.book],
       redup: dup(name),
-      famous: (unitCounts[v.book].get(v.seg) ?? 0) >= lineThreshold[v.book],
+      famous: isFamous(name),
       risk: w >= 500 ? { word: name, freq: w } : null,
       score: staticScore,
     };
@@ -372,24 +398,6 @@ function makeList(entries, tier) {
 const candidates = makeList(sortPairs(pB), 'B');
 const poolMix = makeList(sortPairs(pMix), 'C');
 
-// 成词证据（0.4.0 新增）：这两个字在七部典籍正文里作为「相邻两字」出现过几次。
-// 口径写死在这里：每篇正文单独取（不跨篇拼接）→ 按句读（句号的标点、逗号、顿号、冒号一类非汉字字符）切成段
-// → 只在段内做长度 2 的滑动窗计数，允许重叠（所以「依依」在「依依依依」里算 3 次）。
-// 切段这一步是有意的：「X，Y」这种跨句读的相邻不算成词，否则逗号两侧的字会被误当成一个词。
-// 算出来的数进候选条目，运行时只读不算。
-// 为什么要它：用户反馈「名字像硬凑」。跨字取词（gap 2/3）本来就是从一句里挑两个字，
-// 如果这两个字在语料里从没挨在一起过，那它就是纯粹拼出来的，而不是典籍里现成的词。
-const adjacent = new Map();
-for (const { key } of BOOKS) {
-  for (const text of rawText(key)) {
-    for (const seg of text.split(/[^\u4e00-\u9fff]+/)) {
-      for (let i = 0; i + 1 < seg.length; i++) {
-        const k = seg.slice(i, i + 2);
-        adjacent.set(k, (adjacent.get(k) ?? 0) + 1);
-      }
-    }
-  }
-}
 // 拆词标记：跨字取词时，被跳过的那个中间字与两端在原句里本来就挨着，而那一处在语料里是成词的——
 // 说明我们把一个现成的词剪开了（清扬婉兮 → 取「清婉」）。存下被拆开的原词，卡片上说得清是哪一处。
 function splitPair(c) {
@@ -730,6 +738,11 @@ const meta = {
   pool_modern_word: candidates.filter((c) => (c.w ?? 0) > 0).length,
   pool_no_evidence: candidates.filter((c) => !isWordCand(c)).length,
   pool_split: candidates.filter((c) => c.spl).length,
+  // 名句层（口径见上面 famousThreshold 那段）：跨全池的单一阈值，与守住这条阈值的条数。
+  // 单字名继承它那条出处的判定，所以单独数一份。
+  famous_threshold: famousThreshold,
+  pool_famous: candidates.filter((c) => c.famous).length,
+  singles_famous: singles.filter((s) => s.famous).length,
 };
 const write = (name, data) => fs.writeFileSync(path.join(OUT, name), JSON.stringify(data) + '\n');
 

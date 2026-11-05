@@ -256,6 +256,9 @@ const META_KEYS = [
   'pool_word',
   'pool_no_evidence',
   'pool_split',
+  'famous_threshold',
+  'pool_famous',
+  'singles_famous',
 ] as const;
 type Meta = {
   pool_B: number;
@@ -295,6 +298,10 @@ type Meta = {
   pool_modern_word: number;
   pool_no_evidence: number;
   pool_split: number;
+  // 名句层：跨全池的单一阈值 T，与该守住的条数（单字名继承它那条出处）。口径见 build-data／verify 4g
+  famous_threshold: number;
+  pool_famous: number;
+  singles_famous: number;
   corpus_sha: string;
   id_prefix_stats: { groups: number; collisions: number; max_group: number };
 };

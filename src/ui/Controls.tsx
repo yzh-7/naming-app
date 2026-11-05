@@ -35,6 +35,28 @@ const SORTS: { v: SortKey; label: string }[] = [
 
 const fmt = (n: number) => n.toLocaleString('en-US');
 
+/**
+ * 生成页的筛选要不要收成几行：640px 以下（手机）只留「姓 / 每批条数 / 换一批 / 高级筛选」四行，
+ * 其余条件全部收进「高级筛选」——原来 28 个控件摊成 17 行，引导语和第一张卡片都被推到首屏之外。
+ * 用 matchMedia 而不是只用 CSS：display:none 藏起来的输入框仍然在可访问性树里、还能 Tab 进去，
+ * 手机上的「藏起来」必须是真不渲染，折叠按钮才说得过去。
+ */
+const NARROW_QUERY = '(max-width: 39.98rem)'; // 640px 以下，与界面上的 sm 同一道边界
+
+export function useNarrowPane() {
+  const matches = () => window.matchMedia?.(NARROW_QUERY)?.matches ?? false;
+  const [narrow, setNarrow] = useState(matches);
+  useEffect(() => {
+    const mq = window.matchMedia?.(NARROW_QUERY);
+    if (!mq) return;
+    const on = () => setNarrow(mq.matches);
+    on();
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return narrow;
+}
+
 function poolSummary(poolCount: number, perPage: number, pages: number, pageNo: number): string {
   const parts: string[] = [];
   if (poolCount > 0) {
@@ -117,11 +139,22 @@ export default function Controls({
   const perPage = opts.count === 0 ? poolCount : opts.count;
   const patch = (p: Partial<Opts>) => setOpts((o) => ({ ...o, ...p }));
   const toggleBook = (b: CorpusBook) => setOpts((o) => ({ ...o, books: { ...o.books, [b]: !o.books[b] } }));
+  const [open, setOpen] = useState(false);
+  const narrow = useNarrowPane();
+  // 手机上这一组默认收起（四行之外全进「高级筛选」）；宽屏照旧常驻
+  const showSecondary = open || !narrow;
 
   return (
     <section className="card space-y-4">
-      {/* 第一组：姓、读音、名字形态、批量。手机端两列栅格，桌面一行流式 */}
-      <div className="grid grid-cols-1 gap-3 xs:grid-cols-2 sm:flex sm:flex-wrap sm:items-end sm:gap-4">
+      {/* 第一组：手机上只有姓、每批条数、换一批三行——首屏要先留给引导语与第一张卡片。
+          宽屏照旧把名字字数／性别风格／成词门槛摆在同一组里 */}
+      <div
+        className={
+          narrow
+            ? 'grid grid-cols-1 items-end gap-3'
+            : 'grid grid-cols-1 gap-3 xs:grid-cols-2 sm:flex sm:flex-wrap sm:items-end sm:gap-4'
+        }
+      >
         <label className="col-span-full">
           <span className="lab mb-1">姓（可复姓）</span>
           <input
@@ -133,7 +166,7 @@ export default function Controls({
           />
         </label>
         {surReads.length > 1 && (
-          <label className="block">
+          <label className="col-span-full sm:block">
             <span className="lab mb-1">{sur.length > 1 ? `姓首字「${sur[0]}」的读音` : '姓的读音（多音姓请选）'}</span>
             <select value={pick} onChange={(e) => setReading(Number(e.target.value))} className="field w-full">
               {surReads.map((r, i) => (
@@ -144,7 +177,7 @@ export default function Controls({
             </select>
           </label>
         )}
-        <label className="block">
+        <label className="col-span-full sm:block">
           <span className="lab mb-1" title="决定一屏几条，也决定要翻几页">
             每批条数
           </span>
@@ -164,176 +197,35 @@ export default function Controls({
             <option value="all">全部 {fmt(poolCount)} 条</option>
           </select>
         </label>
-        <label className="col-span-full sm:block">
-          <span className="lab mb-1">名字字数</span>
-          <div className="seg w-full sm:w-auto" role="group" aria-label="名字字数">
-            {([2, 1] as const).map((n) => (
-              <button
-                key={n}
-                onClick={() => patch(n === 1 ? { length: 1, redupOnly: false, mustPos: 'any' } : { length: 2 })}
-                aria-pressed={opts.length === n}
-                className={`seg-btn flex-1 sm:flex-none ${opts.length === n ? 'seg-on' : ''}`}
-              >
-                {n === 2 ? '双名' : '单名'}
-              </button>
-            ))}
-          </div>
-        </label>
-        <label className="col-span-full sm:block">
-          <span className="lab mb-1" title="选定后反向名不进候选池">
-            性别风格
-          </span>
-          <div className="seg w-full sm:w-auto" role="group" aria-label="性别风格">
-            {GENDERS.map((g) => (
-              <button
-                key={g.v}
-                onClick={() => patch({ gender: g.v })}
-                aria-pressed={opts.gender === g.v}
-                className={`seg-btn flex-1 sm:flex-none ${opts.gender === g.v ? g.on : ''}`}
-              >
-                {g.label}
-              </button>
-            ))}
-          </div>
-        </label>
-        <button
-          onClick={() => patch({ wordOnly: !opts.wordOnly })}
-          aria-pressed={opts.wordOnly}
-          title="成词＝这两个字在七部典籍正文里本来就挨着（相邻出现过两次以上），或现代汉语词表收录这个词，或是典籍里的叠字。关掉它就把手没挨着的拼字也放进来"
-          className={`chip self-start ${opts.wordOnly ? 'chip-ok' : 'text-ink-3'}`}
-        >
-          只看成词的名字
-        </button>
+        {!narrow && <FormFilters opts={opts} patch={patch} />}
         {/* 「每批条数」选了全部时只有一页，这个按钮点了什么都不发生——那就别摆在那儿 */}
         {pages > 1 && (
-          <button onClick={onBatch} className="btn-primary col-span-full sm:ml-auto">
+          <button onClick={onBatch} className={`btn-primary ${narrow ? 'w-full' : 'col-span-full sm:ml-auto'}`}>
             换一批 · {pageNo + 1}/{pages}
           </button>
         )}
       </div>
 
-      {/* 第二组：搜索、指定字、排序 */}
-      <div className="grid grid-cols-1 gap-3 border-t border-line pt-4 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
-        <label className="flex items-center gap-2">
-          <span className="lab shrink-0">搜索</span>
-          <input
-            value={opts.search}
-            onChange={(e) => patch({ search: e.target.value })}
-            aria-label="搜索名字、拼音或篇名"
-            placeholder="名字 / 拼音 / 篇名"
-            maxLength={40}
-            className="field w-full sm:w-44"
-          />
-          {opts.search && (
-            <button onClick={() => patch({ search: '' })} aria-label="清除搜索" className="btn">
-              清除
-            </button>
-          )}
-        </label>
-        <label className="flex items-center gap-2">
-          <span
-            className="lab shrink-0"
-            title="只保留这一篇里的候选。篇名可以从卡片上的「同篇候选」进来，也可以在这里直接写"
-          >
-            篇名
-          </span>
-          <input
-            value={opts.title}
-            onChange={(e) => patch({ title: e.target.value })}
-            list="pool-titles"
-            aria-label="篇名（只看这一篇）"
-            placeholder={opts.title ? '' : '如 离骚'}
-            maxLength={14}
-            className="field w-full sm:w-44"
-          />
-          <datalist id="pool-titles">
-            {titlesForBooks(opts.books).map((t) => (
-              <option key={t} value={t} />
-            ))}
-          </datalist>
-          {opts.title && (
-            <button onClick={() => patch({ title: '' })} aria-label="不限篇名" className="btn">
-              不限篇
-            </button>
-          )}
-        </label>
-        <label className="flex flex-wrap items-center gap-2">
-          <span className="lab shrink-0" title="结果里每条名字都必须含这个字；双名还能限定它当首字或末字">
-            指定字
-          </span>
-          {/* 指定字：一个字。maxLength 2 是给拼音组字留位置（1 会让输入法打不出拼音） */}
-          <CharField
-            value={opts.mustChar}
-            onInput={(raw) => patch({ mustChar: [...raw].find(isHan) ?? '' })}
-            maxLength={2}
-            ariaLabel="指定用字（结果必须包含）"
-            placeholder="如 清"
-            className="field w-16 text-center font-serif text-title sm:w-20"
-          />
-          {opts.mustChar && opts.length === 2 && (
-            <select
-              value={opts.mustPos}
-              onChange={(e) => patch({ mustPos: e.target.value as MustPos })}
-              aria-label="指定字的位置"
-              className="field w-full sm:w-auto"
-            >
-              {(['any', 'first', 'last'] as const).map((p) => (
-                <option key={p} value={p}>
-                  {MUST_POS_LABEL[p]}
-                </option>
-              ))}
-            </select>
-          )}
-          {opts.mustChar && (
-            <button onClick={() => patch({ mustChar: '' })} aria-label="清除指定字" className="btn">
-              不限制
-            </button>
-          )}
-        </label>
-        <label className="flex flex-wrap items-center gap-2">
-          <span
-            className="lab shrink-0"
-            title="名里出现其中任何一个字，这条候选就不出现（只查名，不查姓）。用于避长辈名讳、家里忌讳的字"
-          >
-            禁用字
-          </span>
-          <CharField
-            value={opts.avoidChars}
-            onInput={(raw) => patch({ avoidChars: cleanAvoid(raw) })}
-            maxLength={AVOID_MAX + 4}
-            ariaLabel="禁用字（名里出现这些字的候选不出现）"
-            placeholder="如 艳涛"
-            className="field w-24 text-center font-serif text-title sm:w-28"
-          />
-          {/* 上限写在这里而不是只写在 title 里：触屏没有 hover，框里能多打几个字（给拼音组字留的位置）也要说明白 */}
-          <span className="text-meta text-ink-3 tabular-nums" role="status">
-            已填 {[...opts.avoidChars].length}/{AVOID_MAX} 个字
-          </span>
-          {opts.avoidChars && (
-            <button onClick={() => patch({ avoidChars: '' })} aria-label="清除禁用字" className="btn">
-              不限
-            </button>
-          )}
-        </label>
-        <label className="flex items-center gap-2">
-          <span className="lab shrink-0">排序</span>
-          <select
-            value={opts.sort}
-            onChange={(e) => patch({ sort: e.target.value as SortKey })}
-            aria-label="结果排序"
-            className="field w-full sm:w-auto"
-          >
-            {SORTS.map((s) => (
-              <option key={s.v} value={s.v}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      {/* 第二组：搜索、指定字、禁用字、排序。宽屏常驻；手机上跟其余次要条件一起收进「高级筛选」 */}
+      {showSecondary && (
+        <div
+          id={narrow ? 'sec-filters' : undefined}
+          className="grid grid-cols-1 gap-3 border-t border-line pt-4 sm:flex sm:flex-wrap sm:items-center sm:gap-3"
+        >
+          {narrow && <FormFilters opts={opts} patch={patch} />}
+          <SearchFilters opts={opts} patch={patch} />
+        </div>
+      )}
 
       {/* 第三组：高级筛选（默认收起，手机端少占屏） */}
-      <AdvancedFilters opts={opts} patch={patch} toggleBook={toggleBook} />
+      <AdvancedFilters
+        opts={opts}
+        patch={patch}
+        toggleBook={toggleBook}
+        open={open}
+        setOpen={setOpen}
+        narrow={narrow}
+      />
 
       {/* 池内计数常驻：筛选折叠起来时也要看得见命中多少 */}
       <p className="measure text-meta tabular-nums text-ink-3" title="「换一批」往后翻，翻满页数看遍全部">
@@ -362,20 +254,27 @@ function AdvancedFilters({
   opts,
   patch,
   toggleBook,
+  open,
+  setOpen,
+  narrow,
 }: {
   opts: Opts;
   patch: (p: Partial<Opts>) => void;
   toggleBook: (b: CorpusBook) => void;
+  open: boolean;
+  setOpen: (v: boolean | ((o: boolean) => boolean)) => void;
+  narrow: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-
   return (
     <div>
       <button
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        aria-controls="adv-filters"
+        aria-controls={narrow ? 'sec-filters adv-filters' : 'adv-filters'}
         className="btn w-full sm:w-auto"
+        title={
+          narrow ? '搜索、指定字、禁用字、排序与字形／来源／典籍筛选都在这一处' : '整名笔画、用字常见度、来源与典籍开关'
+        }
       >
         <svg
           className={`size-3 transition-transform ${open ? 'rotate-90' : ''}`}
@@ -385,7 +284,7 @@ function AdvancedFilters({
         >
           <path d="M4.5 2l5 4-5 4z" />
         </svg>
-        {open ? '收起筛选' : '高级筛选'}
+        {open ? '收起筛选' : narrow ? '高级筛选（其余条件都在这里）' : '高级筛选'}
       </button>
       {open && (
         <div id="adv-filters" className="mt-3 space-y-3">
@@ -479,10 +378,10 @@ function AdvancedFilters({
                 <button
                   onClick={() => patch({ redupOnly: !opts.redupOnly })}
                   aria-pressed={opts.redupOnly}
-                  title="单名层没有叠字，切到双名才能筛"
+                  title="只看这两个字本身相同的名字：典籍叠字 ＋ 真实人名里的叠字名。单名层没有叠字，切到双名才能筛"
                   className={`chip ${opts.redupOnly ? 'chip-ok' : 'text-ink-3'}`}
                 >
-                  只看典籍叠字
+                  只看叠字
                 </button>
               )}
             </div>
@@ -490,5 +389,177 @@ function AdvancedFilters({
         </div>
       )}
     </div>
+  );
+}
+
+// 名字形态与成词门槛：宽屏留在第一组，手机上收进「高级筛选」里——同一份 JSX，两处共用
+function FormFilters({ opts, patch }: { opts: Opts; patch: (p: Partial<Opts>) => void }) {
+  return (
+    <>
+      <label className="col-span-full sm:block">
+        <span className="lab mb-1">名字字数</span>
+        <div className="seg w-full sm:w-auto" role="group" aria-label="名字字数">
+          {([2, 1] as const).map((n) => (
+            <button
+              key={n}
+              onClick={() => patch(n === 1 ? { length: 1, redupOnly: false, mustPos: 'any' } : { length: 2 })}
+              aria-pressed={opts.length === n}
+              className={`seg-btn flex-1 sm:flex-none ${opts.length === n ? 'seg-on' : ''}`}
+            >
+              {n === 2 ? '双名' : '单名'}
+            </button>
+          ))}
+        </div>
+      </label>
+      <label className="col-span-full sm:block">
+        <span className="lab mb-1" title="选定后反向名不进候选池">
+          性别风格
+        </span>
+        <div className="seg w-full sm:w-auto" role="group" aria-label="性别风格">
+          {GENDERS.map((g) => (
+            <button
+              key={g.v}
+              onClick={() => patch({ gender: g.v })}
+              aria-pressed={opts.gender === g.v}
+              className={`seg-btn flex-1 sm:flex-none ${opts.gender === g.v ? g.on : ''}`}
+            >
+              {g.label}
+            </button>
+          ))}
+        </div>
+      </label>
+      <button
+        onClick={() => patch({ wordOnly: !opts.wordOnly })}
+        aria-pressed={opts.wordOnly}
+        title="成词＝这两个字在七部典籍正文里本来就挨着（相邻出现过两次以上），或现代汉语词表收录这个词，或是典籍里的叠字。关掉它就把手没挨着的拼字也放进来"
+        className={`chip self-start ${opts.wordOnly ? 'chip-ok' : 'text-ink-3'}`}
+      >
+        只看成词的名字
+      </button>
+    </>
+  );
+}
+
+// 搜索 / 篇名 / 指定字 / 禁用字 / 排序：宽屏常驻那一组，手机上展开「高级筛选」才出现
+function SearchFilters({ opts, patch }: { opts: Opts; patch: (p: Partial<Opts>) => void }) {
+  return (
+    <>
+      <label className="flex items-center gap-2">
+        <span className="lab shrink-0">搜索</span>
+        <input
+          value={opts.search}
+          onChange={(e) => patch({ search: e.target.value })}
+          aria-label="搜索名字、拼音或篇名"
+          placeholder="名字 / 拼音 / 篇名"
+          maxLength={40}
+          className="field w-full sm:w-44"
+        />
+        {opts.search && (
+          <button onClick={() => patch({ search: '' })} aria-label="清除搜索" className="btn">
+            清除
+          </button>
+        )}
+      </label>
+      <label className="flex items-center gap-2">
+        <span
+          className="lab shrink-0"
+          title="只保留这一篇里的候选。篇名可以从卡片上的「同篇候选」进来，也可以在这里直接写"
+        >
+          篇名
+        </span>
+        <input
+          value={opts.title}
+          onChange={(e) => patch({ title: e.target.value })}
+          list="pool-titles"
+          aria-label="篇名（只看这一篇）"
+          placeholder={opts.title ? '' : '如 离骚'}
+          maxLength={14}
+          className="field w-full sm:w-44"
+        />
+        <datalist id="pool-titles">
+          {titlesForBooks(opts.books).map((t) => (
+            <option key={t} value={t} />
+          ))}
+        </datalist>
+        {opts.title && (
+          <button onClick={() => patch({ title: '' })} aria-label="不限篇名" className="btn">
+            不限篇
+          </button>
+        )}
+      </label>
+      <label className="flex flex-wrap items-center gap-2">
+        <span className="lab shrink-0" title="结果里每条名字都必须含这个字；双名还能限定它当首字或末字">
+          指定字
+        </span>
+        {/* 指定字：一个字。maxLength 2 是给拼音组字留位置（1 会让输入法打不出拼音） */}
+        <CharField
+          value={opts.mustChar}
+          onInput={(raw) => patch({ mustChar: [...raw].find(isHan) ?? '' })}
+          maxLength={2}
+          ariaLabel="指定用字（结果必须包含）"
+          placeholder="如 清"
+          className="field w-16 text-center font-serif text-title sm:w-20"
+        />
+        {opts.mustChar && opts.length === 2 && (
+          <select
+            value={opts.mustPos}
+            onChange={(e) => patch({ mustPos: e.target.value as MustPos })}
+            aria-label="指定字的位置"
+            className="field w-full sm:w-auto"
+          >
+            {(['any', 'first', 'last'] as const).map((p) => (
+              <option key={p} value={p}>
+                {MUST_POS_LABEL[p]}
+              </option>
+            ))}
+          </select>
+        )}
+        {opts.mustChar && (
+          <button onClick={() => patch({ mustChar: '' })} aria-label="清除指定字" className="btn">
+            不限制
+          </button>
+        )}
+      </label>
+      <label className="flex flex-wrap items-center gap-2">
+        <span
+          className="lab shrink-0"
+          title="名里出现其中任何一个字，这条候选就不出现（只查名，不查姓）。用于避长辈名讳、家里忌讳的字"
+        >
+          禁用字
+        </span>
+        <CharField
+          value={opts.avoidChars}
+          onInput={(raw) => patch({ avoidChars: cleanAvoid(raw) })}
+          maxLength={AVOID_MAX + 4}
+          ariaLabel="禁用字（名里出现这些字的候选不出现）"
+          placeholder="如 艳涛"
+          className="field w-24 text-center font-serif text-title sm:w-28"
+        />
+        {/* 上限写在这里而不是只写在 title 里：触屏没有 hover，框里能多打几个字（给拼音组字留的位置）也要说明白 */}
+        <span className="text-meta text-ink-3 tabular-nums" role="status">
+          已填 {[...opts.avoidChars].length}/{AVOID_MAX} 个字
+        </span>
+        {opts.avoidChars && (
+          <button onClick={() => patch({ avoidChars: '' })} aria-label="清除禁用字" className="btn">
+            不限
+          </button>
+        )}
+      </label>
+      <label className="flex items-center gap-2">
+        <span className="lab shrink-0">排序</span>
+        <select
+          value={opts.sort}
+          onChange={(e) => patch({ sort: e.target.value as SortKey })}
+          aria-label="结果排序"
+          className="field w-full sm:w-auto"
+        >
+          {SORTS.map((s) => (
+            <option key={s.v} value={s.v}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+      </label>
+    </>
   );
 }

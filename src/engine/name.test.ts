@@ -10,6 +10,7 @@ import {
   genderPass,
   glossOf,
   isKnownSurname,
+  isReduplexName,
   L0_CHARS,
   lineGlossOf,
   minGnOf,
@@ -797,6 +798,53 @@ describe('成词门槛：默认只给「典籍里本来就挨着的」名字（�
     expect(wordEvidence({ char: '东' }).tier).toBe('single');
   });
 });
+
+describe('名句层 famous：跨全池的单一阈值（换成可复核的判据）', () => {
+  const T = META.famous_threshold;
+  it('阈值是一个单一数，严于成词门槛 a ≥ 2，命中数既不能退化也不能人手一份', () => {
+    expect(Number.isInteger(T), `阈值要是整数（现 ${T}）`).toBe(true);
+    expect(T, '阈值必须严于成词门槛，否则名句分与成词分是同一件事').toBeGreaterThanOrEqual(3);
+    expect(POOL.filter((it) => it.famous).length).toBe(META.pool_famous);
+    expect(META.pool_famous, '旧判据（每本书取词段复现 ≥ 2）只命中 58 条，新判据必须明显多于它').toBeGreaterThan(58);
+    expect(META.pool_famous, '名句层不许宽到人手一份').toBeLessThan(POOL.length * 0.2);
+    expect(META.singles_famous).toBe(SINGLES.filter((s) => s.famous).length);
+  });
+  it('逐条对齐：a ≥ 阈值才有这一分，一条都对不上就红', () => {
+    const bad = POOL.filter((it) => it.famous !== (it.a ?? 0) >= T);
+    expect(
+      bad.map((it) => `${it.name} a=${it.a ?? 0} famous=${it.famous}`).slice(0, 5),
+      '逐条 famous 与 a 不一致',
+    ).toEqual([]);
+    const none = POOL.filter((it) => (it.a ?? 0) === 0);
+    expect(none.length, '池内该有从没挨着的拼字').toBeGreaterThan(0);
+    expect(none.filter((it) => it.famous).length, '从没挨着的拼字不该有名句分').toBe(0);
+  });
+  it('明月、君子这一类典籍里反复出现的词必须有这一分（旧判据给不出）', () => {
+    for (const n of ['明月', '君子', '依依', '昊天']) {
+      const it = POOL.find((p) => p.name === n);
+      expect(it, `池内应有「${n}」`).toBeTruthy();
+      expect(it?.famous, `「${n}」相邻出现 ${it?.a ?? 0} 次，阈值 ${T}，该有名句分`).toBe(true);
+    }
+  });
+  it('分数明细那一行说的是新判据，不再写「本书名句层」', () => {
+    const it = one(
+      POOL.filter((p) => p.famous),
+      '带名句分的条目',
+    );
+    const row = one(
+      scoreItem('苏', it, opts({ wordOnly: false }), 0).deltas.filter((x) => x.rule.includes('名句层')),
+      '明细里的名句层那一行',
+    );
+    expect(row.delta).toBe(8);
+    expect(row.rule, row.rule).toContain('反复出现');
+    expect(row.rule, row.rule).not.toContain('本书');
+  });
+  it('单字名继承它那条出处的判定：出处带分它才带分', () => {
+    const famous = new Map(POOL.map((p) => [p.name, p.famous]));
+    const bad = SINGLES.filter((s) => !!s.famous !== !!famous.get(s.from)).map((s) => `${s.char}←${s.from}`);
+    expect(bad.slice(0, 5), '单字名与出处的名句判定不一致').toEqual([]);
+  });
+});
 describe('真实用名证据（120 万条真实姓名语料）', () => {
   it('字表没有信号时由真实语料补档，补出来的档仍是互斥三档之一', () => {
     const noSignal = (n: string) => genderOf(n).why === '用字不在性别风格字表内';
@@ -894,10 +942,32 @@ describe('真实人名档（第二个来源）', () => {
     expect(poolSize(gatedBooks)).toBe(META.pool_word);
   });
 
-  it('这一档只有双名：单名层与「只看叠字」下都不出现', () => {
+  it('这一档只有双名：切到单名层时它一条也没有', () => {
     expect(poolSize(opts({ length: 1, source: 'all', wordOnly: false }))).toBe(META.singles);
-    const redup = opts({ redupOnly: true, source: 'all', wordOnly: false });
-    expect(gen('袁', redup, 0).every((r) => r.redup)).toBe(true);
+  });
+
+  it('「只看叠字」不再整档屏蔽真实人名：真叠字名留下，非叠字名照旧不给', () => {
+    const o = opts({ redupOnly: true, source: 'all', wordOnly: false, count: 0 });
+    const pool = plan('苏', o, 0).page;
+    const reduplex = REAL_ITEMS.filter((it) => isReduplexName(it.name));
+    const plain = REAL_ITEMS.filter((it) => !isReduplexName(it.name));
+    expect(reduplex.length, '真实人名档里的真叠字名（婷婷 丹丹 晶晶 这一类）要有量').toBeGreaterThan(100);
+    const realSeen = new Set(pool.filter((r) => r.book === 'real').map((r) => r.name));
+    expect([...realSeen].sort(), '真实人名档在这一开关下只剩真叠字名，一条不多一条不少').toEqual(
+      reduplex.map((it) => it.name).sort(),
+    );
+    for (const n of ['婷婷', '丹丹', '晶晶']) expect(realSeen.has(n), `${n} 必须看得见`).toBe(true);
+    const leaked = plain.filter((it) => realSeen.has(it.name)).map((it) => it.name);
+    expect(leaked.slice(0, 5), '非叠字的真实人名一条都不该进这一档').toEqual([]);
+    for (const r of pool) expect(isReduplexName(r.name), `${r.name} 不是叠字名`).toBe(true);
+    // 典籍那一半的行为不变：开关照旧按构建期的叠字标记筛
+    const corpusRedup = POOL.filter((p) => p.redup).length;
+    expect(pool.filter((r) => r.book !== 'real').length).toBe(corpusRedup);
+    expect(poolSize(o)).toBe(corpusRedup + reduplex.length);
+    // 成词门槛开着（界面默认那一档）时也一样：这一档的叠字名不该被开关整档带走
+    expect(poolSize(opts({ redupOnly: true, source: 'all' })), '默认门槛下这一档仍留着叠字名').toBe(
+      corpusRedup + reduplex.length,
+    );
   });
 
   it('三档互斥在两个来源合起来的那份池子上同样成立', () => {
