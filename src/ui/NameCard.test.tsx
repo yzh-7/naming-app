@@ -96,8 +96,12 @@ describe('NameCard 组件', () => {
   });
   it('原句下方给出今译，且今译与出处同一句', () => {
     render(<NameCard r={r} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />);
-    expect(screen.getByText('今译')).toBeInTheDocument();
-    expect(screen.getByText(lineGlossOf(r))).toBeInTheDocument();
+    // 主出处那一段的今译标签与译文（卡片里「另有几处出处」也各带一段今译，所以按主出处那一段取）
+    const source = document.querySelector('[data-block="source"]')!;
+    expect(source.textContent).toContain('今译');
+    expect(source.textContent).toContain(lineGlossOf(r));
+    const labels = [...source.querySelectorAll('span')].filter((el) => el.textContent === '今译');
+    expect(labels.length, '主出处那一段只该有一个「今译」标签').toBe(1);
     expect(lineGlossOf(r).length).toBeGreaterThan(0);
   });
   it('收藏/拉黑/分享/复制按钮回调到父级', () => {

@@ -370,6 +370,7 @@ const META_KEYS = [
   'line_gloss',
   'gloss_gap_items',
   'gloss_gap_lines',
+  'gloss_lines_primary',
   'src_titles',
   'src_lines',
   'src_lines_gap',
@@ -411,6 +412,7 @@ type Meta = {
   // 今译覆盖的缺口：条目数与唯一原句数（界面在这些位置显示「今译待补」，逐句清单 docs/gloss-gaps.md）
   gloss_gap_items: number;
   gloss_gap_lines: number;
+  gloss_lines_primary: number;
   // 共享表规模：篇名条目数、共享原句条数、其中还没有今译的句子数
   src_titles: number;
   src_lines: number;

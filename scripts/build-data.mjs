@@ -731,6 +731,7 @@ const meta = {
   gloss_lines: lineGloss.length, // 实际进包的今译条数（一句一条）
   gloss_gap_items: candidates.filter((c) => c.lg === -1).length + singles.filter((s) => s.lg === -1).length,
   gloss_gap_lines: glossGaps.size,
+  gloss_lines_primary: new Set([...candidates, ...singles].map((c) => c.lg).filter((i) => i >= 0)).size, // 主出处那一头用到的今译句数（另一头只为别处出处存在，只在 gloss_lines 总数里）
   L0_seed: L0_SEED.size,
   L0_added: verdicts ? verdicts.keep.length : 0,
   L0_dropped: verdicts ? verdicts.drop.length : 0,
@@ -1021,6 +1022,9 @@ write('line_gloss.json', lineGloss);
     '卡片与导出里对应位置显示「今译待补」，不是缺漏被藏起来了。补法：在 `data/raw/line_gloss.tsv` 加一行「原句 TAB 今译」，重跑构建。',
     '',
     `主出处那一头：共 ${glossGaps.size} 句，落在 ${[...byBook.keys()].length} 本书、${meta.gloss_gap_items} 条候选上（总候选 ${candidates.length} 条）。`,
+    glossGaps.size === 0 && altGapLines === 0
+      ? `当前两头都是 0 句：共享原句表 ${lineTable.length} 句全部带今译（0.16.0 补完「另有 N 处出处」那一头的 986 句）。这张表现在是空的——将来带进新句子时它会自动重新列出。`
+      : `两头加起来 ${glossGaps.size + altGapLines} 句待补。`,
     '',
     `「另有 N 处出处」那一头（0.14.0 恢复的多出处）里有 ${altGapAltCount} 处落在没有今译的原句上，其中 ${altGapLines} 句是只为别处出处存在的新句子（下面按书列出）。它们不在这次的候选池计数里（名字一条没多），但界面上每一个「今译待补」都要数得出来，所以一起列在这张表里：补法同样是加一行「原句 TAB 今译」，重跑构建，原句表里那一条就从字符串变成 {s, g}，卡片上立刻有译文。`,
     '',

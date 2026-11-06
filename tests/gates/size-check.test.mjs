@@ -12,9 +12,9 @@ import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 const REPO = path.resolve(new URL('../..', import.meta.url).pathname);
 const SCRIPT = path.join(REPO, 'scripts', 'size-check.mjs');
 // 与 scripts/size-check.mjs 里的常量同口径；数值断言同时把文档里的预算锁在这里。
-const ASSET_BUDGET = 409_600;
-const SHELL_BUDGET = 409_600;
-const SINGLE_BUDGET = 460_800;
+const ASSET_BUDGET = 458_752; // 448 KiB（0.16.0 起，旧值 409,600）
+const SHELL_BUDGET = 409_600; // 页面壳那条没动
+const SINGLE_BUDGET = 524_288; // 512 KiB（旧值 460,800）
 
 let tmp = '';
 
@@ -78,7 +78,7 @@ describe('size-check 门禁的失败路径', () => {
     });
     const { code, out } = runSizeCheck(dir);
     expect(code).toBe(1);
-    expect(out).toMatch(/资源合计 \d+ B gz（预算 409600 B）→ FAIL/);
+    expect(out).toMatch(new RegExp(`资源合计 \\d+ B gz（预算 ${ASSET_BUDGET} B）→ FAIL`));
   });
 
   it('HTML 超页面壳预算但未超单文件预算：不带 --single 判红，带 --single 判绿', () => {
@@ -131,7 +131,7 @@ describe('size-check 门禁的失败路径', () => {
     // 记录这条口径：入口文件是否存在不由体积门禁负责（vite 构建与 e2e 才管这件事），
     // 所以脚本对「没有 HTML」既不判红也不打印 HTML 那一行。
     expect(code).toBe(0);
-    expect(out).toMatch(/资源合计 \d+ B gz（预算 409600 B）→ PASS/);
+    expect(out).toMatch(new RegExp(`资源合计 \\d+ B gz（预算 ${ASSET_BUDGET} B）→ PASS`));
     expect(out).not.toContain('HTML 壳');
   });
 });

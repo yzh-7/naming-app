@@ -140,11 +140,29 @@ describe('verify 门禁的失败路径', () => {
     const src0 = JSON.parse(read(dir, 'src/data/sources.json'));
     const cand0 = JSON.parse(read(dir, 'src/data/candidates.json'));
     const mainLines = new Set(cand0.map((c) => c.li));
-    const altOnly = src0.lines.filter((_, i) => !mainLines.has(i)).map((l) => (typeof l === 'string' ? l : l.s));
+    const altOnly = src0.lines.filter((_, i) => !mainLines.has(i));
     expect(altOnly.length, '夹具里必须有只为 alternates 存在的原句').toBeGreaterThan(0);
-    const target = altOnly[0];
-    const tsv = read(dir, 'data/raw/line_gloss.tsv').trimEnd();
-    write(dir, 'data/raw/line_gloss.tsv', `${tsv}\n${target}\t这一句补上的今译\n`);
+    // 0.16.0 起这一批也全带今译了，所以夹具自己先把某一句的译文摘掉，再按标准补法加回去
+    const withGloss = altOnly.find((l) => typeof l === 'object' && l !== null && l.g >= 0);
+    expect(withGloss, '夹具里必须有一句只为 alternates 存在且带今译').toBeTruthy();
+    const target = withGloss.s;
+    const tsvLines = read(dir, 'data/raw/line_gloss.tsv').trimEnd().split('\n');
+    const row = tsvLines.find((l) => l.split('\t')[0] === target);
+    expect(row, '夹具里这一句必须真有今译行').toBeTruthy();
+    write(dir, 'data/raw/line_gloss.tsv', tsvLines.filter((l) => l !== row).join('\n') + '\n');
+    refreshSum(dir, 'line_gloss.tsv');
+    expect(runBuild(dir).code, '摘掉一行后构建必须仍然收').toBe(0);
+    const srcMid = JSON.parse(read(dir, 'src/data/sources.json'));
+    const mid = srcMid.lines[src0.lines.indexOf(withGloss)];
+    expect(typeof mid === 'string', '摘掉译文后这句应回到「没有今译」的形状').toBe(true);
+    const metaMid = JSON.parse(read(dir, 'src/data/meta.json'));
+    expect(metaMid.gloss_gap_items, '别处出处那一头的缺口不记在主出处那本账上').toBe(0);
+    // 补法照既有口径：加一行「原句 TAB 今译」，重跑构建即进包
+    write(
+      dir,
+      'data/raw/line_gloss.tsv',
+      read(dir, 'data/raw/line_gloss.tsv').trimEnd() + `\n${target}\t这一句补上的今译\n`,
+    );
     refreshSum(dir, 'line_gloss.tsv');
     const { code, out } = runVerify(dir);
     expect(out, out.slice(-700)).toContain('ALL PASS');
@@ -185,6 +203,24 @@ describe('verify 门禁的失败路径', () => {
     );
     expect(tampered, '夹具必须确实改到那一条判定').not.toBe(script);
     write(dir, 'scripts/build-data.mjs', tampered);
+    // 0.16.0 起别处出处的句子也全带今译，所以这一发探测先撞构建自己的守卫：
+    // alternates 一空，那 986 句今译就没人用了，构建直接报错退出。这条先记下来。
+    const built = runBuild(dir);
+    expect(built.code, '把 alternates 判定改坏后，构建自己就该发现那批今译没人用了').toBe(1);
+    expect(built.out).toContain('条释义没有对应原句');
+    // 再连那批今译一起摘掉，让这一发探测能走到 verify 4h 那份从 data/raw 独立重算的逐条比对。
+    const src0 = JSON.parse(read(dir, 'src/data/sources.json'));
+    const cand0 = JSON.parse(read(dir, 'src/data/candidates.json'));
+    const primaryLines = new Set(cand0.map((c) => c.li));
+    const altOnly = new Set(
+      src0.lines.filter((_, i) => !primaryLines.has(i)).map((l) => (typeof l === 'string' ? l : l.s)),
+    );
+    const tsvAll = read(dir, 'data/raw/line_gloss.tsv').trimEnd().split('\n');
+    const tsvKept = tsvAll.filter((l) => !altOnly.has(l.split('\t')[0]));
+    expect(tsvAll.length - tsvKept.length, '夹具摘掉的必须正好是只为别处出处存在的那批今译').toBe(altOnly.size);
+    write(dir, 'data/raw/line_gloss.tsv', tsvKept.join('\n') + '\n');
+    refreshSum(dir, 'line_gloss.tsv');
+    expect(runBuild(dir).code, '摘干净之后构建必须收').toBe(0);
     // 构建脚本自己那套 meta.alt_total 计数照旧在数，产物内部也自洽；
     // 拦得住它的是 verify 4h 那份从 data/raw 独立重算的逐条比对。
     const { code, out } = runVerify(dir);

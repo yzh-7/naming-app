@@ -1,6 +1,8 @@
 // 体积门禁（设计文档 6.1）：两条判定都按 gzip 算，都进退出码。
-//   非 HTML 资源合计 ≤ 400 KB；HTML 自身按产物形态取预算——站点版量的是页面壳（≤ 400 KB gz），
-//   单文件版（npm run single，产物在 dist-single/）量的是整个单文件产物（≤ 450 KB gz，口径见 DESIGN.md 6.1），
+//   非 HTML 资源合计 ≤ 448 KiB；HTML 自身按产物形态取预算——站点版量的是页面壳（≤ 400 KiB gz），
+//   单文件版（npm run single，产物在 dist-single/）量的是整个单文件产物（≤ 512 KiB gz，口径见 DESIGN.md 6.1），
+//   2026-11-04 改的这两条上限是用户拍板的：这一版起按 web 端体验定预算，不再拿旧安卓机与 PWA 首屏下载量当硬约束。
+//   旧数是站点 400 KiB、单文件 450 KiB（0.2.0 起到 0.15.0 都是那两条，CHANGELOG 各版体积行都按旧数记录）。
 //   原文件大小一并报出。gzip 结果与压缩实现有关：CI 的官方 Node 用 zlib-ng，同一文件比系统 zlib 大约 1.4%，
 //   所以本脚本把实现版本打出来，门禁数值以 CI 口径（较大的一侧）为准。
 import fs from 'node:fs';
@@ -28,9 +30,9 @@ for (const f of assets.sort((a, b) => gzOf(b) - gzOf(a))) {
     `${String(gzOf(f)).padStart(7)} gz  ${String(brotliCompressSync(fs.readFileSync(f)).length).padStart(7)} br  ${path.relative(dir, f)}`,
   );
 }
-const ASSET_BUDGET = 400 * 1024; // 站点首屏：JS + CSS + 数据 + 图标，gzip
+const ASSET_BUDGET = 448 * 1024; // 站点首屏：JS + CSS + 数据 + 图标，gzip（旧值 400 KiB，见文件头那条说明）
 const SHELL_BUDGET = 400 * 1024; // 站点 HTML 壳（不含应用本体），gzip
-const SINGLE_BUDGET = 450 * 1024; // 单文件产物：本体都在 HTML 里，按同一份内容的 gzip 放宽 50 KB
+const SINGLE_BUDGET = 512 * 1024; // 单文件产物：本体都在 HTML 里，按同一份内容的 gzip 放宽 64 KiB（旧值 450 KiB）
 const rawOf = (f) => fs.statSync(f).size;
 const htmlGz = html.reduce((a, f) => Math.max(a, gzOf(f)), 0);
 const htmlRaw = html.reduce((a, f) => Math.max(a, rawOf(f)), 0);

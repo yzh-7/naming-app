@@ -480,7 +480,7 @@ describe('出处今译', () => {
       if (byLine.has(it.line)) expect(it.lg).toBe(byLine.get(it.line));
       else byLine.set(it.line, it.lg);
     }
-    expect(byLine.size).toBe(META.line_gloss); // 有译文的那批：一句一条，共用下标
+    expect(byLine.size).toBe(META.gloss_lines_primary); // 主出处用到的那批：一句一条、共用下标（别处出处的今译在 gloss_lines 总数里）
     expect(gapLines.size).toBe(META.gloss_gap_lines); // 待补的那批：句数与 meta 记的一致
   });
   it('抽一条核对句意（灵均）', () => {
