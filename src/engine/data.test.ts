@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import candidatesRaw from '../data/candidates.json';
+import singlesRaw from '../data/singles.json';
 import sourcesRaw from '../data/sources.json';
 import realRaw from '../data/realnames.json';
 import { META, POOL, REAL_ITEMS, SINGLES } from './data';
@@ -18,6 +19,10 @@ describe('候选池产物的存储形状', () => {
     sq?: number;
     alt?: number[];
     alts?: unknown;
+    redup?: boolean;
+    famous?: boolean;
+    risk?: { word: string; freq: number } | null;
+    w?: number;
   };
   const raw = candidatesRaw as unknown as Raw[];
   const SRC = sourcesRaw as unknown as {
@@ -72,6 +77,64 @@ describe('候选池产物的存储形状', () => {
     expect(first.id.startsWith('B')).toBe(true);
     // 名字拼音段进 id 的那部分来自每条自己的 ns，不是现拼：多音字现拼会错位
     expect(first.id).toContain(raw0.ns ?? '');
+  });
+  it('恒假的可选字段不落键：产物里没有 risk／redup／famous 键的条目，加载后运行时值是 null／false', () => {
+    // 产物这一头：不许出现 risk:null／redup:false／famous:false（出现了就是构建脚本没照 DESIGN.md 1.3.1 写）。
+    const storedBad = raw.filter(
+      (c) =>
+        ('risk' in c && (c.risk === null || typeof c.risk !== 'object')) ||
+        ('redup' in c && c.redup !== true) ||
+        ('famous' in c && c.famous !== true),
+    );
+    expect(
+      storedBad.map((c) => `${c.name} ${JSON.stringify({ risk: c.risk, redup: c.redup, famous: c.famous })}`),
+    ).toEqual([]);
+    const stored = (k: 'risk' | 'redup' | 'famous') => raw.filter((c) => k in c).length;
+    // 恒真的那一份必须还在，否则「不落键」就成了「把字段删了」
+    expect(stored('redup'), '真叠字的 redup 必须还在产物里').toBeGreaterThan(0);
+    expect(stored('famous'), '名句层的 famous 必须还在产物里').toBeGreaterThan(0);
+    expect(stored('risk'), '同形风险的 risk 对象必须还在产物里').toBeGreaterThan(0);
+    expect(
+      [stored('risk'), stored('redup'), stored('famous')].every((n) => n < raw.length),
+      `恒假的三份不许随包发（产物带键 risk ${stored('risk')}／redup ${stored('redup')}／famous ${stored('famous')}，条目 ${raw.length} 条）`,
+    ).toBe(true);
+    // 带键的那几条带的必须是判定为真的那个事实
+    expect(raw.filter((c) => 'risk' in c).every((c) => c.risk!.word === c.name && (c.w ?? 0) >= 500)).toBe(true);
+    expect(raw.filter((c) => 'redup' in c).every((c) => [...c.name][0] === [...c.name][1])).toBe(true);
+    expect(POOL.filter((p) => p.redup).every((p) => [...p.name][0] === [...p.name][1])).toBe(true);
+    // 运行时这一头：按位置逐条比对（不是抽样）——带键⟺真值，缺键⟺false／null，一个条目都不许漏成 undefined
+    expect(POOL.length).toBe(raw.length);
+    const mismatched = POOL.filter((p, i) => {
+      const c = raw[i]!;
+      return (
+        typeof p.redup !== 'boolean' ||
+        typeof p.famous !== 'boolean' ||
+        p.redup !== 'redup' in c ||
+        p.famous !== 'famous' in c ||
+        (p.risk === null) !== !('risk' in c)
+      );
+    });
+    expect(
+      mismatched.map((p) => p.name),
+      '加载后的运行时值与产物的键必须一一对上',
+    ).toEqual([]);
+    expect(POOL.filter((p) => p.risk === null).length).toBe(raw.length - stored('risk'));
+    expect(POOL.filter((p) => p.redup).length).toBe(stored('redup'));
+    expect(POOL.filter((p) => p.famous).length).toBe(stored('famous'));
+    // 真实人名档与单字名这一头本轮不动：产物里一个这类键都没有，运行时照样是完整的布尔／null
+    const real = realRaw as unknown as Record<string, unknown>[];
+    expect(real.some((r) => ['risk', 'redup', 'famous'].some((k) => k in r))).toBe(false);
+    expect(REAL_ITEMS.every((r) => r.redup === false)).toBe(true);
+  });
+  it('单字名的产物形状没动：只在该带名句分时带 famous 键，不存 risk／redup', () => {
+    const s = singlesRaw as unknown as { char: string; famous?: boolean; risk?: unknown; redup?: unknown }[];
+    expect(s.some((x) => 'famous' in x && x.famous !== true)).toBe(false);
+    expect(s.some((x) => 'risk' in x || 'redup' in x)).toBe(false);
+    expect(s.filter((x) => 'famous' in x).length, '带 famous 键的份数必须等于加载后带这一分的条数').toBe(
+      SINGLES.filter((x) => x.famous).length,
+    );
+    expect(SINGLES.filter((x) => x.famous).length).toBe(META.singles_famous);
+    expect(SINGLES.every((x) => typeof x.famous === 'boolean')).toBe(true);
   });
 });
 describe('多出处 alternates：产物里的编码与加载期展开', () => {

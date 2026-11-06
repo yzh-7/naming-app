@@ -892,7 +892,16 @@ const compactPair = (c) => {
     gap: c.gap,
     score: c.score,
   };
-  for (const k of ['a', 'w', 'spl', 'redup', 'famous', 'risk', 'rn', 'rs']) if (c[k] !== undefined) out[k] = c[k];
+  // 可选字段有才带（DESIGN.md 1.3.1）：`undefined`（构建期就没算出这个字段）与「恒假」——`risk:null`、
+  // `redup:false`、`famous:false`——一律不落键。以前只剔 `undefined`，恒假那三类照写进产物：
+  // 1,613 个 "risk":null ＋ 1,612 个 "redup":false ＋ 1,567 个 "famous":false 是纯开销，而加载侧
+  // （src/engine/data.ts asPool）本来就把缺键当成 null／false，运行时形状一个字节都没变。
+  // 恒真的那一份照旧存：48 个 redup、93 个 famous、47 个 risk；键的相对顺序不动，只少掉恒假的键。
+  for (const k of ['a', 'w', 'spl', 'redup', 'famous', 'risk', 'rn', 'rs']) {
+    const v = c[k];
+    if (v === undefined || v === null || v === false) continue;
+    out[k] = v;
+  }
   return out;
 };
 const compactSingle = (c) => {

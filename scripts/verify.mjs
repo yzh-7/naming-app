@@ -87,6 +87,9 @@ const risk = JSON.parse(fs.readFileSync(`${OUT}/risk.json`, 'utf8'));
 const SRC = JSON.parse(fs.readFileSync(`${OUT}/sources.json`, 'utf8'));
 // 产物里每条候选只存「共享表下标＋自己独有的字段」：原句、篇名、id 都在 sources.json 那张表上。
 // 这里独立展开一遍（与 src/engine/data.ts 各自的实现），下面所有规模／出处／id 断言都读展开后的条目。
+// 可选字段有才带（DESIGN.md 1.3.1）：`redup`／`famous` 只在真带分时带键、`risk` 只在真有同形风险时带键，
+// 缺键在这里补成 false／null——所以 4／4d／4g 那些逐条断言读的仍是布尔与 null，语义与改前一字不差。
+// 键本身有没有出现由 4i 与 4g 独立断言（恒假的键不许进产物），那一段读的是没展开过的原始条目。
 const pad3 = (n) => String(n).padStart(3, '0');
 function expandItem(c, prefix) {
   const t = SRC.titles[c.ti];
@@ -105,10 +108,15 @@ function expandItem(c, prefix) {
     gap: prefix === 'S_' ? 0 : c.gap,
     strict: t.st,
     lg: l.g,
+    redup: c.redup === true,
+    famous: c.famous === true,
+    risk: c.risk ?? null,
   };
 }
-const cand = JSON.parse(fs.readFileSync(`${OUT}/candidates.json`, 'utf8')).map((c) => expandItem(c, ''));
-const singles = JSON.parse(fs.readFileSync(`${OUT}/singles.json`, 'utf8')).map((c) => expandItem(c, 'S_'));
+const candRaw = JSON.parse(fs.readFileSync(`${OUT}/candidates.json`, 'utf8'));
+const singlesRaw = JSON.parse(fs.readFileSync(`${OUT}/singles.json`, 'utf8'));
+const cand = candRaw.map((c) => expandItem(c, ''));
+const singles = singlesRaw.map((c) => expandItem(c, 'S_'));
 const lineGloss = JSON.parse(fs.readFileSync(`${OUT}/line_gloss.json`, 'utf8'));
 const names = new Set(cand.map((c) => c.name));
 
@@ -634,6 +642,23 @@ console.log('4g) 名句层 famous：跨全池的单一阈值与逐条判定，�
     `逐条 famous 与语料重算一致（重算阈值 T=${T}，有复现的取词 ${counts.length} 条，不符 ${bad.length} 条）`,
     bad.slice(0, 4).join(' | '),
   );
+  // 同一个判据还管产物的形状：带 `famous` 键 ⟺ 重算该带这一分。恒假的 `famous:false` 不许进产物
+  // （DESIGN.md 1.3.1「可选字段有才带」），所以这里断的是「键的有无」本身，不是「键的值」。
+  const badKey = [];
+  let famousKeys = 0;
+  for (const c of candRaw) {
+    const want = (adjacentCount.get(c.name) ?? 0) >= T;
+    if ('famous' in c) famousKeys += 1;
+    if ('famous' in c !== want)
+      badKey.push(
+        `${c.name}: a=${adjacentCount.get(c.name) ?? 0}，产物里${'famous' in c ? '带 famous 键' : '没有 famous 键'}，按重算应${want ? '带键' : '不带键'}`,
+      );
+  }
+  ok(
+    badKey.length === 0,
+    `逐条 famous 键的有无与语料重算一致（${candRaw.length} 条双名里带键 ${famousKeys} 份，恒假的不落键；不符 ${badKey.length} 条）`,
+    badKey.slice(0, 4).join(' | '),
+  );
   const badSingles = [];
   for (const s of singles) {
     const want = (adjacentCount.get(s.from) ?? 0) >= T;
@@ -643,6 +668,21 @@ console.log('4g) 名句层 famous：跨全池的单一阈值与逐条判定，�
     badSingles.length === 0,
     `单字名的名句层继承它那条出处的判定（重算 ${singles.filter((s) => s.famous).length} / ${singles.length} 条，不符 ${badSingles.length} 条）`,
     badSingles.slice(0, 4).join(' | '),
+  );
+  const badKeySingles = [];
+  let famousKeysSingles = 0;
+  for (const s of singlesRaw) {
+    const want = (adjacentCount.get(s.from) ?? 0) >= T;
+    if ('famous' in s) famousKeysSingles += 1;
+    if ('famous' in s !== want)
+      badKeySingles.push(
+        `${s.char}←${s.from}: 产物里${'famous' in s ? '带 famous 键' : '没有 famous 键'}，按重算应${want ? '带键' : '不带键'}`,
+      );
+  }
+  ok(
+    badKeySingles.length === 0,
+    `单字名的 famous 键同样只落在该带分的那几条上（${singlesRaw.length} 条里带键 ${famousKeysSingles} 份；不符 ${badKeySingles.length} 条）`,
+    badKeySingles.slice(0, 4).join(' | '),
   );
   // 退化闸门：阈值必须严于成词门槛（a ≥ 2），命中数必须明显多于旧判据的 58 条，也不许宽到人手一份。
   ok(T >= 3, `阈值 T=${T} 必须严于成词门槛 a ≥ 2，否则名句分与成词分是同一件事`);
@@ -931,6 +971,73 @@ console.log('4h) 多出处 alternates：每个双名的全部可核对出处由 
   );
   const realWithAlt = JSON.parse(fs.readFileSync(`${OUT}/realnames.json`, 'utf8')).filter((r) => 'alt' in r).length;
   ok(realWithAlt === 0, `真实人名档不挂 alternates（带 alt 的 ${realWithAlt} 条）：它没有典籍出处`);
+}
+
+console.log(
+  '4i) 产物形状：恒假的可选字段一律不落键（risk:null / redup:false / famous:false 不进产物，缺键＝null／false）',
+);
+{
+  // 口径是 DESIGN.md 1.3.1「可选字段有才带」，0.14.0 的产物没照做（1,613 个 risk:null、1,612 个 redup:false、
+  // 1,567 个 famous:false）。这一节断的不是「键的值」而是「键的有无」：带键 ⟺ 那条判定为真。
+  // 逐条依据各自独立：redup 照字面（叠字就是两字相同）、famous 照 4g 的重算、risk 照 4d 已核对过的词频 w（≥500）。
+  const bad = [];
+  const keyCount = { risk: 0, redup: 0, famous: 0 };
+  const riskNames = new Set();
+  for (const c of candRaw) {
+    for (const k of ['risk', 'redup', 'famous']) if (k in c) keyCount[k] += 1;
+    // redup：键只落在真叠字上（两字相同），非叠字一条也不许带
+    if ('redup' in c !== (c.name[0] === c.name[1]))
+      bad.push(`${c.name}: redup 键的有无与字面不符（带键=${'redup' in c}，字面叠字=${c.name[0] === c.name[1]}）`);
+    if ('redup' in c && c.redup !== true)
+      bad.push(`${c.name}: redup 存成了 ${JSON.stringify(c.redup)}，恒假就不该带这个键`);
+    // risk：键只落在「与现代词同形」（词频 ≥500）那几条上，值就是那个对象，不许是 null
+    if ('risk' in c) {
+      const w = c.w ?? 0;
+      if (c.risk === null) bad.push(`${c.name}: risk 存成了 null，没有同形风险就不该带这个键`);
+      else if (!c.risk || typeof c.risk !== 'object' || c.risk.word !== c.name || c.risk.freq !== w)
+        bad.push(
+          `${c.name}: risk 带了这个键却不是「{word: 名字, freq: 词频}」（${JSON.stringify(c.risk)} vs 词频 ${w}）`,
+        );
+      else if (w < 500) bad.push(`${c.name}: 重算词频 ${w} 不到 500，不该带 risk`);
+      else riskNames.add(c.name);
+    }
+    // famous：键的有无由 4g 逐条核对（那里有从语料重算的阈值），这里只钉「不许出现 false」
+    if ('famous' in c && c.famous !== true)
+      bad.push(`${c.name}: famous 存成了 ${JSON.stringify(c.famous)}，恒假就不该带这个键`);
+  }
+  ok(
+    bad.length === 0,
+    `带键＝恒真、缺键＝恒假，逐条成立（${candRaw.length} 条双名里带 risk ${keyCount.risk} 份／redup ${keyCount.redup} 份／famous ${keyCount.famous} 份；不符 ${bad.length} 处）`,
+    bad.slice(0, 4).join(' | '),
+  );
+  // 三份恒假的键确实不再随包发：带键的份数必须明显小于条目数，并与 meta 记的判定数对上账
+  ok(
+    keyCount.risk === meta.same_shape.length && keyCount.redup === meta.redup && keyCount.famous === meta.pool_famous,
+    `带键份数与判定数对账：risk ${keyCount.risk}＝meta.same_shape ${meta.same_shape.length}｜redup ${keyCount.redup}＝meta.redup ${meta.redup}｜famous ${keyCount.famous}＝meta.pool_famous ${meta.pool_famous}`,
+  );
+  const metaShape = new Set(meta.same_shape);
+  const shapeDiff = [...metaShape]
+    .filter((n) => !riskNames.has(n))
+    .concat([...riskNames].filter((n) => !metaShape.has(n)));
+  ok(
+    shapeDiff.length === 0,
+    `带 risk 键的名字与 meta.same_shape 逐名一致（差集 ${shapeDiff.length}：${shapeDiff.slice(0, 6).join(' ')}）`,
+  );
+  ok(
+    keyCount.risk < candRaw.length && keyCount.redup < candRaw.length && keyCount.famous < candRaw.length,
+    `恒假的三份没有一份进产物：省略 risk ${candRaw.length - keyCount.risk} 份／redup ${candRaw.length - keyCount.redup} 份／famous ${candRaw.length - keyCount.famous} 份（共 ${3 * candRaw.length - keyCount.risk - keyCount.redup - keyCount.famous} 个键）`,
+  );
+  // 真实人名档与单字名这一头不许被顺手改动：realnames.json 一个可选键都不带，singles.json 只在带分时带 famous
+  const realKeys = JSON.parse(fs.readFileSync(`${OUT}/realnames.json`, 'utf8')).filter((r) =>
+    ['risk', 'redup', 'famous'].some((k) => k in r),
+  ).length;
+  ok(realKeys === 0, `真实人名档不带这三个键（带键的 ${realKeys} 条）：它的 redup:false 由加载时补`);
+  const singleBadKeys = singlesRaw.filter((s) => 'famous' in s && s.famous !== true).length;
+  const singleRiskKeys = singlesRaw.filter((s) => ['risk', 'redup'].some((k) => k in s)).length;
+  ok(
+    singleBadKeys === 0 && singleRiskKeys === 0,
+    `单字名产物形状不变：只在该带分时带 famous（${singlesRaw.filter((s) => 'famous' in s).length}／${singlesRaw.length} 条），不存 risk／redup（带键的 ${singleRiskKeys} 条）`,
+  );
 }
 
 console.log('5) 性别风格：字表未漂移 + 强弱两级 + 真筛选不变量');

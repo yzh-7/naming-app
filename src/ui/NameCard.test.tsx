@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import candidatesRaw from '../data/candidates.json';
 import NameCard, { Source } from './NameCard';
 import { genderOf, scoreItem, findItem, glossOf, lineGlossOf, sameSoundPeers, shapeTags } from '../engine/name';
 import { POOL, REAL_ITEMS } from '../engine/data';
@@ -153,6 +154,46 @@ describe('NameCard 警示分区', () => {
     const chip = screen.getByText(/^同形：/);
     expect(chip.className).toContain('chip-warn');
     expect(chip.className).not.toContain('chip-danger');
+  });
+
+  // 恒假的可选字段不进产物（DESIGN.md 1.3.1），所以卡片这一头只认加载后的值：缺键＝null。
+  it('产物里没有 risk 键的那条：加载后运行时值是 null，卡片上没有同形旗标', () => {
+    const raw = candidatesRaw as unknown as { name: string; risk?: unknown }[];
+    const noKey = one(
+      raw.filter((c) => !('risk' in c)),
+      '产物里应有不带 risk 键的双名',
+    );
+    expect(noKey.risk, '用例前提：产物里确实没有这个键').toBeUndefined();
+    const item = one(
+      POOL.filter((p) => p.name === noKey.name),
+      `候选池里应有「${noKey.name}」`,
+    );
+    expect(item.risk, `「${noKey.name}」缺键必须在加载时补成 null，不能留 undefined`).toBeNull();
+    const r = scoreItem('苏', item, opts, 0);
+    expect(r.flags.some((f) => f.startsWith('同形'))).toBe(false);
+    render(<NameCard r={r} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />);
+    expect(screen.queryByText(/^同形：/)).not.toBeInTheDocument();
+  });
+
+  it('产物里带 risk 键的那条：运行时就是那个对象，卡片照旧给同形旗标与 −12 那一分', () => {
+    const raw = candidatesRaw as unknown as { name: string; risk?: { word: string; freq: number } }[];
+    const withKey = one(
+      raw.filter((c) => 'risk' in c && !!c.risk),
+      '产物里应有带 risk 键的双名',
+    );
+    const item = one(
+      POOL.filter((p) => p.name === withKey.name),
+      `候选池里应有「${withKey.name}」`,
+    );
+    expect(item.risk, '有键就是那个对象').toEqual(withKey.risk);
+    const r = scoreItem('苏', item, opts, 0);
+    expect(
+      r.deltas.some(
+        (d) => d.delta === -12 && d.rule === `与现代词同形：${withKey.risk!.word}（freq ${withKey.risk!.freq}）`,
+      ),
+    ).toBe(true);
+    render(<NameCard r={r} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />);
+    expect(screen.getByText(`同形：${withKey.risk!.word}`)).toBeInTheDocument();
   });
 
   it('拗口、生僻这类旗标走醒目警示', () => {
@@ -389,10 +430,13 @@ describe('真实人名档的出处行', () => {
 });
 describe('今译待补', () => {
   it('lg = -1 的条目在卡片上明说「今译待补」，不是空着一块', () => {
-    const item = one(
-      POOL.filter((it) => it.lg === -1),
-      '应有一条出处句还没今译',
+    // 语料现在主出处一头已经没有缺口（0 句），所以这一条不靠语料碰运气：
+    // 拿一条真有今译的候选，把它的今译下标改回「没有」，验证卡片仍然把缺译文写在明面上。
+    const base = one(
+      POOL.filter((it) => it.lg >= 0),
+      '应有一条带今译的候选作样本',
     );
+    const item = { ...base, lg: -1 };
     const { container } = render(
       <NameCard r={scoreItem('袁', item, opts, 0)} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />,
     );

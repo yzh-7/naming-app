@@ -172,6 +172,22 @@ function asAlts(name: string, v: unknown, where: string): AltRef[] {
   return out;
 }
 
+// 可选字段有才带（DESIGN.md 1.3.1）：产物里 `redup`／`famous` 只带 `true`，`risk` 只带那个对象。
+// 缺键就是 false／null —— 这不是「放松校验」，而是换一条更强的校验：恒假的键不许进产物，
+// 出现了（`redup:false`、`famous:false`、`risk:null`）就地炸，因为它说明构建脚本与声明的口径分叉了。
+// 运行时形状因此与改动前逐字段相同：界面对 redup／famous 读真值、对 risk 读 null，不用改读法。
+function trueFlag(v: unknown, key: string, where: string): boolean {
+  if (v === undefined) return false;
+  if (v !== true) fail(`${where} 的 ${key} 存成了 ${JSON.stringify(v)}：恒假就不该带这个键（缺键＝false）`);
+  return true;
+}
+function riskOf(v: unknown, where: string): PoolItem['risk'] {
+  if (v === undefined) return null;
+  if (!isObj(v) || !isStr(v.word) || !isNum(v.freq))
+    fail(`${where} 的 risk 存成了 ${JSON.stringify(v)}：没有同形风险就不该带这个键（缺键＝null）`);
+  return { word: v.word, freq: v.freq };
+}
+
 function asPool(v: unknown, what: string): PoolItem[] {
   const out: PoolItem[] = [];
   for (const it of isArr(v)) {
@@ -188,9 +204,13 @@ function asPool(v: unknown, what: string): PoolItem[] {
       !isNum(it.foot) ||
       !isNum(it.gap) ||
       !isNum(it.score) ||
+      // 恒假的可选字段不许进产物（见下面 trueFlag／riskOf）：出现了就是构建脚本没照 1.3.1 的口径写
+      ('redup' in it && it.redup !== true) ||
+      ('famous' in it && it.famous !== true) ||
+      ('risk' in it && !isObj(it.risk)) ||
       ['id', 'chars', 'book', 'title', 'author', 'line', 'seg', 'tier', 'strict', 'lg', 'alts'].some((k) => k in it)
     ) {
-      fail(`${what} 有结构不符的条目（可共享或可推导的字段不许直接存）`);
+      fail(`${what} 有结构不符的条目（可共享或可推导的字段不许直接存；恒假的可选字段不许存）`);
     }
     const title = SOURCES.titles[it.ti];
     const line = SOURCES.lines[it.li];
@@ -199,10 +219,13 @@ function asPool(v: unknown, what: string): PoolItem[] {
     if (SOURCES.compactTitles.has(it.ti) || SOURCES.compactLines.has(it.li))
       fail(`${what} 里的「${it.name}」主出处指到了只为 alternates 追加的紧凑形条目上`);
     const text = line.s;
-    const alts = it.alt === undefined ? undefined : asAlts(it.name, it.alt, `${what} 里的「${it.name}」`);
+    const where = `${what} 里的「${it.name}」`;
+    const alts = it.alt === undefined ? undefined : asAlts(it.name, it.alt, where);
     // 产物里的 `alt` 是编码，运行时只留展开后的 `alts`：把下标数组原样带进内存会让卡片与导出读到没校验过的数
     const rest = { ...(it as unknown as Record<string, unknown>) };
     delete rest.alt;
+    // 这三个键在产物里是「有才带」的稀疏形状，运行时必须是完整形状（界面上的 `??` 与打分都按它读）
+    for (const k of ['redup', 'famous', 'risk']) delete rest[k];
     out.push({
       ...(rest as unknown as Omit<
         PoolItem,
@@ -215,12 +238,15 @@ function asPool(v: unknown, what: string): PoolItem[] {
       title: title.t,
       author: title.au,
       line: text,
-      seg: segOf(text, it, `${what} 里的「${it.name}」`),
+      seg: segOf(text, it, where),
       foot: it.foot,
       gap: it.gap,
       score: it.score,
       strict: title.st,
       lg: line.g,
+      redup: trueFlag(it.redup, 'redup', where),
+      famous: trueFlag(it.famous, 'famous', where),
+      risk: riskOf(it.risk, where),
       ...(alts ? { alts } : {}),
     });
   }
@@ -241,9 +267,10 @@ function asSingles(v: unknown): SingleItem[] {
       !isNum(it.sq) ||
       !isNum(it.foot) ||
       !isNum(it.score) ||
+      ('famous' in it && it.famous !== true) ||
       ['id', 'book', 'title', 'author', 'line', 'seg', 'gap', 'strict', 'lg'].some((k) => k in it)
     ) {
-      fail('singles 有结构不符的条目（可共享或可推导的字段不许直接存）');
+      fail('singles 有结构不符的条目（可共享或可推导的字段不许直接存；恒假的可选字段不许存）');
     }
     const title = SOURCES.titles[it.ti];
     const line = SOURCES.lines[it.li];
@@ -251,7 +278,7 @@ function asSingles(v: unknown): SingleItem[] {
     out.push({
       ...(it as unknown as Omit<
         SingleItem,
-        'id' | 'book' | 'title' | 'author' | 'line' | 'seg' | 'gap' | 'strict' | 'lg'
+        'id' | 'book' | 'title' | 'author' | 'line' | 'seg' | 'gap' | 'strict' | 'lg' | 'famous'
       >),
       // 单字名的 id 一直是「S_＋出处双名的 id」，所以出处那一条的序号也从产物里来，重建后逐字不变
       id: idOf(title, it.ns, it.sq, 'S_'),
@@ -264,6 +291,8 @@ function asSingles(v: unknown): SingleItem[] {
       gap: 0, // 单字名没有「间隔几个字」这一说：它取自出处双名的那个字位
       strict: title.st,
       lg: line.g,
+      // 名句层从它那条出处继承：产物只在真带分时带 `famous:true`，缺键＝false（与候选池同一口径）
+      famous: trueFlag(it.famous, 'famous', `singles 里的「${it.char}」`),
     });
   }
   return out;

@@ -211,6 +211,29 @@ describe('verify 门禁的失败路径', () => {
     expect(out).toContain('多出处 alternates');
     expect(out).toContain('FAILURES:');
   }, 120_000);
+
+  it('恒假的可选字段被写回产物（risk:null / redup:false / famous:false）：4i 判红，产物形状与声明不许分叉', () => {
+    const dir = fixture();
+    const script = read(dir, 'scripts/build-data.mjs');
+    const tampered = script.replace(
+      'if (v === undefined || v === null || v === false) continue;',
+      'if (v === undefined) continue; // 探测：把恒假的键照旧写进产物',
+    );
+    expect(tampered, '夹具必须确实改到那一条落键规则').not.toBe(script);
+    write(dir, 'scripts/build-data.mjs', tampered);
+    const { code, out } = runVerify(dir);
+    expect(code).toBe(1);
+    expect(failLines(out).length).toBeGreaterThan(0);
+    expect(out).toContain('恒假的可选字段一律不落键');
+    expect(out).toContain('risk:null');
+    expect(out).toContain('FAILURES:');
+    // 夹具自己那一份产物确实被改回了恒假键：判红不是发生在「脚本没跑起来」这一头
+    const cand = JSON.parse(read(dir, 'src/data/candidates.json'));
+    expect(
+      cand.some((c) => c.risk === null || c.redup === false || c.famous === false),
+      '夹具必须真写出恒假键',
+    ).toBe(true);
+  }, 120_000);
 });
 
 afterAll(() => {
