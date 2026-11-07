@@ -17,6 +17,7 @@ import {
   titleKey,
 } from './engine/name';
 import { APP_VERSION, META } from './engine/data';
+import { traditionalRewrites, toSimplified } from './engine/simplified';
 import { BOOK_LABEL, BOOK_ORDER, type Book, type Opts, type Result, type ShareName } from './engine/types';
 import Controls, { useNarrowPane } from './ui/Controls';
 import NameCard from './ui/NameCard';
@@ -222,7 +223,8 @@ export default function App() {
   const blockList = useMemo(() => block.map((id) => scored(id)).filter((x): x is Result => !!x), [block, scored]);
   const favGroups = useMemo(() => [...new Set(fav.map((f) => f.group).filter(Boolean))] as string[], [fav]);
   const favView = useMemo(() => {
-    const q = favQuery.trim().toLowerCase();
+    // 收藏页的搜索也归一：备注里写的是简体，输入繁体也应当搜得到（表外的字符原样留着）
+    const q = toSimplified(favQuery.trim()).toLowerCase();
     let list = favPairs;
     if (favGroup) list = list.filter((p) => p.rec.group === favGroup);
     if (favFrom) list = list.filter((p) => (p.rec.from ?? 'none') === favFrom);
@@ -734,6 +736,11 @@ export default function App() {
                 placeholder="名字 / 拼音 / 备注 / 分组"
                 className="field w-full sm:w-56"
               />
+              {traditionalRewrites(favQuery).length > 0 && (
+                <p role="status" className="w-full text-meta text-ink-3">
+                  按简体匹配：{traditionalRewrites(favQuery).join('、')}
+                </p>
+              )}
               <select
                 value={favSort}
                 onChange={(e) => setFavSort(e.target.value as FavSort)}

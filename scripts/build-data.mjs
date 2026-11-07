@@ -1006,6 +1006,79 @@ write('radical.json', radical);
 write('gloss.json', gloss);
 // 出处今译：按原句首次出现顺序的纯数组，条目用 lg 下标取；不重复存句子，省体积
 write('line_gloss.json', lineGloss);
+
+// ── 繁简输入归一表（0.20.0）──────────────────────────────────────────
+// 界面上输入繁体（「蘇」「東」）此前什么都搜不到：数据是简体的，匹配也是逐字的。
+// 归一要带一张对照表，代价与两种口径的实测 gzip 见 DESIGN.md「预研：繁简输入归一要花多少体积」，
+// 这里取的是「简体侧落在本应用可匹配字符集里」那一档（1,122 对，4,832 B gzip）。
+// 表是生成物（生成器 opencc-js 1.4.2 的 t→cn，它不进产物），已登记进 SHA256SUMS。
+// 构建时校验四件事：① 两侧都是单个汉字；② 繁体侧不许出现两次；
+// ③ 简体侧自己不许又是繁体键——一次映射就要到位，不许要映射两次；
+// ④ 简体侧不在当前可匹配字符集里的行只数不判红（多余的行无害：那个繁体输入本来就搜不到东西），
+//    判红只有「整张表一行都对不上」这一种，防的是表与语料完全脱节还照发。
+{
+  const charset = new Set();
+  const add = (v) => {
+    if (typeof v === 'string') for (const ch of v) charset.add(ch);
+  };
+  const rowOf = (row, keys, idx) => {
+    if (typeof row === 'string') return row;
+    if (Array.isArray(row)) return idx.map((i) => row[i]);
+    return keys.map((k) => row[k]);
+  };
+  for (const c of candidates) {
+    add(c.name);
+    add(c.spl ?? '');
+  }
+  for (const x of singles) {
+    add(x.char);
+    add(x.from);
+  }
+  // 两张共享表在同一次构建里混着两种形状（主出处那一段与 alternates 的追加段），取字段要都认得
+  const cells = (row, keys, idx) => {
+    const v = rowOf(row, keys, idx);
+    for (const x of Array.isArray(v) ? v : [v]) add(x);
+  };
+  for (const t of titleTable) cells(t, ['t', 'au'], [1, 2]);
+  for (const l of lineTable) cells(l, ['s'], [0]);
+  for (const ch of L0) add(ch);
+
+  const pairs = [];
+  const seenTrad = new Map();
+  let matched = 0;
+  let outside = 0;
+  const lines = read('t2s-simplified.tsv').split('\n');
+  for (const [no, line] of lines.entries()) {
+    const text = line.trim();
+    if (!text || text.startsWith('#')) continue;
+    const [trad, simp] = text.split('\t');
+    if ([...trad].length !== 1 || [...simp].length !== 1)
+      throw new Error(`t2s-simplified.tsv 第 ${no + 1} 行两侧必须是单个汉字：${text}`);
+    if (seenTrad.has(trad)) throw new Error(`t2s-simplified.tsv 第 ${no + 1} 行的繁体字重复：${trad}`);
+    if (charset.has(simp) && seenTrad.has(simp))
+      throw new Error(`t2s-simplified.tsv 第 ${no + 1} 行的简体字「${simp}」自己又是繁体键：一次映射要到位`);
+    if (charset.has(simp)) matched++;
+    else outside++;
+    seenTrad.set(trad, simp);
+    pairs.push(trad + simp);
+  }
+  if (!pairs.length) throw new Error('t2s-simplified.tsv 一条对照对都没有');
+  if (matched === 0)
+    throw new Error(
+      `t2s-simplified.tsv 的 ${pairs.length} 行没有一行落进当前可匹配字符集（${charset.size} 字）：表与语料完全脱节，不能带着它上线`,
+    );
+  write('t2s.json', pairs.join(''));
+  meta.t2s_pairs = pairs.length;
+  meta.t2s_targets = new Set(pairs.map((x) => x[1])).size;
+  meta.t2s_charset = charset.size;
+  meta.t2s_outside = outside;
+  console.log(
+    `t2s：${pairs.length} 对繁简对照，覆盖 ${meta.t2s_targets} 个简体字，可匹配字符集 ${charset.size} 字` +
+      (outside
+        ? `｜其中 ${outside} 行的简体侧不在字符集里（无害：那些繁体输入本来就搜不到东西）`
+        : '｜每一行的简体侧都在字符集里'),
+  );
+}
 {
   // 「今译待补」清单：哪些出处句还没有今译，按书分组写进 docs，下一轮补的时候照这张表勾。
   const byBook = new Map();

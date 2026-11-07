@@ -49,29 +49,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium firefox
+      - run: npx playwright install --with-deps chromium firefox webkit
       - name: 构建
         run: npm run build
-      - name: 端到端 + axe 可访问性扫描（Chromium 与 Firefox 两档，红了拦发布）
-        run: npx playwright test --project=chromium --project=firefox
+      - name: 端到端 + axe 可访问性扫描（Chromium、Firefox、WebKit 三档，红了拦发布）
+        run: npx playwright test
       - name: 设计体检（46 组视口×主题×页面实测）
         run: npm run audit:design
-
-  # WebKit 那一档先当哨兵跑：本机跑不起来（见 playwright.config.ts 里那段说明），
-  # 所以它在 CI 里允许失败——红了不拦发布，但 CI 页上看得见，红了就得看。
-  # 连着两次绿之后把它并进上面那个拦发布的 job。
-  e2e-webkit:
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npx playwright install --with-deps webkit
-      - name: 构建
-        run: npm run build
-      - name: 端到端（WebKit 哨兵档）
-        run: npx playwright test --project=webkit

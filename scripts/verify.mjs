@@ -1040,6 +1040,62 @@ console.log(
   );
 }
 
+console.log('4j) 繁简输入归一表：raw／产物／meta 三方一致，形状合法，一次映射到位（0.20.0）');
+{
+  const rows = [];
+  const bad = [];
+  const seenTrad = new Map();
+  for (const [no, line] of fs.readFileSync('data/raw/t2s-simplified.tsv', 'utf-8').split('\n').entries()) {
+    const text = line.trim();
+    if (!text || text.startsWith('#')) continue;
+    const [trad, simp] = text.split('\t');
+    if ([...trad].length !== 1 || [...simp].length !== 1) bad.push(`第 ${no + 1} 行两侧不是单字`);
+    if (seenTrad.has(trad)) bad.push(`繁体字 ${trad} 出现两次`);
+    seenTrad.set(trad, simp);
+    rows.push(trad + simp);
+  }
+  const out = JSON.parse(fs.readFileSync(`${OUT}/t2s.json`, 'utf-8'));
+  const M = meta;
+  ok(rows.length === M.t2s_pairs, `表 ${rows.length} 对，与 meta.t2s_pairs 一致`);
+  ok(rows.join('') === out, '产物串与 raw 逐行逐字一致（不是重排或另算的一份）');
+  ok(out.length === rows.length * 2, '产物是「繁体简体相邻成对」的串，长度是偶数');
+  const chained = [...seenTrad.values()].filter((simp) => seenTrad.has(simp));
+  ok(chained.length === 0, '表里没有链：任一带繁体的输入映射一次就到位', chained.slice(0, 4).join(' '));
+  ok(new Set([...seenTrad.values()]).size === M.t2s_targets, `简体侧覆盖 ${M.t2s_targets} 个字，与 meta 一致`);
+  // 可匹配字符集独立重算一遍（与 build-data 同一份口径），核对「表里有多少行落在集合外」这件事
+  const charset = new Set();
+  const add = (v) => {
+    if (typeof v === 'string') for (const ch of v) charset.add(ch);
+  };
+  for (const c of candRaw) {
+    add(c.name);
+    add(c.spl ?? '');
+  }
+  for (const x of singlesRaw) {
+    add(x.char);
+    add(x.from);
+  }
+  for (const t of SRC.titles) {
+    add(typeof t === 'string' ? t : (t[1] ?? t.t));
+    add(typeof t === 'string' ? '' : (t[2] ?? t.au));
+  }
+  for (const l of SRC.lines) add(typeof l === 'string' ? l : l.s);
+  for (const ch of L0) add(ch);
+  const outside = [...seenTrad.values()].filter((simp) => !charset.has(simp)).length;
+  ok(
+    outside === M.t2s_outside,
+    `${charset.size} 字可匹配字符集：表里 ${outside} 行落在集合外，与 meta 一致（多余的行无害，但要数得出来）`,
+  );
+  ok(bad.length === 0, `逐行形状合法（${rows.length} 行）`, bad.slice(0, 3).join('；'));
+  // 抽样三条：姓、常用字、一字对多。红了就说明表被换成了别的口径
+  ok(seenTrad.get('蘇') === '苏' && seenTrad.get('東') === '东', '抽样：蘇 → 苏、東 → 东');
+  ok(seenTrad.get('發') === seenTrad.get('髮'), '抽样：發 与 髮 落到同一个简体（一字对多）');
+  ok(
+    [...seenTrad.values()].every((s) => !seenTrad.has(s)),
+    '简体侧自己不是繁体键（幂等）',
+  );
+}
+
 console.log('5) 性别风格：字表未漂移 + 强弱两级 + 真筛选不变量');
 {
   const rawAttr = JSON.parse(fs.readFileSync('data/raw/cnname_attributes.json', 'utf8'));

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { META } from '../engine/data';
+import { traditionalRewrites } from '../engine/simplified';
 import { cleanSurname, surnameReadingOptions, surnameReads, titlesForBooks } from '../engine/name';
 import {
   AVOID_MAX,
@@ -164,6 +165,7 @@ export default function Controls({
             placeholder="如 苏 / 欧阳"
             className="field w-full font-serif text-title sm:w-40"
           />
+          <ScriptHint value={surname} />
         </label>
         {surReads.length > 1 && (
           <label className="col-span-full sm:block">
@@ -440,6 +442,18 @@ function FormFilters({ opts, patch }: { opts: Opts; patch: (p: Partial<Opts>) =>
   );
 }
 
+// 输入里出现表内的繁体字时给一行对照。输入框里保留的是用户打下的字形，归一只发生在匹配处，
+// 所以这一行存在的意义就是「你的字没有被换掉，只是按简体去搜」。
+function ScriptHint({ value }: { value: string }) {
+  const rewrites = traditionalRewrites(value);
+  if (!rewrites.length) return null;
+  return (
+    <p className="measure text-meta text-ink-3" role="status">
+      按简体匹配：{rewrites.join('、')}
+    </p>
+  );
+}
+
 // 搜索 / 篇名 / 指定字 / 禁用字 / 排序：宽屏常驻那一组，手机上展开「高级筛选」才出现
 function SearchFilters({ opts, patch }: { opts: Opts; patch: (p: Partial<Opts>) => void }) {
   return (
@@ -459,6 +473,7 @@ function SearchFilters({ opts, patch }: { opts: Opts; patch: (p: Partial<Opts>) 
             清除
           </button>
         )}
+        <ScriptHint value={opts.search} />
       </label>
       <label className="flex items-center gap-2">
         <span
@@ -486,6 +501,7 @@ function SearchFilters({ opts, patch }: { opts: Opts; patch: (p: Partial<Opts>) 
             不限篇
           </button>
         )}
+        <ScriptHint value={opts.title} />
       </label>
       <label className="flex flex-wrap items-center gap-2">
         <span className="lab shrink-0" title="结果里每条名字都必须含这个字；双名还能限定它当首字或末字">
@@ -519,6 +535,7 @@ function SearchFilters({ opts, patch }: { opts: Opts; patch: (p: Partial<Opts>) 
             不限制
           </button>
         )}
+        <ScriptHint value={opts.mustChar} />
       </label>
       <label className="flex flex-wrap items-center gap-2">
         <span
@@ -544,6 +561,7 @@ function SearchFilters({ opts, patch }: { opts: Opts; patch: (p: Partial<Opts>) 
             不限
           </button>
         )}
+        <ScriptHint value={opts.avoidChars} />
       </label>
       <label className="flex items-center gap-2">
         <span className="lab shrink-0">排序</span>

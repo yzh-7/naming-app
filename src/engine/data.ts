@@ -392,6 +392,10 @@ const META_KEYS = [
   'alt_max',
   'alt_lines_added',
   'alt_titles_added',
+  't2s_pairs',
+  't2s_targets',
+  't2s_charset',
+  't2s_outside',
 ] as const;
 type Meta = {
   pool_B: number;
@@ -443,6 +447,11 @@ type Meta = {
   alt_lines_added: number;
   alt_titles_added: number;
   alt_occurrences: number;
+  // 繁简输入归一（0.20.0）：表里的对照对数／这些对覆盖的简体字数／可匹配字符集大小
+  t2s_pairs: number;
+  t2s_targets: number;
+  t2s_charset: number;
+  t2s_outside: number;
   corpus_sha: string;
   id_prefix_stats: { groups: number; collisions: number; max_group: number };
 };

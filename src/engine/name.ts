@@ -13,6 +13,7 @@ import {
   SINGLES,
 } from './data';
 import type { Book, CorpusBook, Delta, GenderSide, GenderTag, Named, Opts, PoolItem, Result, SortKey } from './types';
+import { toSimplified } from './simplified';
 import { bookOrdinal, cleanSurname } from './types';
 
 const BILABIAL = new Set(['b', 'p', 'm']);
@@ -34,8 +35,9 @@ export function surnameReadingOptions(sur: string, readCount: number) {
 }
 
 // 姓可指定读音序号（多音姓如 曾/单/解，默认读音常是错的）；名的风险判定遍历所有读音组合
+// 姓在查读音之前先过一遍繁简表：输入繁体姓（蘇、陳）也要拿得到音，否则音韵那条链会静默空转。
 function surnameReadings(surname: string, pick: number) {
-  return [...surname].map((ch, i) => {
+  return [...toSimplified(surname)].map((ch, i) => {
     const r = readings(ch);
     if (!r.length) return null;
     return i === 0 && r.length > pick ? r[pick] : r[0];
@@ -43,12 +45,12 @@ function surnameReadings(surname: string, pick: number) {
 }
 
 // 读音选择器的可选条数按姓的首字算（引擎只把 pick 用在第 0 字上），复姓同样要能选
-export const surnameReads = (surname: string) => readings([...surname][0] ?? '').length;
+export const surnameReads = (surname: string) => readings([...toSimplified(surname)][0] ?? '').length;
 
 // phonetics 依赖每个姓字都查得到读音：查不到就整条音韵链静默空转（谐音、声调、生僻全不判，分数白涨）。
 // 引擎不替界面兜这个错，但必须把「查不到」这件事露出来。
 export const isKnownSurname = (surname: string) =>
-  [...surname].length > 0 && surnameReadings(surname, 0).every(Boolean);
+  [...surname].length > 0 && surnameReadings(toSimplified(surname), 0).every(Boolean);
 
 const MAX_COMBOS = 4096;
 
@@ -370,6 +372,7 @@ export type Composed = {
   allL0: boolean;
 };
 export function composeName(surname: string, name: string, surReading = 0): Composed {
+  surname = toSimplified(surname);
   const chars = [...name];
   const ph = phonetics(surname, name, surReading);
   return {
@@ -488,7 +491,7 @@ export function genderPass(it: Named, opts: Opts): boolean {
 // 指定用字：双名查原句配对（这个字与谁在同句读内成对），单名就是该字本身。
 // 字不在名用字白名单时池内可能一条没有——那是事实，界面如实说明，不硬凑。
 export function mustPass(name: string, opts: Opts): boolean {
-  const mc = opts.mustChar;
+  const mc = toSimplified(opts.mustChar);
   if (!mc) return true;
   if (opts.length === 1 || name.length === 1) return name === mc;
   if (opts.mustPos === 'first') return name[0] === mc;
@@ -499,7 +502,7 @@ export function mustPass(name: string, opts: Opts): boolean {
 // 禁用字（避讳字）：名里出现其中任何一个字，整条候选就排除。只查名、不查姓——
 // 姓是用户自己的姓，要避的是给孩子取名时不想用的字（长辈名讳、家里忌讳的字）。
 export function avoidPass(name: string, opts: Opts): boolean {
-  const ac = opts.avoidChars;
+  const ac = toSimplified(opts.avoidChars);
   if (!ac) return true;
   for (const c of name) if (ac.includes(c)) return false;
   return true;
@@ -548,8 +551,9 @@ export function wordBonus(ev: WordEvidence): number {
 }
 
 function universe(opts: Opts): (Named & { famous?: boolean; tier?: string })[] {
-  const q = (opts.search ?? '').trim().toLowerCase();
-  const t = (opts.title ?? '').trim();
+  // 搜索与篇名都在匹配处归一：打「雲」要搜得到「云」，打「論語」要筛得到《论语》
+  const q = toSimplified((opts.search ?? '').trim()).toLowerCase();
+  const t = toSimplified((opts.title ?? '').trim());
   return bookUniverse(opts)
     .filter((it) => genderPass(it as unknown as Named, opts))
     .filter((it) => wordPass(it, opts))
@@ -686,6 +690,9 @@ const SORTERS: Record<SortKey, (a: Result, b: Result) => number> = {
 export type Plan = { page: Result[]; pageNo: number; pages: number; pool: number; titleCounts: Map<string, number> };
 
 export function plan(surname: string, opts: Opts, batch: number, surReading = 0): Plan {
+  // 姓归一一次，往下（拼分、连读风险、full 串）都用简体这一份：数据是简体的，
+  // 名字与拼音、风险词都按简体算，混着两种字形算不出正确的账。
+  surname = toSimplified(surname);
   const excluded = new Set(opts.exclude);
   const items = universe(opts).filter((it) => !excluded.has(it.id));
   // 卡片上的「同篇还有 N 条」按这一份算：与候选池同一个集合，点了按钮不会比这少

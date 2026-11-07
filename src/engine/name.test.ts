@@ -38,6 +38,7 @@ import {
 import { CHARS, META, POOL, REAL_ITEMS, SINGLES } from './data';
 import { BOOK_ORDER, type Book, type Opts } from './types';
 import { at, one } from '../testing';
+import { toSimplified } from './simplified';
 
 const gen = (sur: string, o: Opts, b: number) => plan(sur, o, b).page;
 
@@ -65,6 +66,53 @@ const opts = (p: Partial<Opts> = {}): Opts => ({
   mustPos: 'any',
   avoidChars: '',
   ...p,
+});
+
+describe('输入繁体也认（0.20.0 繁简归一）', () => {
+  it('姓打繁体：读音查得到，出来的名字仍是简体写法', () => {
+    expect(isKnownSurname('蘇'), '查不到读音的话整条音韵链会静默空转').toBe(true);
+    const page = gen('蘇', opts(), 0);
+    expect(page.length).toBeGreaterThan(0);
+    for (const r of page) expect(r.full.startsWith('苏'), r.full).toBe(true);
+  });
+
+  it('姓打繁体与打简体，这一池是同一条池（不是两条凑出来的）', () => {
+    expect(plan('蘇', opts(), 0).pool).toBe(plan('苏', opts(), 0).pool);
+    expect(composeName('蘇', '晚').full).toBe('苏晚');
+  });
+
+  it('搜索打繁体与打简体，池内条数相等且不为零', () => {
+    const t = poolSize(opts({ search: '雲' }));
+    expect(t).toBeGreaterThan(0);
+    expect(t).toBe(poolSize(opts({ search: '云' })));
+  });
+
+  it('篇名筛选也归一：離騷 与 离骚 是同一篇', () => {
+    const t = poolSize(opts({ title: '離騷' }));
+    expect(t).toBeGreaterThan(0);
+    expect(t).toBe(poolSize(opts({ title: '离骚' })));
+  });
+
+  it('指定字打繁体照样限定：東 → 每条名里都有东', () => {
+    const got = gen('苏', opts({ mustChar: '東' }), 0);
+    expect(got.length).toBeGreaterThan(0);
+    for (const r of got) expect(r.name.includes('东'), r.name).toBe(true);
+  });
+
+  it('禁用字打繁体照样排除：東 → 名里不许有东', () => {
+    const got = gen('苏', opts({ avoidChars: '東' }), 0);
+    expect(got.length).toBeGreaterThan(0);
+    for (const r of got) expect(r.name.includes('东'), r.name).toBe(false);
+  });
+
+  it('一字对多的两个繁体都算同一个禁用字（發／髮 → 发）', () => {
+    expect(poolSize(opts({ avoidChars: '發' }))).toBe(poolSize(opts({ avoidChars: '髮' })));
+  });
+
+  it('表外的繁体不会变成别的字：搜它得到零条，与今天的口径相同', () => {
+    expect(poolSize(opts({ search: 'Δ' }))).toBe(0);
+    expect(toSimplified('Δ')).toBe('Δ');
+  });
 });
 
 describe('姓氏输入归一化', () => {
