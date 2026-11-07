@@ -1096,6 +1096,58 @@ console.log('4j) 繁简输入归一表：raw／产物／meta 三方一致，形�
   );
 }
 
+console.log('4k) 今译质量口径（0.21.0 第二轮通读立下的四条，逐条全表核，不是抽样）');
+{
+  const rows = fs
+    .readFileSync('data/raw/line_gloss.tsv', 'utf-8')
+    .split('\n')
+    .filter((l) => l.trim())
+    .map((l) => l.split('\t'));
+  const bad = [];
+  const copied = rows.filter(([srcLine, gloss]) => gloss.replace(/[。？！?]$/, '') === srcLine);
+  ok(
+    copied.length === 0,
+    `今译不许与原句一字不差（照抄等于没译）：全表 ${rows.length} 行，照抄 ${copied.length} 行`,
+    copied
+      .slice(0, 3)
+      .map((r) => r[0])
+      .join(' | '),
+  );
+  const t2s = JSON.parse(fs.readFileSync(`${OUT}/t2s.json`, 'utf-8'));
+  const trad = new Set();
+  for (let i = 0; i + 1 < t2s.length; i += 2) trad.add(t2s[i]);
+  const tradInGloss = rows.filter(([, gloss]) => [...gloss].some((ch) => trad.has(ch)));
+  ok(
+    tradInGloss.length === 0,
+    '今译一律简体：译文里不许出现繁简对照表里的繁体字（界面与输入归一同口径）',
+    tradInGloss
+      .slice(0, 3)
+      .map((r) => r[1])
+      .join(' | '),
+  );
+  const seen = new Map();
+  rows.forEach(([srcLine, gloss]) => {
+    if (seen.has(gloss)) bad.push(`${seen.get(gloss)} ／ ${srcLine}`);
+    else seen.set(gloss, srcLine);
+  });
+  ok(
+    bad.length === 0,
+    `今译不许重复：${rows.length} 行译文互不相同（同一句译文挂到两条原句上必有一条是抄错的）`,
+    bad.slice(0, 2).join(' | '),
+  );
+  const noEnd = rows.filter(([, gloss]) => !/[。！？?]$/.test(gloss));
+  ok(
+    noEnd.length === 0,
+    `今译一律以句末标点收尾（全表 ${rows.length} 行，缺收尾的 ${noEnd.length} 行）`,
+    noEnd
+      .slice(0, 3)
+      .map((r) => r[0])
+      .join(' | '),
+  );
+  const glossChars = rows.reduce((n, [, g]) => n + [...g].length, 0);
+  console.log('  INFO 今译合计字数', glossChars, '平均', (glossChars / rows.length).toFixed(1), '字／行');
+}
+
 console.log('5) 性别风格：字表未漂移 + 强弱两级 + 真筛选不变量');
 {
   const rawAttr = JSON.parse(fs.readFileSync('data/raw/cnname_attributes.json', 'utf8'));

@@ -127,12 +127,42 @@ describe('verify 门禁的失败路径', () => {
     const dir = fixture();
     const lines = read(dir, 'data/raw/line_gloss.tsv').split('\n');
     const i = lines.findIndex((l) => l.trim() && !l.startsWith('#'));
-    lines[i] = lines[i] + '（探测改动）';
+    // 探测改动要合 0.21.0 的口径：措辞随便改，句末标点得有（4k 那条查收尾）
+    lines[i] = lines[i].replace(/。$/, '，探测改动。');
     write(dir, 'data/raw/line_gloss.tsv', lines.join('\n'));
     refreshSum(dir, 'line_gloss.tsv');
     const { code, out } = runVerify(dir);
     expect(out).toContain('ALL PASS');
     expect(code).toBe(0);
+  }, 120_000);
+
+  it('今译照抄原句：4k 判红（0.21.0 第二轮通读查到 214 行照抄，之后这条成了闸门）', () => {
+    const dir = fixture();
+    const lines = read(dir, 'data/raw/line_gloss.tsv').split('\n');
+    const i = lines.findIndex((l) => l.trim() && !l.startsWith('#'));
+    const srcLine = lines[i].split('\t')[0];
+    lines[i] = `${srcLine}\t${srcLine}。`;
+    write(dir, 'data/raw/line_gloss.tsv', lines.join('\n'));
+    refreshSum(dir, 'line_gloss.tsv');
+    const { code, out } = runVerify(dir);
+    expect(code).toBe(1);
+    expect(failLines(out)).toHaveLength(1);
+    expect(out).toContain('今译不许与原句一字不差');
+    expect(out).toContain('FAILURES: 1');
+  }, 120_000);
+
+  it('今译里塞一个繁体字：4k 判红（译文一律简体，与 0.20.0 的输入归一同口径）', () => {
+    const dir = fixture();
+    const lines = read(dir, 'data/raw/line_gloss.tsv').split('\n');
+    const i = lines.findIndex((l) => l.trim() && !l.startsWith('#'));
+    lines[i] = lines[i].replace(/。$/, '後。');
+    write(dir, 'data/raw/line_gloss.tsv', lines.join('\n'));
+    refreshSum(dir, 'line_gloss.tsv');
+    const { code, out } = runVerify(dir);
+    expect(code).toBe(1);
+    expect(failLines(out)).toHaveLength(1);
+    expect(out).toContain('今译一律简体');
+    expect(out).toContain('FAILURES: 1');
   }, 120_000);
 
   it('给「只出现在别处出处」的句子补一行今译：构建照收、译文进包、门禁不判红', () => {
@@ -161,7 +191,7 @@ describe('verify 门禁的失败路径', () => {
     write(
       dir,
       'data/raw/line_gloss.tsv',
-      read(dir, 'data/raw/line_gloss.tsv').trimEnd() + `\n${target}\t这一句补上的今译\n`,
+      read(dir, 'data/raw/line_gloss.tsv').trimEnd() + `\n${target}\t这一句补上的今译。\n`,
     );
     refreshSum(dir, 'line_gloss.tsv');
     const { code, out } = runVerify(dir);
@@ -171,7 +201,7 @@ describe('verify 门禁的失败路径', () => {
     const found = src1.lines.find((l) => (typeof l === 'string' ? l : l.s) === target);
     expect(typeof found === 'object' && found !== null && found.g >= 0, '补的译文必须挂进原句表').toBe(true);
     const gloss = JSON.parse(read(dir, 'src/data/line_gloss.json'));
-    expect(gloss[found.g]).toBe('这一句补上的今译');
+    expect(gloss[found.g]).toBe('这一句补上的今译。');
     const meta1 = JSON.parse(read(dir, 'src/data/meta.json'));
     expect(meta1.gloss_lines, 'meta 记的今译条数必须是补完之后的数').toBe(gloss.length);
   }, 120_000);
