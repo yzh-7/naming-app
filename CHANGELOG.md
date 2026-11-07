@@ -196,7 +196,7 @@
 
 - **Firefox 一次全绿**，51 条里没有为它改过任何产品代码或断言；只有强制颜色那条是 Chromium 独占（靠 CDP 的 `Emulation.setEmulatedMedia` 模拟），Firefox 里 `test.skip`。
 - **WebKit 本机跑不起来**：系统缺 libevent-2.1、libavif16、libmanette、libgav1、libhidapi-hidraw、libbacktrace 六个库；逐个 `apt-get download` 解到 `minibrowser-*/sys/lib` 之后进程起得来，页面握手仍 30 秒超时。所以它由 `process.env.CI || PLAYWRIGHT_WEBKIT=1` 开关控制，本机口径是 Chromium＋Firefox 两档。
-- CI 因此拆成两个 job：`e2e`（Chromium＋Firefox，红了拦发布）与 `e2e-webkit`（`continue-on-error: true`）。**WebKit 到今天一次都没绿过**，所以它是哨兵不是门禁：红了不拦发布，但 CI 页上看得见；连着两次绿就并进拦发布那一档。
+- CI 因此拆成两个 job：`e2e`（Chromium＋Firefox，红了拦发布）与 `e2e-webkit`（`continue-on-error: true`）。**这一版里 WebKit 只在 CI 绿过一次**（`0b3eb20` 那次 `e2e-webkit` job，51 项跑过、强制颜色那条跳过），本机一次都没跑起来过，所以它是哨兵不是门禁：红了不拦发布，但 CI 页上看得见。按写定的规矩，连着两次绿就并进拦发布那一档——下一次绿了（0.19.0 的 CI）就并。
 
 ### 门禁与体积
 
