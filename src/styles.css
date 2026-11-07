@@ -602,3 +602,60 @@
     background: #fff !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Windows 高对比（强制颜色）模式：系统会重写颜色与背景，我们那套暖纸底色、赭石强调、
+   四色性别档（cool/warm/ok/danger）在这里都不保证还存在。原则只有一条——
+   凡是目前只靠颜色传达的信息，这里一律再加一层不靠颜色的表达（边框、粗细、下划线）；
+   不靠颜色的不动。系统把 border-color 强制成 CanvasText，所以这里只定粗细。
+   --------------------------------------------------------------------------- */
+@media (forced-colors: active) {
+  /* 输入框走系统的字段色，不拿 Canvas 灌它 */
+  .field {
+    border: 1px solid CanvasText;
+  }
+  /* 按钮、卡片、胶囊、分段控件：边框要看得见，选中态不能只靠底色变深 */
+  .btn,
+  .btn-primary,
+  .btn-accent,
+  .btn-quiet,
+  .btn-outlined,
+  .btn-danger,
+  .chip,
+  .chip-cool,
+  .chip-warm,
+  .chip-ok,
+  .chip-danger,
+  .chip-warn,
+  .chip-accent,
+  .card,
+  .seg,
+  .seg-btn,
+  .seg-cool,
+  .seg-warm,
+  .meta-row,
+  .measure {
+    border-width: 1px;
+    border-style: solid;
+    border-color: CanvasText;
+  }
+  /* 「按下／选中」这一档原来靠底色与描边颜色区分，这里改成加粗边框＋字重 */
+  .btn-on,
+  .btn-primary,
+  .seg-on,
+  .btn-danger,
+  .chip-danger,
+  .chip-warn {
+    border-width: 2px;
+    font-weight: 600;
+  }
+  /* 原句里的取词高亮：系统的 mark 配色不按我们的意图来，加粗＋下划线保证认得出 */
+  mark {
+    font-weight: 700;
+    text-decoration-line: underline;
+    text-decoration-thickness: 2px;
+  }
+  :focus-visible {
+    outline-color: Highlight;
+  }
+}

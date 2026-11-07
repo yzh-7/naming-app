@@ -5,7 +5,7 @@ import { META, POOL } from './engine/data';
 import { BOOK_LABEL } from './engine/types';
 import { lineGlossOf, namePinyin, popScore, shapeTags } from './engine/name';
 import { at, one } from './testing';
-import { FAV_KEY } from './store/local';
+import { BLOCK_KEY, FAV_KEY } from './store/local';
 
 const ctxStub = () => ({
   fillStyle: '',
@@ -820,5 +820,73 @@ describe('来源筛选在 App 层真的改变结果', () => {
     } finally {
       window.history.replaceState({}, '', '/');
     }
+  });
+});
+
+describe('撤销这几步（0.18.0）', () => {
+  type Rec = { id: string; group?: string; note?: string };
+  const favs = () => JSON.parse(localStorage.getItem(FAV_KEY) ?? '[]') as Rec[];
+  const blocks = () => JSON.parse(localStorage.getItem(BLOCK_KEY) ?? '[]') as string[];
+  const undoBtn = () => screen.getByRole('button', { name: /^撤销「/ });
+  const surname = () => fireEvent.change(screen.getByLabelText('姓（可复姓）'), { target: { value: '苏' } });
+
+  it('收藏之后有撤销；点撤销把这条收回去', () => {
+    render(<App />);
+    surname();
+    fireEvent.click(one(screen.getAllByRole('button', { name: '收藏' }), '「收藏」按钮列表'));
+    expect(favs()).toHaveLength(1);
+    expect(undoBtn()).toHaveTextContent('撤销「收藏 ');
+    fireEvent.click(undoBtn());
+    expect(favs()).toHaveLength(0);
+    expect(screen.getByText(/^已撤销：收藏 /)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^撤销「/ })).not.toBeInTheDocument();
+  });
+
+  it('拉黑之后撤销把卡片放回生成页，拉黑名单也回到空', () => {
+    render(<App />);
+    surname();
+    // 生成页是一页一页的：拉黑一条会有下一条补上来，卡片数不变。认的是名单那头的账目。
+    fireEvent.click(one(screen.getAllByRole('button', { name: '拉黑' }), '「拉黑」按钮列表'));
+    expect(blocks()).toHaveLength(1);
+    expect(screen.getByRole('link', { name: '拉黑 1' })).toBeInTheDocument();
+    fireEvent.click(undoBtn());
+    expect(blocks()).toHaveLength(0);
+    expect(screen.getByRole('link', { name: '拉黑 0' })).toBeInTheDocument();
+    expect(screen.getByText(/^已撤销：拉黑 /)).toBeInTheDocument();
+  });
+
+  it('解散分组可撤销：组名回到那几条收藏上', () => {
+    render(<App />);
+    surname();
+    fireEvent.click(one(screen.getAllByRole('button', { name: '收藏' }), '「收藏」按钮列表'));
+    fireEvent.click(screen.getByRole('link', { name: /收藏 1/ }));
+    fireEvent.change(one(screen.getAllByLabelText('分组'), '「分组」控件列表'), { target: { value: '备选' } });
+    fireEvent.click(screen.getByRole('button', { name: '备选' }));
+    fireEvent.click(screen.getByRole('button', { name: '解散组' }));
+    expect(favs()[0]?.group ?? '').toBe('');
+    fireEvent.click(undoBtn());
+    expect(favs()[0]?.group).toBe('备选');
+    expect(screen.getByRole('button', { name: '备选' })).toBeInTheDocument();
+  });
+
+  it('撤销只认「这一步之后没再动过」：中途改过备注就明说失效，不拿旧状态覆盖', () => {
+    render(<App />);
+    surname();
+    fireEvent.click(one(screen.getAllByRole('button', { name: '收藏' }), '「收藏」按钮列表'));
+    fireEvent.click(screen.getByRole('link', { name: /收藏 1/ }));
+    fireEvent.change(one(screen.getAllByLabelText(/的备注/), '备注输入'), { target: { value: '留着叫苏晚' } });
+    fireEvent.click(undoBtn());
+    expect(screen.getByText('撤销失效：这一步之后又改过收藏或名单，不能拿旧状态覆盖它')).toBeInTheDocument();
+    expect(favs()).toHaveLength(1);
+    expect(favs()[0]?.note).toBe('留着叫苏晚');
+  });
+
+  it('其它提示挂着的时侯不给撤销按钮（撤销只跟那几步走）', () => {
+    render(<App />);
+    surname();
+    // 卡片上「按拼音看」这类提示不改本机数据，它一挂出来就把撤销条换掉
+    fireEvent.click(one(screen.getAllByRole('button', { name: '按拼音看' }), '「按拼音看」按钮列表'));
+    expect(screen.getByText(/^按拼音「/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^撤销「/ })).not.toBeInTheDocument();
   });
 });

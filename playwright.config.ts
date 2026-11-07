@@ -17,5 +17,24 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  // 三个浏览器都要过：这一版起把 WebKit 与 Firefox 也接进来。
+  // 理由是发布口径里有 iOS 与安卓的 PWA——Safari 的 <details>/<summary> 样式、sticky 页头、
+  // focus() 之后滚不滚、隐私模式下 localStorage 直接抛，都和 Chromium 不是一套行为；
+  // 卡片上「另有 N 处出处」那种折叠区恰好全吃这些差异。
+  // 三个浏览器都要过：这一版起把 WebKit 与 Firefox 也接进来。
+  // 理由是发布口径里有 iOS 与安卓的 PWA——Safari 的 <details>/<summary> 样式、sticky 页头、
+  // focus() 之后滚不滚、隐私模式下 localStorage 直接抛，都和 Chromium 不是一套行为；
+  // 卡片上「另有 N 处出处」那种折叠区恰好全吃这些差异。
+  //
+  // 但本机（Ubuntu 26.04）跑不动 WebKit：系统缺 libevent-2.1/libavif/libmanette/libgav1/libhidapi/libbacktrace
+  // 六个库，逐个下载解到浏览器的 sys/lib 之后进程能起来，页面握手仍 30s 超时。
+  // 所以本机口径是 chromium + firefox 两档，CI 里三档（那里用 --with-deps 装全依赖）。
+  // 本地要自己试三档：PLAYWRIGHT_WEBKIT=1 npx playwright test。
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+    ...(process.env.CI || process.env.PLAYWRIGHT_WEBKIT === '1'
+      ? [{ name: 'webkit', use: { ...devices['Desktop Safari'] } }]
+      : []),
+  ],
 });

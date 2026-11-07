@@ -95,6 +95,38 @@ export default function App() {
   const [theme, setTheme] = useState<store.Theme>(() => store.loadTheme());
   const [compare, setCompare] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  // 撤销：收藏／拉黑／分组／导入这几步改的是本机存着的东西，点错一下没法自己复原。
+  // 记的是「这一步之前的两份名单」；点撤销时先确认这一步之后没再动过它们——
+  // 动过就明说失效，绝不拿旧快照覆盖用户后来的改动。
+  type Step = {
+    label: string;
+    fav: store.FavRecord[];
+    block: string[];
+    afterFav: store.FavRecord[];
+    afterBlock: string[];
+  };
+  const [undo, setUndo] = useState<Step | null>(null);
+  const notify = (msg: string, step?: Step) => {
+    setNotice(msg);
+    setUndo(step ?? null);
+  };
+  const runUndo = () => {
+    const u = undo;
+    if (!u) return;
+    const stale =
+      JSON.stringify(fav) !== JSON.stringify(u.afterFav) || JSON.stringify(block) !== JSON.stringify(u.afterBlock);
+    if (stale) {
+      setUndo(null);
+      notify('撤销失效：这一步之后又改过收藏或名单，不能拿旧状态覆盖它');
+      return;
+    }
+    store.saveFavorites(u.fav);
+    store.saveBlocklist(u.block);
+    setFav(store.loadFavorites());
+    setBlock(store.loadBlocklist());
+    setUndo(null);
+    notify(`已撤销：${u.label}`);
+  };
   const [storageBroken, setStorageBroken] = useState(() => !store.storageUsable());
   const [pendingImport, setPendingImport] = useState<SavedState | null>(null);
   const [favQuery, setFavQuery] = useState('');
@@ -223,28 +255,60 @@ export default function App() {
   // from 只在「从哪一页存的」确实知道的时候写：生成页写 gen，自选页自己另有一条路；
   // 收藏页与拉黑页上的按钮此时多半是取消收藏，真要重新收藏就留空（进「未记录」）
   const toggleFav = (r: Result, from?: 'gen' | 'compose') => {
-    setFav(favIds.has(r.id) ? store.removeFavorite(r.id) : store.addFavorite(r.id, favSnap(r, from)));
+    const removing = favIds.has(r.id);
+    const afterFav = removing ? store.removeFavorite(r.id) : store.addFavorite(r.id, favSnap(r, from));
+    setFav(afterFav);
+    notify(removing ? `已取消收藏 ${r.full}` : `已收藏 ${r.full}`, {
+      label: removing ? `取消收藏 ${r.full}` : `收藏 ${r.full}`,
+      fav,
+      block,
+      afterFav,
+      afterBlock: block,
+    });
   };
   const toggleBlock = (r: Result) => {
-    setBlock(block.includes(r.id) ? store.removeBlock(r.id) : store.addBlock(r.id));
+    const removing = block.includes(r.id);
+    const afterBlock = removing ? store.removeBlock(r.id) : store.addBlock(r.id);
+    setBlock(afterBlock);
+    notify(removing ? `已取消拉黑 ${r.full}` : `已拉黑 ${r.full}`, {
+      label: removing ? `取消拉黑 ${r.full}` : `拉黑 ${r.full}`,
+      fav,
+      block,
+      afterFav: fav,
+      afterBlock,
+    });
   };
   // 分组改名 / 删组（连同条目一起删）。改名后当前视图跟到新名字上
   const doRenameGroup = (from: string, to: string) => {
     if (!to || to === from) return;
-    setFav(store.renameGroup(from, to));
+    const afterFav = store.renameGroup(from, to);
+    setFav(afterFav);
     setFavGroup(to);
-    setNotice(`分组「${from}」已改名为「${to}」`);
+    notify(`分组「${from}」已改名为「${to}」`, {
+      label: `把分组「${from}」改名为「${to}」`,
+      fav,
+      block,
+      afterFav,
+      afterBlock: block,
+    });
   };
   const doDeleteGroup = (g: string) => {
     const before = fav.filter((f) => f.group === g).length;
-    setFav(store.clearGroup(g));
+    const afterFav = store.clearGroup(g);
+    setFav(afterFav);
     setFavGroup('');
-    setNotice(`分组「${g}」已解散，${before} 条收藏回到未分组（收藏本身没删）`);
+    notify(`分组「${g}」已解散，${before} 条收藏回到未分组（收藏本身没删）`, {
+      label: `解散分组「${g}」`,
+      fav,
+      block,
+      afterFav,
+      afterBlock: block,
+    });
   };
   // 对比最多 3 个：到上限时说明白，不要静默不勾（原来点了第四个什么都不发生）
   const toggleCompare = (id: string) => {
     if (compare.includes(id)) setCompare(compare.filter((x) => x !== id));
-    else if (compare.length >= 3) setNotice('对比最多 3 个：先取消一个再勾新的');
+    else if (compare.length >= 3) notify('对比最多 3 个：先取消一个再勾新的');
     else setCompare([...compare, id]);
   };
 
@@ -257,36 +321,36 @@ export default function App() {
       from: p.rec.from,
     }));
     if (!rows.length) {
-      setNotice('当前视图里没有条目可导出');
+      notify('当前视图里没有条目可导出');
       return;
     }
     downloadText(
       favoritesCsv(rows),
       `收藏${favGroup ? `-${favGroup}` : ''}-${new Date().toISOString().slice(0, 10)}.csv`,
     );
-    setNotice(`已导出 CSV：${rows.length} 条${favGroup ? `（分组「${favGroup}」）` : '（全部）'}`);
+    notify(`已导出 CSV：${rows.length} 条${favGroup ? `（分组「${favGroup}」）` : '（全部）'}`);
   };
   const doExport = () => {
     const st = buildState({ surname: sur, reading, opts, favorites: fav, blocklist: block });
     downloadText(serialize(st), `naming-${new Date().toISOString().slice(0, 10)}.json`);
-    setNotice(`已导出：收藏 ${fav.length} · 拉黑 ${block.length}`);
+    notify(`已导出：收藏 ${fav.length} · 拉黑 ${block.length}`);
   };
   // 候选全量导出：count:0＝一屏全展，paginate 会把整个筛选结果放进同一页，导出的就是「翻不完的池」本身
   const doExportCandidates = (fmt: 'csv' | 'json') => {
     const all = plan(sur, { ...effective, count: 0 }, 0, reading).page;
     if (!all.length) {
-      setNotice('当前筛选没有候选可导出');
+      notify('当前筛选没有候选可导出');
       return;
     }
     const stamp = new Date().toISOString().slice(0, 10);
     if (fmt === 'csv') downloadText(candidatesCsv(all), `候选-${sur || '无姓'}-${stamp}.csv`, 'text/csv');
     else downloadText(candidatesJson(all), `候选-${sur || '无姓'}-${stamp}.json`);
-    setNotice(`已导出候选 ${all.length} 条（当前筛选全量，不只这一屏）`);
+    notify(`已导出候选 ${all.length} 条（当前筛选全量，不只这一屏）`);
   };
   const doImportFile = async (file: File) => {
     // 先看体积再读内容：不先挡住的话，一个几十兆的文件会先进内存再交给 JSON.parse
     if (file.size > MAX_IMPORT_BYTES) {
-      setNotice(
+      notify(
         `导入失败：这个文件 ${(file.size / 1048576).toFixed(1)} MiB，超过 ${MAX_IMPORT_BYTES / 1048576} MiB 的上限。本应用自己导出的一份最大的（全量候选）是 0.6 MiB。`,
       );
       return;
@@ -295,21 +359,21 @@ export default function App() {
     try {
       text = await file.text();
     } catch {
-      setNotice('导入失败：这个文件读不出来（可能被浏览器拦下，或选完就被移走了）。请重新选一次。');
+      notify('导入失败：这个文件读不出来（可能被浏览器拦下，或选完就被移走了）。请重新选一次。');
       return;
     }
     // File.size 只是选文件那一刻的报告值（选完被改过、或特殊文件系统报 0 都会漏过上面那道闸），
     // 读出来之后按实际字节再判一次
     const bytes = new TextEncoder().encode(text).length;
     if (bytes > MAX_IMPORT_BYTES) {
-      setNotice(
+      notify(
         `导入失败：这个文件实际 ${(bytes / 1048576).toFixed(1)} MiB，超过 ${MAX_IMPORT_BYTES / 1048576} MiB 的上限。`,
       );
       return;
     }
     const res = parseState(text);
     if (!res.ok) {
-      setNotice(
+      notify(
         res.error === 'json'
           ? '导入失败：这个文件不是 JSON，读不出内容。'
           : res.error === 'foreign'
@@ -324,6 +388,8 @@ export default function App() {
   const confirmImport = (mode: 'merge' | 'replace') => {
     if (!pendingImport) return;
     const st = pendingImport;
+    const beforeFav = store.loadFavorites();
+    const beforeBlock = store.loadBlocklist();
     const nextFav =
       mode === 'merge'
         ? [...new Map([...store.loadFavorites(), ...st.favorites].map((r) => [r.id, r])).values()]
@@ -340,7 +406,13 @@ export default function App() {
     setPendingImport(null);
     const parts = [`收藏 ${st.favorites.length}`, `拉黑 ${st.blocklist.length}`];
     if (!st.favorites.length && !st.blocklist.length) parts.push('只有姓氏与筛选设置');
-    setNotice(`已导入（${mode === 'merge' ? '合并' : '覆盖'}）：${parts.join(' · ')}`);
+    notify(`已导入（${mode === 'merge' ? '合并' : '覆盖'}）：${parts.join(' · ')}`, {
+      label: `导入（${mode === 'merge' ? '合并' : '覆盖'}）`,
+      fav: beforeFav,
+      block: beforeBlock,
+      afterFav: store.loadFavorites(),
+      afterBlock: store.loadBlocklist(),
+    });
   };
   // 导入确认框：Escape 取消，打开即把焦点交给第一个按钮，关掉后还回原处
   const importBoxRef = useRef<HTMLDivElement>(null);
@@ -360,20 +432,20 @@ export default function App() {
   const doCopyLink = async () => {
     const q = toQuery({ surname: sur, reading, opts });
     const url = `${location.origin}${location.pathname}${q ? `?${q}` : ''}${hashFor(tab)}`;
-    setNotice((await copyText(url)) ? '链接已复制（只含当前筛选与页签，不含收藏）' : '复制失败，请手动复制地址栏');
+    notify((await copyText(url)) ? '链接已复制（只含当前筛选与页签，不含收藏）' : '复制失败，请手动复制地址栏');
   };
   const doShare = async (r: Result | ShareName) => {
     const { blob, qr } = await renderShareCard(r, undefined, `${location.origin}${location.pathname}`);
     downloadBlob(blob, `${r.full}-${r.book}.png`);
-    setNotice(qr ? '分享卡片已生成（含扫码二维码）' : '分享卡片已生成，但二维码没画出来（链接过长）');
+    notify(qr ? '分享卡片已生成（含扫码二维码）' : '分享卡片已生成，但二维码没画出来（链接过长）');
   };
   const doCopy = async (r: Result | ShareName) => {
-    setNotice((await copyText(resultSummary(r))) ? '名字信息已复制' : '复制失败');
+    notify((await copyText(resultSummary(r))) ? '名字信息已复制' : '复制失败');
   };
   const doExportList = async () => {
     const entries = favView.filter((p) => p.r).map((p) => ({ r: p.r!, note: p.rec.note }));
     if (!entries.length) {
-      setNotice('当前视图里没有可画进名单图的条目。');
+      notify('当前视图里没有可画进名单图的条目。');
       return;
     }
     const { blob, qr } = await renderListCard(entries, {
@@ -381,7 +453,7 @@ export default function App() {
       url: `${location.origin}${location.pathname}`,
     });
     downloadBlob(blob, `名单-${new Date().toISOString().slice(0, 10)}.png`);
-    setNotice(`名单图已生成（${entries.length} 条）${qr ? '，含扫码二维码' : '，二维码没画出来（链接过长）'}`);
+    notify(`名单图已生成（${entries.length} 条）${qr ? '，含扫码二维码' : '，二维码没画出来（链接过长）'}`);
   };
   const doPrint = () => {
     setTimeout(() => window.print?.(), 60);
@@ -431,7 +503,11 @@ export default function App() {
         </div>
       </header>
 
-      <main id="main" className="anchor-offset mx-auto max-w-6xl space-y-4 px-4 py-4 sm:py-6">
+      <main
+        id="main"
+        tabIndex={-1}
+        className="anchor-offset mx-auto max-w-6xl space-y-4 px-4 py-4 sm:py-6 outline-none"
+      >
         {offline && (
           <p className="rounded-card border border-warn-line bg-warn-soft px-3 py-2 text-meta text-warn no-print">
             离线模式：数据都来自本机缓存，功能正常。
@@ -486,8 +562,13 @@ export default function App() {
           }
         >
           {notice && (
-            <span className="max-w-[min(36rem,100%)] rounded-card border border-line-strong bg-surface px-3 py-2 text-meta text-ink">
-              {notice}
+            <span className="flex max-w-[min(40rem,100%)] flex-wrap items-center gap-2 rounded-card border border-line-strong bg-surface px-3 py-2 text-meta text-ink">
+              <span>{notice}</span>
+              {undo && (
+                <button type="button" onClick={runUndo} className="btn btn-outlined text-meta">
+                  撤销「{undo.label}」
+                </button>
+              )}
             </span>
           )}
         </div>
@@ -596,12 +677,12 @@ export default function App() {
                         onTitle={() => {
                           setOpts((o) => ({ ...o, title: r.title, search: '' }));
                           setBatch(0);
-                          setNotice(`只看《${r.title}》里的候选`);
+                          notify(`只看《${r.title}》里的候选`);
                         }}
                         onSameSound={() => {
                           setOpts((o) => ({ ...o, search: namePinyin(r.name), title: '' }));
                           setBatch(0);
-                          setNotice(`按拼音「${namePinyin(r.name)}」搜索同音写法`);
+                          notify(`按拼音「${namePinyin(r.name)}」搜索同音写法`);
                         }}
                         sameTitle={paged.titleCounts.get(titleKey(r))}
                       />
@@ -622,13 +703,16 @@ export default function App() {
             opts={effective}
             fav={favIds}
             onFav={(r: Result) => {
-              if (favIds.has(r.id)) {
-                setFav(store.removeFavorite(r.id));
-                setNotice(`已取消收藏 ${r.full}`);
-              } else {
-                setFav(store.addFavorite(r.id, favSnap(r, 'compose')));
-                setNotice(`已收藏 ${r.full}`);
-              }
+              const removing = favIds.has(r.id);
+              const afterFav = removing ? store.removeFavorite(r.id) : store.addFavorite(r.id, favSnap(r, 'compose'));
+              setFav(afterFav);
+              notify(removing ? `已取消收藏 ${r.full}` : `已收藏 ${r.full}`, {
+                label: removing ? `取消收藏 ${r.full}` : `收藏 ${r.full}`,
+                fav,
+                block,
+                afterFav,
+                afterBlock: block,
+              });
             }}
             onShare={(r) => void doShare(r)}
             onCopy={(r) => void doCopy(r)}
