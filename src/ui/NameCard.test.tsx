@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import candidatesRaw from '../data/candidates.json';
 import NameCard, { Source } from './NameCard';
 import { genderOf, scoreItem, findItem, glossOf, lineGlossOf, sameSoundPeers, shapeTags } from '../engine/name';
@@ -518,5 +518,79 @@ describe('另有 N 处出处：主出处之外的可核对出处挂在同一张�
     expect(nameRow.textContent).toContain(String(rAlt.total));
     // 主出处的那句原句不许被 alternates 顶掉：卡上第一句原文就是它
     expect(source.textContent).toContain(rAlt.line.slice(0, 4));
+  });
+});
+
+describe('另有 N 处出处的分页（0.17.0）', () => {
+  const PAGED = 12;
+  const junzi = POOL.find((x) => x.name === '君子')!;
+  const card = (name: string) => {
+    const item = POOL.find((x) => x.name === name)!;
+    const r = scoreItem('袁', item, opts, 0);
+    const view = render(<NameCard r={r} fav={false} blocked={false} onFav={() => {}} onBlock={() => {}} />);
+    return { r, item, box: view.container.querySelector<HTMLElement>('[data-block="alts"]')! };
+  };
+
+  it('出处最多的那条（君子）默认只给 12 处；翻页能翻、全部展开给到全部', () => {
+    expect(junzi.alts?.length ?? 0, '君子这一轮仍是有几百处的那条').toBeGreaterThan(200);
+    const { box } = card('君子');
+    const rows = () => box.querySelectorAll('li[data-alt]').length;
+    const n = junzi.alts!.length;
+    expect(rows(), '一次全展开 288 条会把卡撑成一屏出处').toBe(PAGED);
+    expect(box.querySelector('li[data-alt-more]')!.textContent).toContain(`已显示 ${PAGED}／${n} 处`);
+    fireEvent.click(within(box).getByRole('button', { name: `再显示 ${PAGED} 处` }));
+    expect(rows(), '翻一页多给 12 处').toBe(PAGED * 2);
+    fireEvent.click(within(box).getByRole('button', { name: /全部展开/ }));
+    expect(rows(), '「全部展开」必须一处不少，不是抽样').toBe(n);
+    expect(box.querySelector('li[data-alt-more]')!.textContent).toContain(`已显示 ${n}／${n} 处`);
+    fireEvent.click(within(box).getByRole('button', { name: `只留前 ${PAGED} 处` }));
+    expect(rows(), '要能收回默认那一页').toBe(PAGED);
+  });
+
+  it.each([
+    ['可知', 11],
+    ['清明', 12],
+    ['翼翼', 12],
+  ])('%s：%d 处正好列得下，不出现翻页那一行', (name, n) => {
+    const item = POOL.find((x) => x.name === name)!;
+    expect(item.alts?.length, `${name} 这一轮应正好是 ${n} 处`).toBe(n);
+    const { box } = card(name);
+    expect(box.querySelectorAll('li[data-alt]').length).toBe(n);
+    expect(box.querySelector('li[data-alt-more]'), '列得下的卡不该出现翻页控件').toBeNull();
+  });
+
+  it('正好 13 处（最小的要分页的卡）：默认 12 处，按钮写「再显示 1 处」', () => {
+    const item = POOL.find((x) => x.name === '子子')!;
+    expect(item.alts?.length, '子子 这一轮应正好是 13 处').toBe(13);
+    const { box } = card('子子');
+    const rows = () => box.querySelectorAll('li[data-alt]').length;
+    expect(rows()).toBe(PAGED);
+    expect(box.querySelector('li[data-alt-more]')!.textContent).toContain('已显示 12／13 处');
+    fireEvent.click(within(box).getByRole('button', { name: '再显示 1 处' }));
+    expect(rows(), '只剩 1 处没显示时按钮就该写「再显示 1 处」').toBe(13);
+    expect(box.querySelector('li[data-alt-more]')!.textContent).toContain('已显示 13／13 处');
+  });
+
+  it('翻页之后焦点不许掉回页头：留在这一行里还在的按钮上', async () => {
+    const { box } = card('君子');
+    const focusedButtonIn = (text: string) => {
+      const el = document.activeElement;
+      return el?.tagName === 'BUTTON' && box.contains(el) && (el.textContent ?? '').includes(text);
+    };
+    fireEvent.click(within(box).getByRole('button', { name: /全部展开/ }));
+    await vi.waitFor(() => expect(focusedButtonIn('只留前 12 处'), '焦点要留在翻页那一行里').toBe(true));
+    fireEvent.click(within(box).getByRole('button', { name: `只留前 ${PAGED} 处` }));
+    await vi.waitFor(() => expect(focusedButtonIn('再显示 12 处'), '收回之后焦点也留在这一行').toBe(true));
+  });
+
+  it('翻页只动这一区：主出处那一段与折叠标题里的处数不随之变', () => {
+    const { box, item } = card('君子');
+    const summary = box.querySelector('summary')!.textContent!.trim();
+    expect(summary).toBe(`另有 ${item.alts!.length} 处出处`);
+    const src = document.querySelector<HTMLElement>('[data-block="source"]')!;
+    const before = src.textContent;
+    fireEvent.click(within(box).getByRole('button', { name: /全部展开/ }));
+    expect(src.textContent, '展开多少处都不许改动常驻的主出处').toBe(before);
+    expect(box.querySelector('summary')!.textContent!.trim(), '标题里的处数不随翻页变').toBe(summary);
   });
 });

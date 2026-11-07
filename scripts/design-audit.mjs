@@ -276,8 +276,19 @@ for (const vp of VIEWPORTS) {
     const page = await ctx.newPage();
     const m = async (name) => {
       // 「首屏」就是滚到顶之后的那一屏：先把滚动归零，再量页头有没有压住第一张卡片
-      await page.evaluate(() => window.scrollTo(0, 0));
-      await page.waitForTimeout(160);
+      // 归零要确认过再量：卡片里刚移交过的焦点会被浏览器滚回视野，可能把页面又推下去
+      // （展开「另有 N 处出处」之后实测 scrollTo(0,0) 会被顶回 4169px），所以最多试三次。
+      let top = -1;
+      for (let i = 0; i < 3; i++) {
+        await page.evaluate(() => {
+          document.activeElement?.blur?.();
+          window.scrollTo(0, 0);
+        });
+        await page.waitForTimeout(160);
+        top = await page.evaluate(() => Math.round(window.scrollY));
+        if (top === 0) break;
+      }
+      if (top !== 0) console.log(`警告：${vp.name}×${vp.height} ${theme} ${name} 滚不回顶部，停在 ${top}px`);
       const r = await page.evaluate(measure, [vp.width, vp.mobile]);
       results.push({ vp: `${vp.name}×${vp.height}`, mobile: vp.mobile, theme, page: name, ...r });
     };
@@ -286,6 +297,24 @@ for (const vp of VIEWPORTS) {
     await page.locator('main article').first().waitFor();
     await page.getByRole('button', { name: '高级筛选' }).click();
     await m('生成');
+    // 0.17.0：「另有 N 处出处」那一区分页之后，「只留前 12 处」只在展开态存在。
+    // 以前这一组从不点开 details，展开态那一行的按钮与小字从没进过目标尺寸与对比度扫描。
+    if (vp.mobile) {
+      const alts = page.locator('details[data-block="alts"]');
+      if ((await alts.count()) > 0) {
+        await alts.first().locator('summary').click();
+        await alts
+          .first()
+          .getByRole('button', { name: /全部展开/ })
+          .click();
+        await m('多出处展开');
+        await alts
+          .first()
+          .getByRole('button', { name: /只留前 12 处/ })
+          .click();
+        await alts.first().locator('summary').click();
+      }
+    }
     await page.getByRole('button', { name: '收藏' }).first().click();
     await page.getByRole('button', { name: '收藏' }).first().click();
     await page.getByRole('button', { name: '拉黑' }).first().click();

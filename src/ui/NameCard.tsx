@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   glossOf,
   lineGlossOf,
@@ -13,6 +13,10 @@ import {
 import { BOOK_LABEL, type AltRef, type Book, type Result } from '../engine/types';
 
 const WINDOW_MAX = 28;
+
+// 「另有 N 处出处」一次全展开时最多能到 288 条（君子），一屏全是它，卡也撑得老长。
+// 默认一次给 12 处，剩下的用按钮翻页；要全看在同一区里一次展开，不藏数据。
+const ALT_PAGE = 12;
 
 type Win = { start: number; end: number; cutLeft: boolean; cutRight: boolean };
 
@@ -123,7 +127,7 @@ export function AltSource({ a }: { a: AltRef }) {
       ? `取词段第 ${a.at + 1}–${a.at2 + 1} 字`
       : `取词段第 ${a.at + 1} 与第 ${a.at2 + 1} 字（中间隔 ${a.at2 - a.at - 1} 字）`;
   return (
-    <li className="font-serif text-glyph leading-6 text-ink-2">
+    <li data-alt className="font-serif text-glyph leading-6 text-ink-2">
       <Excerpt w={w} pieces={pieces} />
       <div className="mt-1 text-meta text-ink-3">
         {sourceLabel({ book: a.book, title: a.title, author: a.author, rn: undefined } as SourceRef)} · {where}
@@ -210,6 +214,24 @@ export default function NameCard({
   // 按全语料算的话，设了禁用字、性别或典籍之后按钮写 5 条、点进去只有 2 条
   sameTitle?: number;
 }) {
+  // 翻页状态跟着这条候选走：换了卡就回到第一页（组件在收藏页那处没有 key，靠这个兜住）
+  const alts = r.alts ?? [];
+  // 翻页状态：调用方给每张卡都带 key={r.id}，换卡自然重挂载，所以这里只需要记住翻到多少处
+  const [altShown, setAltShown] = useState(ALT_PAGE);
+  const moreRef = useRef<HTMLLIElement>(null);
+  // 翻页后那一行里的按钮可能被换掉（翻到尽头就只剩「只留前 12 处」）：点了之后焦点不许掉回页头。
+  // 移交焦点要等 DOM 更新完（effect 里），用 requestAnimationFrame 不可靠——React 的提交可能排在 rAF 之后，
+  // 那时按下的按钮还在、指过去随即被换掉，浏览器里焦点仍落到 body（实测如此）。
+  const handOffFocus = useRef(false);
+  const pageTo = (shown: number) => {
+    handOffFocus.current = true;
+    setAltShown(shown);
+  };
+  useEffect(() => {
+    if (!handOffFocus.current) return;
+    handOffFocus.current = false;
+    moreRef.current?.querySelector('button')?.focus();
+  });
   const marked = r.flags.filter((f) => !f.startsWith('同形'));
   const shadow = r.flags.filter((f) => f.startsWith('同形'));
   const g = r.gender;
@@ -317,19 +339,44 @@ export default function NameCard({
 
       {/* 另有几处出处：语料里同一个名字往往不止一处能核对到（0.14.0）。默认折叠——
           卡上常驻的仍是主出处那一句，这一区是把「还有几处」如实列出来，不抢主句的位置 */}
-      {r.alts && r.alts.length > 0 && (
+      {alts.length > 0 && (
         <details
           data-block="alts"
           className="mt-2 text-meta text-ink-2 no-print"
           title="主出处之外，语料里还能核对到这个名字的句读。每条给出书·篇、原句（那对字高亮）与今译"
         >
           <summary className="flex min-h-11 cursor-pointer select-none items-center text-ink-3 hover:text-ink lg:min-h-8">
-            另有 {r.alts.length} 处出处
+            另有 {alts.length} 处出处
           </summary>
           <ul className="mt-1.5 space-y-3 border-t border-line pt-2">
-            {r.alts.map((a) => (
+            {alts.slice(0, altShown).map((a) => (
               <AltSource key={`${a.ti}\u0000${a.li}\u0000${a.at}\u0000${a.at2}`} a={a} />
             ))}
+            {alts.length > ALT_PAGE && (
+              <li ref={moreRef} data-alt-more className="flex flex-wrap items-center gap-2 pt-1">
+                <span role="status" className="text-ink-3 tabular-nums">
+                  已显示 {Math.min(altShown, alts.length)}／{alts.length} 处
+                </span>
+                {altShown < alts.length && (
+                  <>
+                    <button
+                      className="btn btn-quiet text-meta"
+                      onClick={() => pageTo(Math.min(altShown + ALT_PAGE, alts.length))}
+                    >
+                      再显示 {Math.min(ALT_PAGE, alts.length - altShown)} 处
+                    </button>
+                    <button className="btn btn-quiet text-meta" onClick={() => pageTo(alts.length)}>
+                      全部展开（{alts.length} 处）
+                    </button>
+                  </>
+                )}
+                {altShown > ALT_PAGE && (
+                  <button className="btn btn-quiet text-meta" onClick={() => pageTo(ALT_PAGE)}>
+                    只留前 {ALT_PAGE} 处
+                  </button>
+                )}
+              </li>
+            )}
           </ul>
         </details>
       )}
