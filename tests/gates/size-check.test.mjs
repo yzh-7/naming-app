@@ -108,12 +108,14 @@ describe('size-check 门禁的失败路径', () => {
     expect(out).toContain('FAIL');
   });
 
-  it('SVG 与 .txt 不计入资源合计（它们不是首屏要下载的包）', () => {
+  it('SVG、.txt 与 .xml 不计入资源合计（它们不是首屏要下载的包）', () => {
     const heavy = noise(ASSET_BUDGET + 40_000);
     const asSvg = fixture('svg-excluded', {
       'index.html': noise(1024),
       'icon.svg': heavy,
       'assets.txt': heavy,
+      // 0.19.0 起 dist 里会有 robots.txt 与 sitemap.xml：抓取器文件不是首屏要下载的包
+      'sitemap.xml': heavy,
     });
     expect(runSizeCheck(asSvg).code).toBe(0);
     // 同样的字节数换成 .js 就应当判红：证明排除是按后缀，不是恰好没数到

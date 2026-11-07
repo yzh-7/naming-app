@@ -1,0 +1,5 @@
+# 纯静态、离线可用的取名字典站：没有用户数据、没有私有路径，欢迎收录主页。
+User-agent: *
+Allow: /
+
+Sitemap: https://yzh-7.github.io/naming-app/sitemap.xml

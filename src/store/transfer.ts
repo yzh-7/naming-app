@@ -9,6 +9,7 @@ import {
   sanitizeOpts,
   sanitizeReading,
   type FavRecord,
+  type Theme,
 } from './local';
 
 // 导入文件的条目上限：一份导出文件的实际量级是几百条，超过这个数就不可能是本机导出的
@@ -24,6 +25,8 @@ export type SavedState = {
   opts: Opts;
   favorites: FavRecord[];
   blocklist: string[];
+  /** 主题档也在备份里：换设备时「我习惯深色」本来就是本机数据的一部分 */
+  theme?: Theme;
 };
 
 // 姓氏与读音不进 opts（它们不是筛选条件），但清洗规则同样只有一份：姓用 engine 的 cleanSurname，
@@ -36,6 +39,7 @@ export function buildState(p: {
   opts: Opts;
   favorites: FavRecord[];
   blocklist: string[];
+  theme?: Theme;
 }): SavedState {
   return { app: 'naming-app', version: 1, exportedAt: new Date().toISOString(), ...p };
 }
@@ -56,7 +60,7 @@ export function parseState(text: string): ParseResult {
   const r = raw as Record<string, unknown>;
   // 带 app 标记但不是本应用的 → 别人的文件；没有标记但要有一个我们认识的键，否则也当别人的文件
   if (typeof r.app === 'string' && r.app !== 'naming-app') return { ok: false, error: 'foreign' };
-  if (!['favorites', 'blocklist', 'opts', 'surname', 'reading'].some((k) => k in r))
+  if (!['favorites', 'blocklist', 'opts', 'surname', 'reading', 'theme'].some((k) => k in r))
     return { ok: false, error: 'foreign' };
 
   // 收藏与拉黑逐条消毒（类型、长度、未知 book）、按 id 去重、限量，和读本机时同一套规则
@@ -80,7 +84,10 @@ export function parseState(text: string): ParseResult {
       if (blocks.length >= BLOCK_MAX) break;
     }
   }
-  const hasSettings = 'opts' in r || 'surname' in r || 'reading' in r;
+  const hasSettings = 'opts' in r || 'surname' in r || 'reading' in r || 'theme' in r;
+  // 主题只有三个合法值，别的一律当没写：不猜、不夹到最接近的档位
+  const theme: Theme | undefined =
+    r.theme === 'light' || r.theme === 'dark' || r.theme === 'system' ? r.theme : undefined;
   if (!favs.length && !blocks.length && !hasSettings) return { ok: false, error: 'empty' };
 
   return {
@@ -94,6 +101,7 @@ export function parseState(text: string): ParseResult {
       opts: sanitizeOpts(r.opts),
       favorites: favs,
       blocklist: blocks,
+      theme,
     },
   };
 }

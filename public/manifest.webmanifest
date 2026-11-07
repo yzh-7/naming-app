@@ -1,13 +1,15 @@
 {
+  "id": "https://yzh-7.github.io/naming-app/",
   "name": "取名 · 典籍取词",
   "short_name": "取名",
   "description": "从诗经/楚辞/论语/唐诗/宋词/乐府/道法取词取名，起点落音步、出处可核对，完全离线。",
   "lang": "zh-CN",
+  "categories": ["reference", "productivity", "education"],
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f6f5f1",
-  "theme_color": "#9a3a12",
+  "theme_color": "#f6f5f1",
   "icons": [
     { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
     { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" },

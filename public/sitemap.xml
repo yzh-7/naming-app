@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 单页应用：只有一个可收录的地址（各页签是 hash，不算不同页面）。
+     不写 lastmod——那是发布时刻的派生值，本项目的版本口径由 package.json 与标签说话，不重复一份会漂移的事实。 -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://yzh-7.github.io/naming-app/</loc>
+    <changefreq>monthly</changefreq>
+  </url>
+</urlset>

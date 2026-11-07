@@ -21,7 +21,10 @@ const files = [];
 })(dir);
 
 const html = files.filter((f) => f.endsWith('.html'));
-const assets = files.filter((f) => !f.endsWith('.html') && !f.endsWith('.svg') && !f.endsWith('.txt'));
+// 不计入「首屏要下载的包」的三类：HTML 另按产物形态单列预算；SVG 是图标（几十 B 且可缓存）；
+// .txt 与 .xml 是给抓取器与人看的旁路文件（robots.txt、sitemap.xml、SHA256SUMS 之类），页面不请求它们。
+const SKIP = ['.html', '.svg', '.txt', '.xml'];
+const assets = files.filter((f) => !SKIP.some((ext) => f.endsWith(ext)));
 const gzOf = (f) => gzipSync(fs.readFileSync(f), { level: 9 }).length;
 const total = assets.reduce((a, f) => a + gzOf(f), 0);
 

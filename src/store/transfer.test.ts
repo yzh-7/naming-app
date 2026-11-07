@@ -295,3 +295,46 @@ describe('可分享链接', () => {
     BOOK_ORDER.slice(6).forEach((k) => expect(books[k], k).toBe(true));
   });
 });
+
+describe('备份里的主题档（0.19.0）', () => {
+  const base = () =>
+    buildState({ surname: '苏', reading: 0, opts: sanitizeOpts({}), favorites: [], blocklist: [], theme: 'dark' });
+
+  it('导出带上主题，导入原样回来：换设备不用重设一遍深色', () => {
+    const parsed = parseState(serialize(base()));
+    if (!parsed.ok) throw new Error(`应当认这份文件：${parsed.error}`);
+    expect(parsed.state.theme).toBe('dark');
+  });
+
+  it('只有主题一份设置的文件也算内容，不算「空文件」', () => {
+    const only = JSON.stringify({ app: 'naming-app', version: 1, exportedAt: 'x', theme: 'system' });
+    const parsed = parseState(only);
+    if (!parsed.ok) throw new Error(`应当认这份文件：${parsed.error}`);
+    expect(parsed.state.theme).toBe('system');
+    expect(parsed.state.favorites).toHaveLength(0);
+  });
+
+  it('主题写了别的值就当没写：不猜、不夹到最近的档位', () => {
+    const bad = JSON.stringify({ app: 'naming-app', version: 1, exportedAt: 'x', theme: 'midnight', surname: '苏' });
+    const parsed = parseState(bad);
+    if (!parsed.ok) throw new Error(`应当认这份文件：${parsed.error}`);
+    expect(parsed.state.theme, '界面据此保持本机当前主题，而不是换成一个不认识的词').toBeUndefined();
+  });
+
+  it('0.18.0 之前导出的文件没有 theme 这一项，照样能导入', () => {
+    const old = JSON.stringify({
+      app: 'naming-app',
+      version: 1,
+      exportedAt: 'x',
+      surname: '苏',
+      reading: 0,
+      opts: {},
+      favorites: [],
+      blocklist: [],
+    });
+    const parsed = parseState(old);
+    if (!parsed.ok) throw new Error(`应当认这份文件：${parsed.error}`);
+    expect(parsed.state.theme).toBeUndefined();
+    expect(parsed.state.surname).toBe('苏');
+  });
+});

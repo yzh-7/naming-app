@@ -331,7 +331,7 @@ export default function App() {
     notify(`已导出 CSV：${rows.length} 条${favGroup ? `（分组「${favGroup}」）` : '（全部）'}`);
   };
   const doExport = () => {
-    const st = buildState({ surname: sur, reading, opts, favorites: fav, blocklist: block });
+    const st = buildState({ surname: sur, reading, opts, favorites: fav, blocklist: block, theme });
     downloadText(serialize(st), `naming-${new Date().toISOString().slice(0, 10)}.json`);
     notify(`已导出：收藏 ${fav.length} · 拉黑 ${block.length}`);
   };
@@ -402,6 +402,7 @@ export default function App() {
     setSurname(st.surname);
     setReading(st.reading);
     setOpts(st.opts);
+    if (st.theme) setTheme(st.theme); // 老导出文件没有 theme 这一项：那就保持本机现在的主题
     setBatch(0);
     setPendingImport(null);
     const parts = [`收藏 ${st.favorites.length}`, `拉黑 ${st.blocklist.length}`];
